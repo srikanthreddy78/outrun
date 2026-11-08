@@ -1,11 +1,9 @@
-const CACHE = "daybreak-v2";
+const CACHE = "daybreak-v3";
+const PRECACHE_URLS = ["/"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) =>
-      c.addAll(["/", "/onboarding", "/offline"])
-        .catch(() => {}) // don't fail install if a page isn't reachable
-    )
+    caches.open(CACHE).then((c) => c.addAll(PRECACHE_URLS))
   );
   self.skipWaiting();
 });
