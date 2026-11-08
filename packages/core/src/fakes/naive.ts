@@ -181,6 +181,13 @@ export class FakeNaiveClient implements NaiveClient {
     s.pendingActions = [];
   }
 
+  /** Tests flip `enabled` to force the webhook alert. */
+  readonly webhooks: { id: string; url: string; enabled: boolean; events: string[] }[] = [];
+  async listWebhooks() {
+    this.calls.push({ method: "listWebhooks", args: [] });
+    return this.webhooks.map((w) => ({ ...w }));
+  }
+
   async agentSpendUsd(agentId: string): Promise<number> {
     this.calls.push({ method: "agentSpendUsd", args: [agentId] });
     return this.spend.get(agentId) ?? 0;

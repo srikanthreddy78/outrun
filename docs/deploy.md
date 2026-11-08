@@ -24,6 +24,9 @@ into Vercel env, Render env and the Naive vault, never into git, prompts or chat
 
 - New Blueprint from `render.yaml`, which gives one starter background worker and runs migrations before each deploy.
 - Fill in the `sync: false` secrets when Render asks for them.
+- Set `ALERT_EMAIL` to the team inbox. `check_stuck` runs every 5 minutes and emails each stuck job, dead job,
+  stuck order, stale approval, budget stop, disabled Naive webhook, bounce pause or 80% LLM spend at most once an
+  hour. Without it, alerts are only `alert.raised` events in the Ops Ledger.
 
 ## 4. Stripe
 
