@@ -78,7 +78,8 @@ export interface ClientIcp {
 }
 
 const words = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
-const mentions = (text: string, kw: string) => {
+/** The text mentions the keyword as a whole word or phrase, ignoring case. */
+export const mentions = (text: string, kw: string) => {
   const k = words(kw).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return k ? new RegExp(`\\b${k}\\b`, "i").test(text) : false;
 };

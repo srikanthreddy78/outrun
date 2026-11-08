@@ -1,9 +1,12 @@
 import { asc, clients, ne } from "@outrun/core/db/query";
 import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
+import { clientFocus, proposalsFor } from "@outrun/core/insights";
 import {
+  acceptProposalAction,
   addClientAction,
   confirmProfileAction,
   pauseAction,
+  rejectProposalAction,
   startProfilingAction,
 } from "../../../lib/clients-actions";
 import { getRuntime } from "../../../lib/runtime";
@@ -27,6 +30,20 @@ export default async function ClientsPage() {
     .from(clients)
     .where(ne(clients.id, OUTRUN_CLIENT_ID))
     .orderBy(asc(clients.createdAt));
+  const learned = new Map(
+    await Promise.all(
+      rows.map(
+        async (c) =>
+          [
+            c.id,
+            {
+              focus: await clientFocus(rt.db.db, c.id),
+              open: (await proposalsFor(rt.db.db, c.id)).filter((p) => p.status === "open"),
+            },
+          ] as const,
+      ),
+    ),
+  );
   return (
     <>
       <h1>Clients</h1>
@@ -88,6 +105,32 @@ export default async function ClientsPage() {
               <button type="submit">{c.profileConfirmedAt ? "Save changes" : "Confirm profile"}</button>
             </form>
           )}
+          {learned.get(c.id)?.focus && (
+            <p>
+              CEO focus: {learned.get(c.id)!.focus!.dailyDraftLimit} first emails a day (
+              {learned.get(c.id)!.focus!.reason})
+            </p>
+          )}
+          {learned.get(c.id)?.open.map((p) => (
+            <div key={p.proposalId} className="team-card" style={{ margin: "0.5rem 0" }}>
+              <p>
+                <strong>The CEO proposes a profile change</strong> ({p.at.toISOString().slice(0, 10)})
+              </p>
+              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(p.changes, null, 2)}</pre>
+              <p>Evidence: {p.evidence}</p>
+              <form action={acceptProposalAction} style={{ display: "inline" }}>
+                <input type="hidden" name="clientId" value={c.id} />
+                <input type="hidden" name="proposalId" value={p.proposalId} />
+                <button type="submit">Accept</button>
+              </form>{" "}
+              <form action={rejectProposalAction} style={{ display: "inline" }}>
+                <input type="hidden" name="clientId" value={c.id} />
+                <input type="hidden" name="proposalId" value={p.proposalId} />
+                <input name="reason" maxLength={500} placeholder="Why not (optional)" />
+                <button type="submit">Reject</button>
+              </form>
+            </div>
+          ))}
           {c.dnsRecords.length > 0 && (
             <>
               <p>
