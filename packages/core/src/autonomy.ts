@@ -4,6 +4,7 @@
  * and where a human stepped in. `redact` makes it safe for the public /ops page.
  */
 import { and, desc, eq, gt, gte, inArray, lte, or } from "drizzle-orm";
+import { predictionActual, predictionRange, type PredictionMetric } from "./brain";
 import { OUTRUN_CLIENT_ID } from "./constants";
 import type { Db } from "./db/client";
 import { agentSessions, clients, companies, events, messages, prospects } from "./db/schema";
@@ -59,6 +60,10 @@ export const COUNTED_TYPES = [
   "ceo.brief",
   "ceo.brief_sent",
   "session.started",
+  // the CEO's brain: lessons, predictions it is scored on, the weekly memo
+  "ceo.lesson",
+  "ceo.prediction",
+  "ceo.board_memo",
   // people stepping in
   "approval.submitted",
   "email.resumed",
@@ -68,7 +73,7 @@ export const COUNTED_TYPES = [
 const COUNTED = new Set<string>(COUNTED_TYPES);
 
 /** Read for the feeds but not counted on their own (a CEO kick on a live session). */
-const EXTRA_TYPES = ["session.messaged"] as const;
+const EXTRA_TYPES = ["session.messaged", "ceo.prediction_scored"] as const;
 
 const STEP_IN_TYPES = new Set([
   "approval.submitted",
@@ -368,6 +373,53 @@ export async function autonomyReport(
         decisions.push(
           item(r, `Took an order from an outside agent over ${str(p.protocol) ?? "the public API"}`),
         );
+        break;
+      case "ceo.prediction":
+      case "ceo.prediction_scored": {
+        const metric = str(p.metric) as PredictionMetric | null;
+        const low = Number(p.low);
+        const high = Number(p.high);
+        if (!metric || !Number.isFinite(low) || !Number.isFinite(high)) break;
+        const k = clientById.get(r.entityId);
+        const name = k && (!redact || k.confirmed) ? k.name : "a client";
+        const range = predictionRange(metric, low, high);
+        if (r.type === "ceo.prediction") {
+          // Publicly numbers only: the decision is the CEO's free text.
+          const why = !redact && str(p.decision) ? `: ${str(p.decision)}` : "";
+          decisions.push(item(r, `CEO predicted ${range} for ${name}${why}`));
+        } else {
+          const actual = Number(p.actual);
+          decisions.push(
+            item(
+              r,
+              `CEO's prediction for ${name} scored: ${range} predicted, ${predictionActual(metric, actual)} actual, ${p.hit === true ? "a hit" : "a miss"}`,
+            ),
+          );
+        }
+        break;
+      }
+      case "ceo.lesson":
+        decisions.push(
+          item(r, redact ? "CEO recorded a lesson in its playbook" : `CEO lesson: ${str(p.lesson) ?? ""}`),
+        );
+        break;
+      case "ceo.board_memo":
+        decisions.push(item(r, "CEO wrote its weekly board memo for the owner"));
+        break;
+      case "job.replayed":
+      case "client.paused":
+      case "client.resumed":
+        if (classifyActor(r.actor) === "agent") {
+          const name = clientName(r) ?? "a client";
+          decisions.push(
+            item(
+              r,
+              r.type === "job.replayed"
+                ? `CEO replayed a failed ${str(p.type) ?? ""} job`.replace("  ", " ")
+                : `CEO ${r.type === "client.paused" ? "paused" : "resumed"} ${name}`,
+            ),
+          );
+        }
         break;
       case "session.started":
       case "session.messaged":

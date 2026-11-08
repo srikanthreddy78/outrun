@@ -192,6 +192,7 @@ export async function setPaused(
   clientId: string,
   paused: boolean,
   actor: string,
+  reason?: string,
 ) {
   const [c] = await deps.db.select().from(clients).where(eq(clients.id, clientId));
   if (!c || c.id === OUTRUN_CLIENT_ID) throw new AppError("not_found", "no such client");
@@ -209,7 +210,7 @@ export async function setPaused(
     type: paused ? "client.paused" : "client.resumed",
     entityType: "client",
     entityId: c.id,
-    payload: { status },
+    payload: { status, ...(reason ? { reason } : {}) },
   });
   return { status };
 }
