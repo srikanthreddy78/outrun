@@ -17,6 +17,7 @@ import {
   saveResearch,
   type ProspectingDeps,
 } from "./prospecting";
+import { OUTRUN_CLIENT_ID } from "../../constants";
 
 describe("prospecting tools (SH-2, SH-3)", () => {
   let t: TempDb;
@@ -27,6 +28,7 @@ describe("prospecting tools (SH-2, SH-3)", () => {
   const ctx = (): ToolContext => ({
     agent: "prospector",
     requestId: "r",
+    clientId: OUTRUN_CLIENT_ID,
     db: t.db,
     now: () => now,
     enqueue: async (j) => {

@@ -11,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, count, eq, gte, isNull, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
-import { CRON_TZ } from "../../constants";
+import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
 import { companies, contacts, prospects, suppressions } from "../../db/schema";
 import { assertDemoDiscovery } from "../../demo";
 import { isSuppressed } from "../../email/rules";
@@ -31,6 +31,8 @@ export const listCandidates = (deps: ProspectingDeps) =>
   defineTool({
     name: "list_candidates",
     handler: async ({ limit, source }, ctx) => {
+      // Discovered candidates are Outrun's; other clients get their own candidate lists.
+      if (ctx.clientId !== OUTRUN_CLIENT_ID) return { candidates: [] };
       const rows = await ctx.db
         .select({
           companyId: companies.id,
@@ -40,7 +42,7 @@ export const listCandidates = (deps: ProspectingDeps) =>
           summary: companies.summary,
         })
         .from(companies)
-        .leftJoin(prospects, eq(prospects.companyId, companies.id))
+        .leftJoin(prospects, and(eq(prospects.companyId, companies.id), eq(prospects.clientId, ctx.clientId)))
         .where(
           and(
             eq(companies.kind, "candidate"),
@@ -61,12 +63,12 @@ export const fileProspect = (deps: ProspectingDeps) =>
     name: "file_prospect",
     handler: async ({ companyId, reason }, ctx) => {
       const [co] = await ctx.db.select().from(companies).where(eq(companies.id, companyId));
-      if (!co) throw new AppError("not_found", "no such candidate");
+      if (!co || ctx.clientId !== OUTRUN_CLIENT_ID) throw new AppError("not_found", "no such candidate");
       assertDemoDiscovery(deps.settings, co.source);
       const [existing] = await ctx.db
         .select({ id: prospects.id })
         .from(prospects)
-        .where(eq(prospects.companyId, co.id));
+        .where(and(eq(prospects.companyId, co.id), eq(prospects.clientId, ctx.clientId)));
       if (existing) return { prospectId: existing.id, status: "duplicate" as const };
       const [blocked] = await ctx.db
         .select({ id: suppressions.id })
@@ -77,7 +79,11 @@ export const fileProspect = (deps: ProspectingDeps) =>
         .select({ n: count() })
         .from(prospects)
         .where(
-          and(gte(prospects.createdAt, startOfDayIn(CRON_TZ, ctx.now())), eq(prospects.isDemo, false)),
+          and(
+            eq(prospects.clientId, ctx.clientId),
+            gte(prospects.createdAt, startOfDayIn(CRON_TZ, ctx.now())),
+            eq(prospects.isDemo, false),
+          ),
         )) as [{ n: number }];
       if (n >= deps.settings.discoveryDailyCap)
         throw new AppError("rate_limited", "today's discovery cap is used; file more tomorrow", {
@@ -86,14 +92,14 @@ export const fileProspect = (deps: ProspectingDeps) =>
 
       const [p] = await ctx.db
         .insert(prospects)
-        .values({ companyId: co.id, filedReason: reason })
-        .onConflictDoNothing({ target: prospects.companyId })
+        .values({ clientId: ctx.clientId, companyId: co.id, filedReason: reason })
+        .onConflictDoNothing({ target: [prospects.clientId, prospects.companyId] })
         .returning({ id: prospects.id });
       if (!p) {
         const [again] = await ctx.db
           .select({ id: prospects.id })
           .from(prospects)
-          .where(eq(prospects.companyId, co.id));
+          .where(and(eq(prospects.companyId, co.id), eq(prospects.clientId, ctx.clientId)));
         return { prospectId: again!.id, status: "duplicate" as const };
       }
       await ctx.db.update(companies).set({ kind: "prospect" }).where(eq(companies.id, co.id));
@@ -120,7 +126,12 @@ export const fileProspect = (deps: ProspectingDeps) =>
     },
   });
 
-async function prospectWithCompany(db: Parameters<typeof latestChecks>[0], prospectId: string) {
+/** A prospect of this client's, with its company; another client's prospect is not found. */
+async function prospectWithCompany(
+  db: Parameters<typeof latestChecks>[0],
+  prospectId: string,
+  clientId: string,
+) {
   const [r] = await db
     .select({
       p: prospects,
@@ -131,7 +142,7 @@ async function prospectWithCompany(db: Parameters<typeof latestChecks>[0], prosp
     })
     .from(prospects)
     .innerJoin(companies, eq(prospects.companyId, companies.id))
-    .where(eq(prospects.id, prospectId));
+    .where(and(eq(prospects.id, prospectId), eq(prospects.clientId, clientId)));
   if (!r) throw new AppError("not_found", `prospect ${prospectId}`);
   return r;
 }
@@ -139,7 +150,7 @@ async function prospectWithCompany(db: Parameters<typeof latestChecks>[0], prosp
 export const getProspect = defineTool({
   name: "get_prospect",
   handler: async ({ prospectId }, ctx) => {
-    const r = await prospectWithCompany(ctx.db, prospectId);
+    const r = await prospectWithCompany(ctx.db, prospectId, ctx.clientId);
     const scan = await latestChecks(ctx.db, r.domain);
     return {
       prospect: { id: r.p.id, stage: r.p.stage, fitScore: r.p.fitScore, gapScore: r.p.gapScore },
@@ -163,7 +174,7 @@ export const enrichCompany = (deps: ProspectingDeps) =>
   defineTool({
     name: "enrich_company",
     handler: async ({ prospectId }, ctx) => {
-      const r = await prospectWithCompany(ctx.db, prospectId);
+      const r = await prospectWithCompany(ctx.db, prospectId, ctx.clientId);
       if (deps.settings.demo && !r.p.isDemo)
         throw new AppError("forbidden", "demo mode: enrich only the demo prospect");
       const out = await deps.enrich(r.domain);
@@ -184,7 +195,7 @@ export const enrichCompany = (deps: ProspectingDeps) =>
 export const saveResearch = defineTool({
   name: "save_research",
   handler: async ({ prospectId, facts, contacts: found }, ctx) => {
-    const r = await prospectWithCompany(ctx.db, prospectId);
+    const r = await prospectWithCompany(ctx.db, prospectId, ctx.clientId);
     const problems = found.map((c) => contactProblem(c.email, r.domain)).filter(Boolean) as string[];
     if (problems.length) throw new AppError("bad_request", problems.join("; "));
     for (const f of facts)

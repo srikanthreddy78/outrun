@@ -15,6 +15,8 @@ export const StartSessionInput = z.object({
     .refine((m) => !/@[\w-]+\.[a-z]{2,}/i.test(m), "a session message must name ids, not email addresses"),
   entity: Entity,
   idempotencyKey: z.string().min(1).max(200),
+  /** The client whose crew runs it; Outrun's when absent. */
+  clientId: Id.optional(),
 });
 export type StartSessionInput = z.infer<typeof StartSessionInput>;
 

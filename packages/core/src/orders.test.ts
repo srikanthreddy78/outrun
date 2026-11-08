@@ -8,6 +8,7 @@ import { createEmitter } from "./events";
 import { FakeStripe } from "./fakes";
 import { canTransition, checkoutFor, createOrder, ORDER_TRANSITIONS, transition } from "./orders";
 import { createTempDatabase, type TempDb } from "./testing/db";
+import { OUTRUN_CLIENT_ID } from "./constants";
 
 describe("orders", () => {
   let t: TempDb;
@@ -101,6 +102,7 @@ describe("orders", () => {
       ]).call("closer", "create_checkout_link", input, {
         agent: "closer",
         requestId: "r",
+        clientId: OUTRUN_CLIENT_ID,
         db: t.db,
         now: () => new Date(),
         enqueue: async () => ({ jobId: null }),

@@ -9,9 +9,10 @@
  */
 import { and, eq, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { StartSessionInput, type StopReason } from "../contracts";
-import { SESSION_START_STALE_MINUTES } from "./constants";
+import { OUTRUN_CLIENT_ID, OUTRUN_CLIENT_SLUG, SESSION_START_STALE_MINUTES } from "./constants";
+import { naiveAgentName } from "./crew/identity";
 import type { Db } from "./db/client";
-import { agentSessions, events } from "./db/schema";
+import { agentSessions, clients, events } from "./db/schema";
 import { AppError } from "./errors";
 import type { Emit } from "./events";
 import type { NaiveClient } from "./integrations/types";
@@ -37,9 +38,22 @@ function pgCode(err: unknown): { code?: string; constraint?: string } {
   return (e ?? {}) as { code?: string; constraint?: string };
 }
 
+/** Outrun's slug needs no lookup; any other client's comes from its row. */
+async function clientSlugOf(db: SessionDeps["db"], clientId: string): Promise<string> {
+  if (clientId === OUTRUN_CLIENT_ID) return OUTRUN_CLIENT_SLUG;
+  const [c] = await db
+    .select({ slug: clients.slug, status: clients.status })
+    .from(clients)
+    .where(eq(clients.id, clientId));
+  if (!c) throw new AppError("not_found", `client ${clientId}`);
+  if (c.status === "paused") throw new AppError("forbidden", `client ${c.slug} is paused`);
+  return c.slug;
+}
+
 export async function startSession(deps: SessionDeps, raw: StartSessionInput): Promise<StartOutcome> {
   const input = StartSessionInput.parse(raw);
   const { agent, entity, idempotencyKey, message } = input;
+  const clientId = input.clientId ?? OUTRUN_CLIENT_ID;
 
   // 1. This exact start was seen before.
   const [same] = await deps.db
@@ -64,6 +78,7 @@ export async function startSession(deps: SessionDeps, raw: StartSessionInput): P
     .from(agentSessions)
     .where(
       and(
+        eq(agentSessions.clientId, clientId),
         eq(agentSessions.agent, agent),
         eq(agentSessions.entityType, entity.type),
         eq(agentSessions.entityId, entity.id),
@@ -88,7 +103,14 @@ export async function startSession(deps: SessionDeps, raw: StartSessionInput): P
     try {
       [row] = await deps.db
         .insert(agentSessions)
-        .values({ agent, entityType: entity.type, entityId: entity.id, idempotencyKey, status: "starting" })
+        .values({
+          clientId,
+          agent,
+          entityType: entity.type,
+          entityId: entity.id,
+          idempotencyKey,
+          status: "starting",
+        })
         .returning();
     } catch (err) {
       const { code, constraint } = pgCode(err);
@@ -116,7 +138,9 @@ export async function startSession(deps: SessionDeps, raw: StartSessionInput): P
   // 4. Only the Naive call is compensated: on failure the slot frees, the row stays for the retry.
   let sessionId: string;
   try {
-    const agentId = await deps.naive.resolveAgentId(agent);
+    const agentId = await deps.naive.resolveAgentId(
+      naiveAgentName(agent, await clientSlugOf(deps.db, clientId)),
+    );
     ({ sessionId } = await deps.naive.startSession({
       agentId,
       message,

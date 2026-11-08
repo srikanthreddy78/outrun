@@ -29,6 +29,7 @@ import { handleApifyWebhook } from "@outrun/core/webhooks/apify";
 import { acceptStripeEvent } from "@outrun/core/webhooks/stripe";
 import { startWorker } from "@outrun/worker";
 import { submitDecisions } from "../apps/web/lib/approvals-core";
+import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 
 const TIMEOUT_MS = 60_000;
 const APIFY_SECRET = "e2e-apify-secret"; // gitleaks:allow (throwaway test value)
@@ -147,6 +148,7 @@ async function main(): Promise<void> {
     naiveOpts.ctx = (agent: AgentName): ToolContext => ({
       agent,
       requestId: randomUUID(),
+      clientId: OUTRUN_CLIENT_ID,
       db,
       now: () => new Date(),
       enqueue: (job, o) => rt!.queue.enqueue(job, o),

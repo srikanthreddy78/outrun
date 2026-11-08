@@ -99,6 +99,24 @@ describe("Naive client", () => {
     expect(f).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps each client's crew apart by agent name and ignores agents that aren't ours", async () => {
+    const f = vi.fn().mockImplementation(async () =>
+      reply(200, {
+        data: [
+          { id: "agt_o_sdr", name: "sdr" },
+          { id: "agt_acme_sdr", name: "acme-sdr" },
+          { id: "agt_x", name: "someone-elses-bot" },
+        ],
+        has_more: false,
+      }),
+    );
+    const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
+    expect(await c.resolveAgentId("sdr")).toBe("agt_o_sdr");
+    expect(await c.resolveAgentId("acme-sdr")).toBe("agt_acme_sdr");
+    await expect(c.resolveAgentId("beta-sdr")).rejects.toMatchObject({ code: "not_configured" });
+    await expect(c.resolveAgentId("someone-elses-bot")).rejects.toMatchObject({ code: "not_configured" });
+  });
+
   it("branches on error.code, never the message", async () => {
     const mk = (status: number, code: string) =>
       createNaiveClient("k", {

@@ -3,7 +3,8 @@
  * Naive's, never ours. Mutating calls carry an Idempotency-Key. Errors branch on error.code first,
  * then the HTTP status.
  */
-import { AGENTS, type AgentName, STOP_REASONS, type StopReason } from "../../contracts";
+import { parseNaiveAgentName } from "../crew/identity";
+import { STOP_REASONS, type StopReason } from "../../contracts";
 import { AppError } from "../errors";
 import type { NaiveClient, NaiveEvent, NaivePendingAction, NaiveSession } from "./types";
 
@@ -84,7 +85,7 @@ export function createNaiveClient(
 ): NaiveClient {
   const base = (opts.baseUrl ?? NAIVE_API_BASE).replace(/\/$/, "");
   const f = opts.fetch ?? fetch;
-  const agentIds = new Map<AgentName, string>();
+  const agentIds = new Map<string, string>();
 
   async function call<T>(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
     let res: Response;
@@ -124,7 +125,7 @@ export function createNaiveClient(
         next_cursor?: string;
       }>("GET", `/v1/agents?limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`);
       for (const a of r.data) {
-        if ((AGENTS as readonly string[]).includes(a.name)) agentIds.set(a.name as AgentName, a.id);
+        if (parseNaiveAgentName(a.name)) agentIds.set(a.name, a.id);
       }
       if (!r.has_more || !r.next_cursor) return;
       after = r.next_cursor;
@@ -142,10 +143,10 @@ export function createNaiveClient(
   }
 
   return {
-    async resolveAgentId(agent) {
-      if (!agentIds.has(agent)) await listAgents();
-      const id = agentIds.get(agent);
-      if (!id) throw new AppError("not_configured", `naive: no agent named ${agent}; run pnpm naive:up`);
+    async resolveAgentId(name) {
+      if (!agentIds.has(name)) await listAgents();
+      const id = agentIds.get(name);
+      if (!id) throw new AppError("not_configured", `naive: no agent named ${name}; run pnpm naive:up`);
       return id;
     },
 

@@ -14,7 +14,7 @@
  */
 import { and, asc, eq, type SQL } from "drizzle-orm";
 import type { AgentName, Entity, ProspectStage } from "../../../contracts";
-import { CRON_TZ } from "../../constants";
+import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
 import { prospects } from "../../db/schema";
 import { DEMO_FILED_REASON } from "../../seed";
 import { dayIn } from "../../time";
@@ -31,15 +31,17 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
     handler: async (input, ctx) => {
       const now = ctx.now();
       const day = dayIn(CRON_TZ, now);
-      const counts = await pipelineCounts(ctx.db, settings, now);
+      const counts = await pipelineCounts(ctx.db, ctx.clientId, settings, now);
       const limit = input.limitPerAgent;
       const enqueued: { agent: AgentName; prospectId: string | null }[] = [];
 
       const start = async (agent: AgentName, entity: Entity, message: string) => {
+        // Outrun's keys predate clients; another client's carry its id, so days don't collide.
+        const scope = ctx.clientId === OUTRUN_CLIENT_ID ? "" : `${ctx.clientId}:`;
         await ctx.enqueue({
           type: "start_session",
-          payload: { agent, message, entity },
-          idempotencyKey: `plan:${day}:${agent}:${entity.id}`,
+          payload: { agent, message, entity, clientId: ctx.clientId },
+          idempotencyKey: `plan:${day}:${scope}${agent}:${entity.id}`,
           traceId: ctx.requestId,
         });
         enqueued.push({ agent, prospectId: entity.type === "prospect" ? entity.id : null });
@@ -53,7 +55,7 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
         const rows = await ctx.db
           .select({ id: prospects.id })
           .from(prospects)
-          .where(and(eq(prospects.stage, stage), demoOnly))
+          .where(and(eq(prospects.clientId, ctx.clientId), eq(prospects.stage, stage), demoOnly))
           .orderBy(asc(prospects.createdAt), asc(prospects.id))
           .limit(n);
         return rows.map((r) => r.id);

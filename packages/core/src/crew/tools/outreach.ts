@@ -69,7 +69,8 @@ export async function latestChecks(db: Db, domain: string) {
   return { scanId: s.id, score: s.score, checks };
 }
 
-async function prospectRow(db: Db, prospectId: string) {
+/** A prospect of this client's; another client's prospect is not found. */
+async function prospectRow(db: Db, prospectId: string, clientId: string) {
   const [r] = await db
     .select({
       prospect: prospects,
@@ -80,7 +81,7 @@ async function prospectRow(db: Db, prospectId: string) {
     .from(prospects)
     .innerJoin(companies, eq(prospects.companyId, companies.id))
     .leftJoin(contacts, eq(prospects.contactId, contacts.id))
-    .where(eq(prospects.id, prospectId));
+    .where(and(eq(prospects.id, prospectId), eq(prospects.clientId, clientId)));
   if (!r) throw new AppError("not_found", `prospect ${prospectId}`);
   return r;
 }
@@ -156,7 +157,7 @@ export function getBrief(deps: OutreachDeps) {
   return defineTool({
     name: "get_brief",
     handler: async ({ prospectId }, ctx) => {
-      const r = await prospectRow(ctx.db, prospectId);
+      const r = await prospectRow(ctx.db, prospectId, ctx.clientId);
       const scan = await latestChecks(ctx.db, r.domain);
       const prior = await ctx.db
         .select({
@@ -197,7 +198,7 @@ export function checkDraft(deps: OutreachDeps) {
   return defineTool({
     name: "check_draft",
     handler: async (input, ctx) => {
-      const r = await prospectRow(ctx.db, input.prospectId);
+      const r = await prospectRow(ctx.db, input.prospectId, ctx.clientId);
       const reasons: string[] = [];
       if (!r.contact) reasons.push("this prospect has no contact yet");
       else if (r.contact.suppressed || (await isSuppressed(ctx.db, r.contact.email)))
@@ -275,6 +276,7 @@ export function checkDraft(deps: OutreachDeps) {
       const [m] = await ctx.db
         .insert(messages)
         .values({
+          clientId: ctx.clientId,
           prospectId: input.prospectId,
           contactId: r.contact!.id,
           threadId,
@@ -310,7 +312,10 @@ async function queueApprovedDraft(
   input: { draftId: string; hash: string },
   kinds: readonly ("first" | "followup" | "reply")[],
 ) {
-  const [m] = await ctx.db.select().from(messages).where(eq(messages.id, input.draftId));
+  const [m] = await ctx.db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, input.draftId), eq(messages.clientId, ctx.clientId)));
   if (!m || m.direction !== "outbound" || !kinds.includes(m.kind as never))
     throw new AppError("not_found", "no such draft for this tool");
   if (m.status === "approved" || m.status === "sending" || m.status === "sent")
@@ -368,7 +373,7 @@ export const replyEmailTool = (deps: OutreachDeps) =>
   });
 
 /** Prospects due a follow-up: +3 then +7 days after the first email, no reply, not suppressed. */
-export async function dueFollowups(db: Db, now: Date, limit = 50) {
+export async function dueFollowups(db: Db, clientId: string, now: Date, limit = 50) {
   const rows = await db
     .select({
       prospectId: prospects.id,
@@ -379,6 +384,7 @@ export async function dueFollowups(db: Db, now: Date, limit = 50) {
     .innerJoin(contacts, eq(prospects.contactId, contacts.id))
     .where(
       and(
+        eq(prospects.clientId, clientId),
         eq(prospects.stage, "contacted"),
         eq(contacts.suppressed, false),
         sql`${prospects.followupStep} < ${FOLLOWUP_OFFSETS_DAYS.length}`,
@@ -401,11 +407,11 @@ export async function dueFollowups(db: Db, now: Date, limit = 50) {
 
 export const listDueFollowups = defineTool({
   name: "list_due_followups",
-  handler: async ({ limit }, ctx) => ({ due: await dueFollowups(ctx.db, ctx.now(), limit) }),
+  handler: async ({ limit }, ctx) => ({ due: await dueFollowups(ctx.db, ctx.clientId, ctx.now(), limit) }),
 });
 
 export const followupsDueCount = async (ctx: ToolContext): Promise<number> =>
-  (await dueFollowups(ctx.db, ctx.now(), 1000)).length;
+  (await dueFollowups(ctx.db, ctx.clientId, ctx.now(), 1000)).length;
 
 export const getThread = defineTool({
   name: "get_thread",
@@ -413,7 +419,13 @@ export const getThread = defineTool({
     const rows = await ctx.db
       .select()
       .from(messages)
-      .where(and(eq(messages.threadId, threadId), inArray(messages.status, ["sent", "received"])))
+      .where(
+        and(
+          eq(messages.threadId, threadId),
+          eq(messages.clientId, ctx.clientId),
+          inArray(messages.status, ["sent", "received"]),
+        ),
+      )
       .orderBy(asc(messages.createdAt))
       .limit(50);
     const prospectId = rows.find((m) => m.prospectId)?.prospectId;
@@ -435,7 +447,7 @@ export const getThread = defineTool({
 export const markOutcome = defineTool({
   name: "mark_outcome",
   handler: async ({ prospectId, outcome, note }, ctx) => {
-    const r = await prospectRow(ctx.db, prospectId);
+    const r = await prospectRow(ctx.db, prospectId, ctx.clientId);
     // A paid or unsubscribed prospect keeps its stage; the closer can't undo either.
     const locked = ["won", "unsubscribed", "checkout_sent"].includes(r.prospect.stage) && outcome !== "lost";
     const stage = locked ? r.prospect.stage : outcome;

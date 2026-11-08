@@ -4,6 +4,7 @@ import { createTempDatabase, type TempDb } from "../../testing/db";
 import { ToolRegistry } from "../registry";
 import type { ToolContext } from "../types";
 import { pipelineStatus } from "./pipeline_status";
+import { OUTRUN_CLIENT_ID } from "../../constants";
 
 const NOW = new Date("2026-11-06T18:00:00Z"); // 10:00 in Los Angeles
 const YESTERDAY = new Date("2026-11-05T18:00:00Z");
@@ -32,6 +33,7 @@ describe("pipeline_status send cap", () => {
     const ctx = {
       agent: "orchestrator",
       requestId: "r",
+      clientId: OUTRUN_CLIENT_ID,
       db: t.db,
       now: () => NOW,
       enqueue: async () => ({ jobId: null }),

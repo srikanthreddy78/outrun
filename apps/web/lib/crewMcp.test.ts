@@ -4,6 +4,7 @@ import { allTools } from "@outrun/core/crew/tools";
 import { ToolRegistry } from "@outrun/core/crew";
 import { crewToken } from "@outrun/core/crew/tokens";
 import { eq, events } from "@outrun/core/db";
+import { clients, companies, prospects } from "@outrun/core/db/schema";
 import { createEmitter } from "@outrun/core/events";
 import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
 import { crewMcpResponse } from "./crewMcp";
@@ -160,5 +161,64 @@ describe("crew MCP server", () => {
     );
     const text = JSON.stringify(r);
     expect(text).not.toContain("capsLeft");
+  });
+
+  describe("another client's crew", () => {
+    let outrunProspectId: string;
+    beforeAll(async () => {
+      await t.db.insert(clients).values([
+        { slug: "acme", name: "Acme", domain: "acme.example", status: "active" },
+        { slug: "beta", name: "Beta", domain: "beta.example", status: "active" },
+        { slug: "sleepy", name: "Sleepy", domain: "sleepy.example", status: "paused" },
+      ]);
+      const [co] = await t.db
+        .insert(companies)
+        .values({ domain: "target.example", source: "fixture", kind: "prospect" })
+        .returning();
+      const [p] = await t.db.insert(prospects).values({ companyId: co!.id }).returning();
+      outrunProspectId = p!.id;
+    });
+    const status = async (path: string, token: string) => {
+      const r = await rpc(
+        await call(
+          path,
+          { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "pipeline_status", arguments: {} } },
+          token,
+        ),
+      );
+      return JSON.parse((r.result?.content as { text: string }[])[0]!.text) as {
+        stages: Record<string, number>;
+        candidatesWaiting: number;
+      };
+    };
+
+    it("answers at /<slug>/<role> with that client's own token only", async () => {
+      const ok = await rpc(await call("acme/orchestrator", list, crewToken(SECRET, "orchestrator", "acme")));
+      expect((ok.result?.tools as { name: string }[]).map((x) => x.name)).toContain("pipeline_status");
+      expect((await call("acme/orchestrator", list, crewToken(SECRET, "orchestrator"))).status).toBe(401);
+      expect((await call("acme/orchestrator", list, crewToken(SECRET, "orchestrator", "beta"))).status).toBe(
+        401,
+      );
+      expect((await call("orchestrator", list, crewToken(SECRET, "orchestrator", "acme"))).status).toBe(401);
+    });
+
+    it("404s an unknown client, Outrun under a slug, and deeper paths; 403s a paused client", async () => {
+      expect((await call("ghost/sdr", list, crewToken(SECRET, "sdr", "ghost"))).status).toBe(404);
+      expect((await call("outrun/sdr", list, crewToken(SECRET, "sdr"))).status).toBe(404);
+      expect((await call("acme/sdr/x", list, crewToken(SECRET, "sdr", "acme"))).status).toBe(404);
+      expect((await call("Acme/sdr", list, crewToken(SECRET, "sdr", "Acme"))).status).toBe(404);
+      expect((await call("sleepy/sdr", list, crewToken(SECRET, "sdr", "sleepy"))).status).toBe(403);
+    });
+
+    it("sees only its own client's pipeline, and records calls under its agent name", async () => {
+      expect(outrunProspectId).toBeTruthy();
+      const mine = await status("orchestrator", crewToken(SECRET, "orchestrator"));
+      expect(mine.stages.filed).toBeGreaterThan(0);
+      const theirs = await status("acme/orchestrator", crewToken(SECRET, "orchestrator", "acme"));
+      expect(theirs.stages.filed).toBe(0);
+      expect(theirs.candidatesWaiting).toBe(0);
+      const rows = await t.db.select().from(events).where(eq(events.actor, "naive:acme-orchestrator"));
+      expect(rows.length).toBeGreaterThan(0);
+    });
   });
 });

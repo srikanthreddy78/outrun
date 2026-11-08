@@ -69,7 +69,7 @@ export async function seedDemo(
         isDemo: true,
       })
       .onConflictDoUpdate({
-        target: prospects.companyId,
+        target: [prospects.clientId, prospects.companyId],
         set: { contactId: contact!.id, filedReason: DEMO_FILED_REASON, isDemo: true },
       })
       .returning();
