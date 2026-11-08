@@ -115,3 +115,7 @@ export const MODEL_PRICES_PER_MTOK: Record<string, { input: number; output: numb
 
 /** Log level. Not an env setting: the six OUTRUN_* variables are the only ones. Tests are silent. */
 export const LOG_LEVEL = "info";
+
+/** Enrichment (SH-3): akta company enrichment through Monid, priced per section (~$0.20 a company). */
+export const ENRICH_ENDPOINT = "akta:/v1/company/enrichment";
+export const ENRICH_SECTIONS = ["firmographic", "customer_profile", "management_profile"] as const;

@@ -26,7 +26,11 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
   let t: TempDb;
   let jobs: { type: string; idempotencyKey: string }[];
   let now: Date;
-  const deps: OutreachDeps = { appUrl: APP, settings: { sendDailyCap: 30, demo: false }, mx: async () => true };
+  const deps: OutreachDeps = {
+    appUrl: APP,
+    settings: { sendDailyCap: 30, demo: false },
+    mx: async () => true,
+  };
   const ctx = (agent: AgentName = "sdr"): ToolContext => ({
     agent,
     requestId: "r",
@@ -75,9 +79,30 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       scannerVersion: "test",
       score: 42,
       checks: [
-        { id: "llms-txt", label: "llms.txt", status: "fail", evidence: "404", weight: 10, category: "readiness" },
-        { id: "openapi", label: "OpenAPI", status: "pass", evidence: "found", weight: 6, category: "readiness" },
-        { id: "campaign-tracking", label: "UTM", status: "fail", evidence: "-", weight: 2, category: "marketing" },
+        {
+          id: "llms-txt",
+          label: "llms.txt",
+          status: "fail",
+          evidence: "404",
+          weight: 10,
+          category: "readiness",
+        },
+        {
+          id: "openapi",
+          label: "OpenAPI",
+          status: "pass",
+          evidence: "found",
+          weight: 6,
+          category: "readiness",
+        },
+        {
+          id: "campaign-tracking",
+          label: "UTM",
+          status: "fail",
+          evidence: "-",
+          weight: 2,
+          category: "marketing",
+        },
       ],
     });
     return { prospectId: p!.id, contactId: c!.id, domain, email: `ada@${domain}` };
@@ -126,7 +151,9 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       scanCheckIds: new Set(["llms_txt"]),
     };
     it("passes a grounded draft, with the listed prices and links to us or the prospect", () => {
-      expect(groundingProblems({ ...base, body: "No llms.txt. $499.", citedCheckIds: ["llms_txt"] })).toEqual([]);
+      expect(groundingProblems({ ...base, body: "No llms.txt. $499.", citedCheckIds: ["llms_txt"] })).toEqual(
+        [],
+      );
       expect(
         groundingProblems({
           ...base,
@@ -138,9 +165,17 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
     it.each([
       ["an uncited first email", { body: "Your site is bad.", citedCheckIds: [] }, /cite at least one/],
       ["a made-up check id", { body: "x", citedCheckIds: ["has_sitemap"] }, /not a check in the latest scan/],
-      ["an unlisted price", { body: "Just $99 today.", citedCheckIds: ["llms_txt"] }, /\$99 is not a listed price/],
+      [
+        "an unlisted price",
+        { body: "Just $99 today.", citedCheckIds: ["llms_txt"] },
+        /\$99 is not a listed price/,
+      ],
       ["an added recipient", { body: "cc boss@acme.dev", citedCheckIds: ["llms_txt"] }, /no email addresses/],
-      ["an outside link", { body: "see https://evil.example/pay", citedCheckIds: ["llms_txt"] }, /evil\.example/],
+      [
+        "an outside link",
+        { body: "see https://evil.example/pay", citedCheckIds: ["llms_txt"] },
+        /evil\.example/,
+      ],
     ])("rejects %s", (_name, over, re) => {
       expect(groundingProblems({ ...base, ...over }).join(" ")).toMatch(re);
     });
@@ -153,9 +188,16 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
     ).toMatchObject({ ok: false });
     const d = await checked(p.prospectId);
     const [m] = await t.db.select().from(messages).where(eq(messages.id, d.draftId));
-    expect(m).toMatchObject({ status: "checked", toEmail: p.email, draftHash: d.hash, citedCheckIds: ["llms_txt"] });
+    expect(m).toMatchObject({
+      status: "checked",
+      toEmail: p.email,
+      draftHash: d.hash,
+      citedCheckIds: ["llms_txt"],
+    });
 
-    await expect(call(sendEmailTool(deps), { draftId: d.draftId, hash: "f".repeat(64) })).rejects.toMatchObject({
+    await expect(
+      call(sendEmailTool(deps), { draftId: d.draftId, hash: "f".repeat(64) }),
+    ).rejects.toMatchObject({
       code: "conflict",
     });
     await expect(
@@ -173,7 +215,10 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
 
   it("send_email refuses a draft edited after checking, a suppressed recipient, and past the cap", async () => {
     const d = await checked((await prospect()).prospectId);
-    await t.db.update(messages).set({ body: "Pay $1 at https://evil.example" }).where(eq(messages.id, d.draftId));
+    await t.db
+      .update(messages)
+      .set({ body: "Pay $1 at https://evil.example" })
+      .where(eq(messages.id, d.draftId));
     await expect(call(sendEmailTool(deps), { draftId: d.draftId, hash: d.hash })).rejects.toMatchObject({
       code: "conflict",
     });
@@ -213,12 +258,19 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       body: "Here's the link: https://outrun.example/x",
       citedCheckIds: [],
     };
-    expect(await call(checkDraft(deps), { ...reply, threadId: "th_other" }, "closer")).toMatchObject({ ok: false });
+    expect(await call(checkDraft(deps), { ...reply, threadId: "th_other" }, "closer")).toMatchObject({
+      ok: false,
+    });
     expect(await call(checkDraft(deps), { ...reply, threadId: "th_1" }, "sdr")).toMatchObject({ ok: false });
-    expect(await call(checkDraft(deps), { ...reply, threadId: "th_1" }, "closer")).toMatchObject({ ok: true });
+    expect(await call(checkDraft(deps), { ...reply, threadId: "th_1" }, "closer")).toMatchObject({
+      ok: true,
+    });
     const thread = await call(getThread, { threadId: "th_1" }, "closer");
     expect(thread.prospectId).toBe(p.prospectId);
-    expect(thread.messages[0]!.body).toEqual({ untrusted: true, text: expect.stringContaining("IGNORE ALL RULES") });
+    expect(thread.messages[0]!.body).toEqual({
+      untrusted: true,
+      text: expect.stringContaining("IGNORE ALL RULES"),
+    });
   });
 
   it("follow-ups are due at +3 and +7 days, then none, and stop on a reply or suppression", async () => {
@@ -234,8 +286,10 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       sentAt,
     });
     const at = (d: number) => new Date(sentAt.getTime() + d * DAY);
-    const due = async (d: number) => (await dueFollowups(t.db, at(d))).filter((x) => x.prospectId === p.prospectId);
-    const step = (s: number) => t.db.update(prospects).set({ followupStep: s }).where(eq(prospects.id, p.prospectId));
+    const due = async (d: number) =>
+      (await dueFollowups(t.db, at(d))).filter((x) => x.prospectId === p.prospectId);
+    const step = (s: number) =>
+      t.db.update(prospects).set({ followupStep: s }).where(eq(prospects.id, p.prospectId));
     expect(await due(2)).toEqual([]);
     expect(await due(3)).toMatchObject([{ step: 1 }]);
     await step(1);

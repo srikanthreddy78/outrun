@@ -21,7 +21,8 @@ export interface Selection {
 export function createIntegrations(
   config: Config,
   real: Partial<{
-    [K in keyof Integrations]: { key: keyof Config["keys"]; make: (c: Config) => Integrations[K] };
+    /** `key: null` needs no secret (public sources); it is always the real client. */
+    [K in keyof Integrations]: { key: keyof Config["keys"] | null; make: (c: Config) => Integrations[K] };
   }> = {},
 ): Selection {
   const fakes = createFakes();
@@ -41,7 +42,7 @@ export function createIntegrations(
 
   const pick = <K extends Exclude<keyof Integrations, "llm">>(name: K): Integrations[K] => {
     const r = real[name];
-    if (r && config.keys[r.key]) return r.make(config);
+    if (r && (r.key === null || config.keys[r.key])) return r.make(config);
     fallback(name, r ? `${String(r.key)} is not set` : "the real client hasn't merged yet");
     return fakes[name];
   };

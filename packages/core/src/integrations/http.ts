@@ -4,7 +4,14 @@ import { AppError } from "../errors";
 export async function postJson<T>(
   url: string,
   body: unknown,
-  opts: { headers: Record<string, string>; timeoutMs: number; signal?: AbortSignal; provider: string },
+  opts: {
+    headers: Record<string, string>;
+    timeoutMs: number;
+    signal?: AbortSignal;
+    provider: string;
+    /** POST unless set; HubSpot's association calls are PUT. */
+    method?: "POST" | "PUT" | "PATCH" | "GET";
+  },
 ): Promise<T> {
   const signal = opts.signal
     ? AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs)])
@@ -12,9 +19,9 @@ export async function postJson<T>(
   let res: Response;
   try {
     res = await fetch(url, {
-      method: "POST",
+      method: opts.method ?? "POST",
       headers: { "content-type": "application/json", ...opts.headers },
-      body: JSON.stringify(body),
+      ...(opts.method === "GET" ? {} : { body: JSON.stringify(body) }),
       signal,
     });
   } catch (err) {
@@ -28,5 +35,10 @@ export async function postJson<T>(
     const retryable = res.status >= 500;
     throw new AppError("upstream_error", `${opts.provider}: HTTP ${res.status}`, { retryable });
   }
-  return (await res.json()) as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : {}) as T;
 }
+
+/** JSON GET with the same error mapping. */
+export const getJson = <T>(url: string, opts: Omit<Parameters<typeof postJson>[2], "method">): Promise<T> =>
+  postJson<T>(url, undefined, { ...opts, method: "GET" });

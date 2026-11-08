@@ -12,6 +12,7 @@ import { planDay } from "./plan_day";
 import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
 import { AppError } from "../../errors";
 import { followupsDueCount, outreachTools, type OutreachDeps } from "./outreach";
+import { prospectingTools, type ProspectingDeps } from "./prospecting";
 
 export { createCheckoutLink, ping, pipelineStatus, planDay };
 
@@ -36,6 +37,8 @@ export function allTools(opts: {
   audit?: { apify: ApifyClient; appUrl: string };
   /** SH-5/7/8: the sdr's and closer's tools; with them, pipeline_status counts real follow-ups. */
   outreach?: OutreachDeps;
+  /** SH-2/3: the prospector's and researcher's tools. */
+  prospecting?: ProspectingDeps;
 }): ToolDef[] {
   const followupsDue = opts.followupsDue ?? (opts.outreach ? followupsDueCount : undefined);
   return [
@@ -46,5 +49,6 @@ export function allTools(opts: {
     ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl) : []),
     createCheckoutLink(opts.orders ?? noOrders),
     ...(opts.outreach ? outreachTools(opts.outreach) : []),
+    ...(opts.prospecting ? prospectingTools(opts.prospecting) : []),
   ] as unknown as ToolDef[];
 }

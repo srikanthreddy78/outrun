@@ -1,0 +1,653 @@
+{
+  "servers": [
+    {
+      "server": {
+        "name": "ac.inference.sh/mcp",
+        "title": "inference.sh",
+        "description": "Run 150+ AI apps \u2014 image, video, audio, LLMs, 3D and more. Browse, execute, stream results.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://sh.inference.ac"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-13T17:32:20.852269Z",
+          "publishedAt": "2026-04-13T17:32:20.852269Z",
+          "updatedAt": "2026-04-13T17:32:20.852269Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.inference.sh/mcp",
+        "title": "inference.sh",
+        "description": "Run 150+ AI apps \u2014 image, video, audio, LLMs, 3D and more. Browse, execute, stream results.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://sh.inference.ac"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-13T17:33:26.613537Z",
+          "publishedAt": "2026-04-13T17:33:26.613537Z",
+          "updatedAt": "2026-04-13T17:33:26.613537Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.inference.sh/mcp",
+        "title": "inference.sh",
+        "description": "run any ai model. compose agents, stack knowledge, connect tools. one api, pay per run.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://sh.inference.ac"
+          },
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-20T18:02:33.295284Z",
+          "publishedAt": "2026-07-20T18:02:33.295284Z",
+          "updatedAt": "2026-07-20T18:02:33.295284Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.inference.sh/mcp",
+        "title": "inference.sh",
+        "description": "run any ai model. compose agents, stack knowledge, connect tools. one api, pay per run.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://api.inference.sh/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-07-27T10:44:51.359634Z",
+          "publishedAt": "2026-07-27T10:44:51.359634Z",
+          "updatedAt": "2026-07-27T10:44:51.359634Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.mizan/registry",
+        "title": "Mizan",
+        "description": "Player ban records from 560+ game community ban lists, with Steam's own bans. Reads need no key.",
+        "websiteUrl": "https://mizan.ac/capabilities",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mizan.ac/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-11-05T23:35:33.188176Z",
+          "publishedAt": "2026-11-05T23:35:33.188176Z",
+          "updatedAt": "2026-11-05T23:35:33.188176Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.snag/snag",
+        "description": "Gives your coding agent the captured console, network, replay and screenshot evidence for a bug.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.snag.ac/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-09T10:35:53.194664Z",
+          "publishedAt": "2026-09-09T10:35:53.194664Z",
+          "updatedAt": "2026-09-09T10:35:53.194664Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.tandem/docs-mcp",
+        "description": "Remote MCP server for Tandem docs, install guides, SDKs, workflows, and agent setup help.",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://tandem.ac/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/frumu-ai/tandem",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-02T11:22:40.005172Z",
+          "publishedAt": "2026-04-02T11:22:40.005172Z",
+          "updatedAt": "2026-04-02T11:22:40.005172Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.tandem/docs-mcp",
+        "description": "Remote MCP server for Tandem docs, install guides, SDKs, workflows, and agent setup help.",
+        "websiteUrl": "https://tandem.ac/docs-mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://tandem.ac/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/frumu-ai/tandem",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-02T11:40:41.429277Z",
+          "publishedAt": "2026-04-02T11:40:41.429277Z",
+          "updatedAt": "2026-04-02T11:40:41.429277Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ac.tandem/docs-mcp",
+        "description": "Remote MCP server for Tandem docs, install guides, SDKs, workflows, and agent setup help.",
+        "websiteUrl": "https://tandem.ac/docs-mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://tandem.ac/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/frumu-ai/tandem",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-04-22T21:06:34.500049Z",
+          "publishedAt": "2026-04-22T21:06:34.500049Z",
+          "updatedAt": "2026-04-22T21:06:34.500049Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "academy.apexai/apex-ai-academy",
+        "title": "Apex AI Academy",
+        "description": "Lessons, news and pricing from Apex AI Academy, an AI academy run by agents. Free lessons, no key.",
+        "websiteUrl": "https://apexai.academy/developers/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://apexai.academy/mcp",
+            "headers": [
+              {
+                "description": "Optional: Bearer <personal apex_ key> for Premium tools. Public tools need no key.",
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/ApexAI-Academy/sample-agents",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-16T03:32:46.025467Z",
+          "publishedAt": "2026-10-16T03:32:46.025467Z",
+          "updatedAt": "2026-10-16T03:32:46.025467Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "academy.apexai/apex-ai-academy",
+        "title": "Apex AI Academy",
+        "description": "Learn your AI agent, and let it learn you: fact-checked lessons with human and agent views.",
+        "websiteUrl": "https://apexai.academy/developers/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://apexai.academy/mcp",
+            "headers": [
+              {
+                "description": "Optional: Bearer <personal apex_ key> for Premium tools. Public tools need no key.",
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/ApexAI-Academy/sample-agents",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-16T18:06:12.817713Z",
+          "publishedAt": "2026-10-16T18:06:12.817713Z",
+          "updatedAt": "2026-10-16T18:06:12.817713Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "academy.apexai/apex-ai-academy",
+        "title": "Apex AI Academy",
+        "description": "Co-Learn with your Agent: fact-checked AI lessons with Human and Agent views.",
+        "websiteUrl": "https://apexai.academy/developers/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://apexai.academy/mcp",
+            "headers": [
+              {
+                "description": "Optional: Bearer <personal apex_ key> for Premium tools. Public tools need no key.",
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/ApexAI-Academy/sample-agents",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-17T03:25:05.205722Z",
+          "publishedAt": "2026-10-17T03:25:05.205722Z",
+          "updatedAt": "2026-10-17T03:25:05.205722Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "academy.ase/periodic-system",
+        "title": "Agentic Engineering Periodic System",
+        "description": "Practices for building software with coding agents, each with a test you check on your repo.",
+        "websiteUrl": "https://ase.academy/agentic-engineering/periodic-system/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://ase.academy/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-22T20:23:57.545065Z",
+          "publishedAt": "2026-10-22T20:23:57.545065Z",
+          "updatedAt": "2026-10-22T20:23:57.545065Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.apogee/apogee",
+        "title": "Apogee: Bulk Ad Launcher for Meta, TikTok & Snapchat",
+        "description": "Bulk-launch and manage ads across many Meta, TikTok and Snapchat ad accounts for agencies.",
+        "websiteUrl": "https://www.apogee.ad/developers/mcp/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://app.apogee.ad/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/ApogeeGIT/apogee-mcp",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-11-03T23:36:32.020466Z",
+          "publishedAt": "2026-11-03T23:36:32.020466Z",
+          "updatedAt": "2026-11-03T23:36:32.020466Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.getle/leads",
+        "title": "Getlead",
+        "description": "Find B2B leads with verified work emails, find and verify emails, and run cold email outreach.",
+        "websiteUrl": "https://getle.ad/mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.getle.ad/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/Adgrowofficial/getlead-mcp",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-26T12:28:37.779048Z",
+          "publishedAt": "2026-09-26T12:28:37.779048Z",
+          "updatedAt": "2026-09-26T12:28:37.779048Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.getle/leads",
+        "title": "Getlead",
+        "description": "Find B2B leads with verified work emails, find and verify emails, and run cold email outreach.",
+        "websiteUrl": "https://getle.ad/mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.getle.ad/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/Adgrowofficial/getlead-mcp",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-26T22:16:48.897897Z",
+          "publishedAt": "2026-10-26T22:16:48.897897Z",
+          "updatedAt": "2026-10-26T22:16:48.897897Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.inside/inside-ads",
+        "title": "Inside Ads",
+        "description": "Telegram ad exchange: estimate reach and cost with no account, then create and run campaigns.",
+        "websiteUrl": "https://inside.ad",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://app.inside.ad/api/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-08-18T20:55:46.452926Z",
+          "publishedAt": "2026-08-18T20:55:46.452926Z",
+          "updatedAt": "2026-08-18T20:55:46.452926Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.pantheon/mcp",
+        "title": "Pantheon",
+        "description": "Meta ads library, competitor ads, brand voice, avatars and offer briefs from your Pantheon account.",
+        "websiteUrl": "https://pantheon.ad",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.pantheon.ad/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-11-03T12:12:01.650543Z",
+          "publishedAt": "2026-11-03T12:12:01.650543Z",
+          "updatedAt": "2026-11-03T12:12:01.650543Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ad.tide/mcp",
+        "title": "tide",
+        "description": "Sui blockchain data in plain English: transactions, wallets, coins, balances, fund flows and SQL.",
+        "websiteUrl": "https://tide.ad/docs/mcp",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://api.tide.ad/mcp",
+            "headers": [
+              {
+                "description": "Optional. Bearer YOUR_API_KEY for higher limits and SQL. Free keys at https://tide.ad/developers/keys. Works without it at the keyless tier.",
+                "isSecret": true,
+                "name": "Authorization"
+              }
+            ]
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-11-04T06:22:37.915668Z",
+          "publishedAt": "2026-11-04T06:22:37.915668Z",
+          "updatedAt": "2026-11-04T06:22:37.915668Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.beachclubs/mcp",
+        "title": "BeachClubs.ae",
+        "description": "Search UAE beach clubs, day pass prices, amenities, opening hours and events across all 7 emirates.",
+        "websiteUrl": "https://www.beachclubs.ae/mcp-server",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://www.beachclubs.ae/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-22T22:20:40.178549Z",
+          "publishedAt": "2026-10-22T22:20:40.178549Z",
+          "updatedAt": "2026-10-22T22:20:40.178549Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.beachclubs/mcp",
+        "title": "BeachClubs.ae",
+        "description": "Search UAE beach clubs, day pass prices, amenities, opening hours and events across all 7 emirates.",
+        "websiteUrl": "https://www.beachclubs.ae/mcp-server",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://www.beachclubs.ae/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-23T16:09:50.932635Z",
+          "publishedAt": "2026-10-23T16:09:50.932635Z",
+          "updatedAt": "2026-10-23T16:09:50.932635Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.brainy/grocery-prices",
+        "title": "Dubai Grocery Prices",
+        "description": "Compare Dubai grocery lists, observed prices, delivery rules and indicative online offers in AED.",
+        "websiteUrl": "https://prices.brainy.ae/developers.html",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://prices.brainy.ae/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-30T10:34:55.977998Z",
+          "publishedAt": "2026-09-30T10:34:55.977998Z",
+          "updatedAt": "2026-09-30T10:34:55.977998Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.brainy/grocery-prices",
+        "title": "Dubai Cost of Living Prices",
+        "description": "Dubai cost of living: groceries, schools, fuel, rent, utilities, phone plans, electronics and visas",
+        "websiteUrl": "https://prices.brainy.ae/developers.html",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://prices.brainy.ae/mcp"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-02T04:58:59.331523Z",
+          "publishedAt": "2026-10-02T04:58:59.331523Z",
+          "updatedAt": "2026-10-02T04:58:59.331523Z",
+          "isLatest": false
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.brainy/grocery-prices",
+        "title": "Brainy Prices \u2014 UAE Cost of Living",
+        "description": "Source-backed UAE costs: groceries, schools, housing, transport, utilities, telecom and relocation",
+        "websiteUrl": "https://prices.brainy.ae/developers.html",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://prices.brainy.ae/mcp/v2"
+          }
+        ]
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-10-04T02:29:51.000704Z",
+          "publishedAt": "2026-10-04T02:29:51.000704Z",
+          "updatedAt": "2026-10-04T02:29:51.000704Z",
+          "isLatest": true
+        }
+      }
+    },
+    {
+      "server": {
+        "name": "ae.datadubai/dubai-real-estate",
+        "title": "Dubai Data \u2014 Dubai real estate statistics",
+        "description": "Dubai property prices, AED/sqft, sales, rents, yields and projects from DLD registered transactions.",
+        "websiteUrl": "https://datadubai.ae/mcp/",
+        "remotes": [
+          {
+            "type": "streamable-http",
+            "url": "https://mcp.datadubai.ae/mcp"
+          }
+        ],
+        "repository": {
+          "url": "https://github.com/datadubai/dubai-real-estate-dld",
+          "source": "github"
+        }
+      },
+      "_meta": {
+        "io.modelcontextprotocol.registry/official": {
+          "status": "active",
+          "statusChangedAt": "2026-09-30T08:30:47.911063Z",
+          "publishedAt": "2026-09-30T08:30:47.911063Z",
+          "updatedAt": "2026-09-30T08:30:47.911063Z",
+          "isLatest": true
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "nextCursor": "africa.lomi/mcp:1.0.0",
+    "count": 40
+  }
+}

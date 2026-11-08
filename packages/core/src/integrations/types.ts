@@ -183,6 +183,8 @@ export interface HubSpotClient {
     companyId: string;
   }): Promise<{ id: string }>;
   logEmail(e: {
+    /** Our message id; the sync logs each message once. */
+    outrunId?: string;
     dealId: string;
     subject: string;
     body: string;
