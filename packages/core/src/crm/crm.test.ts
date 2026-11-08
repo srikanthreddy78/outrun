@@ -129,6 +129,34 @@ describe("Monid client (SH-3), recorded responses", () => {
     );
   });
 
+  it("a run that finishes at once reports no cost: it is read back from the run (live API shape)", async () => {
+    const seen = recordFetch((r) =>
+      r.method === "POST"
+        ? {
+            json: {
+              runId: "run_2",
+              status: "COMPLETED",
+              providerResponse: { httpStatus: 200 },
+              output: { data: { uuid: "y" } },
+            },
+          }
+        : { json: { runId: "run_2", status: "COMPLETED", cost: { value: 0.2, currency: "USD" } } },
+    );
+    const out = await createMonidClient("k", { sleep: async () => {} }).run(
+      "akta:/v1/company/enrichment",
+      {},
+    );
+    expect(out).toEqual({ data: { data: { uuid: "y" } }, costUsd: 0.2 });
+    expect(seen.at(-1)!.url).toBe("https://api.monid.ai/v1/runs/run_2");
+    // The live API names the provider's status httpStatus.
+    recordFetch(() => ({
+      json: { runId: "r", status: "COMPLETED", providerResponse: { httpStatus: 422 }, cost: { value: 0 } },
+    }));
+    await expect(createMonidClient("k", { sleep: async () => {} }).run("akta:/x", {})).rejects.toThrow(
+      /provider HTTP 422/,
+    );
+  });
+
   it("a provider error or a blocked run is an error, not data", async () => {
     recordFetch(() => ({
       json: { runId: "r", status: "COMPLETED", providerResponse: { status: 422, data: { error: "bad" } } },

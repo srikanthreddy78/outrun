@@ -14,7 +14,7 @@ interface MonidRun {
   runId?: string;
   status?: string;
   output?: unknown;
-  providerResponse?: { status?: number; data?: unknown };
+  providerResponse?: { status?: number; httpStatus?: number; data?: unknown };
   cost?: { value?: number };
   error?: { message?: string };
 }
@@ -60,12 +60,23 @@ export function createMonidClient(
         throw new AppError("upstream_error", `monid: run ${id ?? "?"} ended ${run.status ?? "unknown"}`, {
           retryable: run.status === undefined || !DONE.has(run.status),
         });
-      const http = run.providerResponse?.status;
+      // The live API calls it httpStatus; older responses used status.
+      const http = run.providerResponse?.httpStatus ?? run.providerResponse?.status;
       // Not found: the provider knows nothing about it. That is an empty answer, not a failure.
       if (http === 404) return { data: null, costUsd: run.cost?.value ?? 0 };
       if (http && http >= 400)
         throw new AppError("upstream_error", `monid: provider HTTP ${http}`, { retryable: http >= 500 });
-      return { data: run.providerResponse?.data ?? run.output ?? null, costUsd: run.cost?.value ?? 0 };
+      const data = run.providerResponse?.data ?? run.output ?? null;
+      // A run that finishes inside the POST comes back without its cost; the run record has it.
+      if (run.cost?.value === undefined && id) {
+        const billed = await getJson<MonidRun>(`${BASE}/v1/runs/${encodeURIComponent(id)}`, {
+          headers,
+          timeoutMs: 30_000,
+          provider: "monid",
+        }).catch(() => null);
+        return { data, costUsd: billed?.cost?.value ?? 0 };
+      }
+      return { data, costUsd: run.cost?.value ?? 0 };
     },
   };
 }
