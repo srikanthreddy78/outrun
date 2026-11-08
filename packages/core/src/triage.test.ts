@@ -141,3 +141,19 @@ describe("triage_reply (SH-7, SH-10)", () => {
       expect(msg).toContain(p);
   });
 });
+
+describe("triage for a client", () => {
+  it("names the client and its offer, not Outrun", async () => {
+    const { triageSystem, clientAgentReplyBrief } = await import("./triage");
+    const s = triageSystem("Acme Pay, which offers: a demo of invoice matching");
+    expect(s).toContain("from Acme Pay, which offers: a demo of invoice matching.");
+    expect(s).not.toContain("Outrun");
+    const b = clientAgentReplyBrief({
+      name: "Acme Pay",
+      pitch: "a demo",
+      callToActionUrl: "https://acme-pay.dev/demo",
+    });
+    expect(b).toContain("next_step: https://acme-pay.dev/demo");
+    expect(b).not.toMatch(/llms\.txt|USD/);
+  });
+});

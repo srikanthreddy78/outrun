@@ -155,6 +155,15 @@ export interface TransactionalEmail {
   idempotencyKey: string;
 }
 export type SendTransactionalFn = (msg: TransactionalEmail) => Promise<{ providerId: string }>;
+/** A client's sending domain on AgentMail and the DNS records the client must add. */
+export interface AgentMailDomain {
+  domainId: string;
+  domain: string;
+  /** NOT_STARTED, PENDING, INVALID, FAILED, VERIFYING or VERIFIED. */
+  status: string;
+  records: { type: string; name: string; value: string; status: string; priority?: number }[];
+}
+
 export interface AgentMailClient {
   send(msg: {
     to: string;
@@ -164,8 +173,19 @@ export interface AgentMailClient {
     inReplyTo?: string;
     listUnsubscribe: string;
     idempotencyKey: string;
+    /** Send from this inbox instead of Outrun's: a client's own, on its own domain. */
+    inboxId?: string;
   }): Promise<{ providerId: string; threadId: string }>;
   sendTransactional: SendTransactionalFn;
+  /** Registers a client's domain; `clientId` makes a retry return the same domain. */
+  createDomain(domain: string, clientId: string): Promise<AgentMailDomain>;
+  getDomain(domainId: string): Promise<AgentMailDomain>;
+  /** Asks AgentMail to re-check the DNS records now. */
+  verifyDomain(domainId: string): Promise<void>;
+  /** Creates `username@domain` once the domain is verified; `clientId` makes a retry return the same inbox. */
+  createInbox(req: { username: string; domain: string; displayName: string; clientId: string }): Promise<{
+    inboxId: string;
+  }>;
 }
 
 /* ---------- HubSpot (Shane, SH-4) ---------- */

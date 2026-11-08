@@ -11,7 +11,8 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { WEBHOOK_TOLERANCE_SECONDS } from "../../contracts";
 import { transaction, type DbHandle } from "../db/client";
-import { contacts, messages, prospects } from "../db/schema";
+import { clients, contacts, messages, prospects } from "../db/schema";
+import { OUTRUN_CLIENT_ID } from "../constants";
 import type { Emit } from "../events";
 import { recordWebhookOnce } from "../events";
 import { suppress } from "../email/rules";
@@ -107,11 +108,24 @@ export async function acceptAgentMailEvent(opts: {
     const m = e.data.message;
     const first = await transaction(opts.db, async (tx) => {
       if (!(await recordWebhookOnce(tx.db, "agentmail", eventId, { type }))) return false;
+      // The inbox says whose reply it is: a client's own inbox is that client's; any other is Outrun's.
+      const [owner] = await tx.db
+        .select({ id: clients.id })
+        .from(clients)
+        .where(eq(clients.agentmailInboxId, m.inbox_id))
+        .limit(1);
+      const clientId = owner?.id ?? OUTRUN_CLIENT_ID;
       // The thread ties a reply to its prospect; a stranger's mail has neither.
       const [prior] = await tx.db
         .select({ prospectId: messages.prospectId, contactId: messages.contactId })
         .from(messages)
-        .where(and(eq(messages.threadId, m.thread_id), sql`${messages.prospectId} is not null`))
+        .where(
+          and(
+            eq(messages.threadId, m.thread_id),
+            eq(messages.clientId, clientId),
+            sql`${messages.prospectId} is not null`,
+          ),
+        )
         .limit(1);
       const [contact] = prior
         ? []
@@ -119,6 +133,7 @@ export async function acceptAgentMailEvent(opts: {
       const [row] = await tx.db
         .insert(messages)
         .values({
+          clientId,
           prospectId: prior?.prospectId ?? null,
           contactId: prior?.contactId ?? contact?.id ?? null,
           threadId: m.thread_id,

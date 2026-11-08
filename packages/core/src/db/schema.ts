@@ -14,6 +14,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -79,6 +80,12 @@ export const clients = pgTable(
     profileConfirmedAt: timestamp("profile_confirmed_at", { withTimezone: true }),
     confirmedBy: text("confirmed_by"),
     agentmailInboxId: text("agentmail_inbox_id"),
+    agentmailDomainId: text("agentmail_domain_id"),
+    /** The DNS records AgentMail asks for, as last read, for the client to add. */
+    dnsRecords: jsonb("dns_records")
+      .$type<{ type: string; name: string; value: string; status: string; priority?: number }[]>()
+      .notNull()
+      .default([]),
     sendingDomain: text("sending_domain"),
     dnsStatus: text("dns_status", { enum: ["none", "pending", "verified", "failed"] })
       .notNull()
@@ -357,7 +364,8 @@ export const suppressions = pgTable(
     clientId: uuid("client_id").references(() => clients.id),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("suppressions_value_uq").on(t.value)],
+  // One row per address and client; a null client (everyone) counts once too.
+  (t) => [unique("suppressions_value_client_uq").on(t.value, t.clientId).nullsNotDistinct()],
 );
 
 /** Application tables, for tests and tooling. */

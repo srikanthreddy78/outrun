@@ -43,6 +43,13 @@
       "when": 1794123150704,
       "tag": "0005_ceo_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794123905588,
+      "tag": "0006_client_email",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { companies, contacts, events, messages, prospects, suppressions } from "
 import { createEmitter } from "../events";
 import { FakeAgentMail } from "../fakes";
 import { createTempDatabase, type TempDb } from "../testing/db";
+import { OUTRUN_CLIENT_ID } from "../constants";
 import { acceptAgentMailEvent, verifySvix } from "../webhooks/agentmail";
 import { effectiveSendCap, sendPause } from "./rules";
 import { runSendEmail, type SendDeps } from "./send";
@@ -186,7 +187,10 @@ describe("email (SH-1, SH-6)", () => {
     it("signs tokens that can't be forged, and unsubscribes once", async () => {
       const p = await prospect();
       const token = unsubscribeToken(SECRET, p.contactId);
-      expect(readUnsubscribeToken(SECRET, token)).toBe(p.contactId);
+      expect(readUnsubscribeToken(SECRET, token)).toEqual({
+        contactId: p.contactId,
+        clientId: OUTRUN_CLIENT_ID,
+      });
       expect(readUnsubscribeToken("another-secret", token)).toBeNull();
       const other = await prospect();
       const forged = `${Buffer.from(other.contactId).toString("base64url")}.${token.split(".")[1]}`;

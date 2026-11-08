@@ -9,7 +9,7 @@
  *   save_research    sourced facts and business contacts only; code computes the fit score
  */
 import { randomUUID } from "node:crypto";
-import { and, asc, count, eq, gte, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
 import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
 import { companies, contacts, prospects, suppressions } from "../../db/schema";
@@ -73,7 +73,12 @@ export const fileProspect = (deps: ProspectingDeps) =>
       const [blocked] = await ctx.db
         .select({ id: suppressions.id })
         .from(suppressions)
-        .where(eq(suppressions.value, co.domain));
+        .where(
+          and(
+            eq(suppressions.value, co.domain),
+            or(isNull(suppressions.clientId), eq(suppressions.clientId, ctx.clientId)),
+          ),
+        );
       if (blocked) throw new AppError("forbidden", `${co.domain} is suppressed`);
       const [{ n }] = (await ctx.db
         .select({ n: count() })
@@ -211,7 +216,7 @@ export const saveResearch = defineTool({
     let savedContacts = 0;
     let first: { id: string; email: string; role: string } | null = null;
     for (const c of found) {
-      if (await isSuppressed(ctx.db, c.email)) continue;
+      if (await isSuppressed(ctx.db, c.email, ctx.clientId)) continue;
       const [row] = await ctx.db
         .insert(contacts)
         .values({
