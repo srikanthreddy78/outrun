@@ -24,6 +24,7 @@ import { assertDemoRecipient } from "../../demo";
 import type { MxLookup } from "../../email/mx";
 import { effectiveSendCap, isSuppressed, sentToday } from "../../email/rules";
 import { AppError } from "../../errors";
+import { lessonsFor } from "../../insights";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
 
@@ -257,6 +258,7 @@ export function getBrief(deps: OutreachDeps) {
               tone: client.profile.tone,
             }
           : null,
+        lessons: client ? await lessonsFor(ctx.db, ctx.clientId) : null,
       };
     },
   });

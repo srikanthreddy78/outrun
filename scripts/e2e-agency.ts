@@ -10,6 +10,8 @@
  *   the profile → the client's own approver approves in the portal → sent from the client's
  *   own inbox. Then a reply to Acme's inbox reaches Acme's closer, who answers with Acme's
  *   call to action after Acme approves.
+ *   Then the CEO learns: it reads Acme's insights, sets Acme's focus and proposes an ICP change
+ *   with the numbers; the owner accepts, and Acme's confirmed profile carries the change.
  *
  * Both clients prospect the same company and the same person, so it also proves: drafts,
  * approvals, inboxes, unsubscribes and replies never cross clients, and Outrun is untouched.
@@ -17,6 +19,7 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "@outrun/core";
 import { addClient, confirmProfile, startEmailSetup, startProfiling } from "@outrun/core/clients";
+import { applyProfileProposal, clientFocus, proposalsFor } from "@outrun/core/insights";
 import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 import type { AgentName } from "@outrun/core/contracts";
 import type { ToolContext } from "@outrun/core/crew";
@@ -553,6 +556,69 @@ async function main(): Promise<void> {
       "the CEO sees which crew member ran",
     );
     ok("no draft, approval, inbox or unsubscribe crossed clients; Outrun untouched; the CEO sees both");
+
+    console.log("F. the CEO learns from Acme's results, and the owner accepts its proposal");
+    naive.script("ceo", [
+      { tool: "client_insights", input: { clientId: acme } },
+      {
+        tool: "set_client_focus",
+        input: (calls: { tool: string; result?: unknown }[]) => {
+          const i = calls.find((x) => x.tool === "client_insights")?.result as {
+            replies: number;
+            contacted: number;
+          };
+          return { clientId: acme, dailyDraftLimit: 12, reason: `${i.replies} of ${i.contacted} replied` };
+        },
+      },
+      {
+        tool: "propose_profile_change",
+        input: (calls: { tool: string; result?: unknown }[]) => {
+          const i = calls.find((x) => x.tool === "client_insights")?.result as {
+            byKeyword: { key: string; contacted: number; replied: number }[];
+          };
+          const k = i.byKeyword.find((r) => r.key === "invoicing")!;
+          return {
+            clientId: acme,
+            changes: { addIncludeKeywords: ["accounts payable"], buyerRoles: ["CFO"] },
+            evidence: `invoicing: ${k.replied} of ${k.contacted} replied, all from a CFO`,
+          };
+        },
+      },
+    ]);
+    await startAgent("outrun", "ceo", { type: "system", id: "ceo-learns" });
+    const proposal = await waitFor("the CEO's proposal", async () => {
+      noFailures();
+      const [p] = await proposalsFor(db, acme);
+      return p;
+    });
+    const insight = naive.toolCalls.find((c) => c.tool === "client_insights")?.result as {
+      sent: number;
+      contacted: number;
+      replies: number;
+      interested: number;
+    };
+    check(
+      insight.sent === 2 && insight.contacted === 1 && insight.replies === 1 && insight.interested === 1,
+      `the CEO read Acme's numbers (${JSON.stringify(insight)})`,
+    );
+    check(proposal.status === "open" && proposal.by === "naive:ceo", "the proposal waits for the owner");
+    check((await clientFocus(db, acme))?.dailyDraftLimit === 12, "Acme's focus is 12 first emails a day");
+    await applyProfileProposal({ db, emit: rt.emit }, acme, proposal.proposalId, OWNER);
+    const [acmeRow] = await db.select().from(clients).where(eq(clients.id, acme));
+    const icp = (acmeRow!.profile as { icp: { includeKeywords: string[]; buyerRoles: string[] } }).icp;
+    check(
+      icp.includeKeywords.includes("accounts payable") && icp.buyerRoles.join() === "CFO",
+      "the accepted change is in Acme's profile",
+    );
+    check(acmeRow!.profileConfirmedAt && acmeRow!.status === "active", "and the profile stays confirmed");
+    const [betaRow] = await db.select().from(clients).where(eq(clients.id, beta));
+    check(
+      !(betaRow!.profile as { icp: { includeKeywords: string[] } }).icp.includeKeywords.includes(
+        "accounts payable",
+      ),
+      "Beta's profile untouched",
+    );
+    ok("the CEO read Acme's insights, set its focus and proposed an ICP change; the owner accepted it");
 
     const dead = await db.select().from(events).where(eq(events.type, "job.dead"));
     check(

@@ -11,6 +11,7 @@ import type { Db } from "../../db/client";
 import { agentSessions, clients, events, messages, prospects } from "../../db/schema";
 import { AppError } from "../../errors";
 import { saveDraftProfile } from "../../clients";
+import { clientInsights, insightsSince, proposeProfileChange, setClientFocus } from "../../insights";
 import { dayIn } from "../../time";
 import { naiveAgentName } from "../identity";
 import { defineTool } from "../registry";
@@ -260,6 +261,36 @@ export async function latestBrief(db: Db, day?: string) {
   return e ? { ...(e.payload as { day: string; summary: string }), at: e.ts } : null;
 }
 
+/** client_insights: what is working for one client, from the ledger. Read-only. */
+export const clientInsightsTool = defineTool({
+  name: "client_insights",
+  handler: async ({ clientId }, ctx) => {
+    const c = await clientById(ctx.db, clientId);
+    return clientInsights(ctx.db, c.id, { since: insightsSince(ctx.now()) });
+  },
+});
+
+/** propose_profile_change: an ICP change for the owner to accept or reject on the dashboard. */
+export const proposeProfileChangeTool = defineTool({
+  name: "propose_profile_change",
+  handler: async ({ clientId, changes, evidence }, ctx) =>
+    proposeProfileChange(
+      { db: ctx.db, emit: ctx.emit, now: ctx.now },
+      { clientId, changes, evidence },
+      `naive:${ctx.agent}`,
+    ),
+});
+
+/** set_client_focus: how many first emails a client's crew drafts a day; plan_day reads it. */
+export const setClientFocusTool = defineTool({
+  name: "set_client_focus",
+  handler: async (input, ctx) => {
+    const c = await clientById(ctx.db, input.clientId);
+    if (c.id === OUTRUN_CLIENT_ID) throw new AppError("bad_request", "Outrun's own crew plans its own day");
+    return setClientFocus({ db: ctx.db, emit: ctx.emit }, input, `naive:${ctx.agent}`);
+  },
+});
+
 export const agencyTools = [
   getClientProfile,
   saveClientProfile,
@@ -268,6 +299,9 @@ export const agencyTools = [
   agencyStatus,
   kickClient,
   saveBrief,
+  clientInsightsTool,
+  proposeProfileChangeTool,
+  setClientFocusTool,
 ];
 
 /** /dashboard/agency: every client, its six agents with what each did this week, and the brief. */
