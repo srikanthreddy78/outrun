@@ -4,6 +4,7 @@
  * `naive.config.test.ts` fails if they drift. Changes need all three approvals.
  */
 import { z } from "zod";
+import { ClientProfile, ClientStatus } from "./clients";
 import { Domain, Email, Id, IsoDateTime, Untrusted } from "./common";
 import {
   CheckId,
@@ -26,14 +27,6 @@ export const AGENTS = [...CLIENT_ROLES, "ceo"] as const;
 export const AgentName = z.enum(AGENTS);
 export type AgentName = z.infer<typeof AgentName>;
 
-const ClientStatus = z.enum([
-  "draft",
-  "profiling",
-  "awaiting_confirmation",
-  "email_setup",
-  "active",
-  "paused",
-]);
 const CrewMember = z.object({ role: AgentName, naiveAgent: z.string() });
 
 /** The MCP server name agents see; tools appear as `outrun.<tool>`. */
@@ -310,6 +303,14 @@ export const CREW_TOOLS = {
       confirmed: z.boolean(),
       profile: z.record(z.string(), z.unknown()),
     }),
+  },
+  save_client_profile: {
+    agents: ["researcher"],
+    policy: "allow",
+    description:
+      "Saves the draft profile for your client (target customer, offer, prices, sender, sources), drafted from the client's own site. The owner confirms it before any outreach.",
+    input: z.object({ profile: ClientProfile }),
+    output: z.object({ status: ClientStatus }),
   },
   list_clients: {
     agents: ["ceo"],
