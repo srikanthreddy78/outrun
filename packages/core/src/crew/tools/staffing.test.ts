@@ -263,7 +263,7 @@ describe("the CEO staffs clients and drives them to a goal; the account manager 
       call(
         "account_manager",
         "answer_client",
-        { questionId: q.questionId.replace(/.$/, "0"), answer: "x" },
+        { questionId: q.questionId.replace(/.$/, (c) => (c === "0" ? "1" : "0")), answer: "x" },
         acme,
       ),
     ).rejects.toThrow();
