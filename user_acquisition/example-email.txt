@@ -19,7 +19,7 @@ your streak" but your landing page leads with "beautiful habit tracking", your a
 ticket to change the headline, not just a report.
 
 We're opening early access. Reply "yes" and we'll send the details, or point your agent at
-heyoutrun.com/llms.txt and it can take it from there.
+heyoutrun.com/SKILL.md and it can take it from there.
 
 The Outrun team
 

@@ -3,7 +3,7 @@
 The first email each prospect gets, written from `wiki/PRODUCT.md`: Outrun is a product marketing
 agency that the prospect's coding agent uses, and its feedback loop ships code. Plain text, one
 recipient, anonymous ("The Outrun team", written as "we"), and one link besides the unsubscribe
-link: `heyoutrun.com/llms.txt`, the page written for the prospect's agent. Every send waits for a
+link: `heyoutrun.com/SKILL.md`, the page written for the prospect's agent. Every send waits for a
 person's approval, so nothing below goes out until someone approves it.
 
 ## Envelope
@@ -33,7 +33,7 @@ your streak" but your landing page leads with "beautiful habit tracking", your a
 ticket to change the headline, not just a report.
 
 We're opening early access. Reply "yes" and we'll send the details, or point your agent at
-heyoutrun.com/llms.txt and it can take it from there.
+heyoutrun.com/SKILL.md and it can take it from there.
 
 The Outrun team
 ```
@@ -69,7 +69,7 @@ Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.a
 - No invented facts: no metrics, customer names, results or prices. The streak example is the
   illustration from `wiki/PRODUCT.md`, phrased as a hypothetical ("If the hook that lands...").
 - Don't promise what doesn't exist yet: no install command or public CLI/MCP connector. Early
-  access is by reply, or through `heyoutrun.com/llms.txt`.
+  access is by reply, or through `heyoutrun.com/SKILL.md`.
 - A reply of "yes" lands in the inbox, where `inbox-triage` logs it as a human reply. Someone has
   to answer it with the early-access details; nothing answers automatically yet.
 
@@ -85,7 +85,7 @@ Hi {{first_name_or_team}},
 
 A quick nudge on Outrun. Your coding agent hands us the product, we run the marketing, and
 what we learn comes back as tickets it can ship. Reply "yes" for early access, or point your
-agent at heyoutrun.com/llms.txt.
+agent at heyoutrun.com/SKILL.md.
 
 The Outrun team
 ```
@@ -96,7 +96,7 @@ The Outrun team
 Hi {{first_name_or_team}},
 
 Last note from us. If you ever want your coding agent to hand off {{company}}'s marketing,
-reply any time, or have it read heyoutrun.com/llms.txt.
+reply any time, or have it read heyoutrun.com/SKILL.md.
 
 The Outrun team
 ```

@@ -38,8 +38,8 @@ root `.env.example`).
 
 ```sh
 pnpm install                                   # from the repo root
-pnpm --filter @outrun/user-acquisition up:dry  # build, then preview
-pnpm --filter @outrun/user-acquisition up      # build, then apply
+pnpm --filter @outrun/user-acquisition naive:dry-run  # build, then preview
+pnpm --filter @outrun/user-acquisition naive:up       # build, then apply
 pnpm --filter @outrun/user-acquisition naive session create --agent outreach-sender --identity outrun --message "..."
 ```
 
