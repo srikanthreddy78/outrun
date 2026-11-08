@@ -9,7 +9,12 @@ const OLD = "whsec_previous_test";
 const NOW = 1_794_100_000_000;
 
 const envelope = (id: string) =>
-  JSON.stringify({ id, type: "session.idle", created_at: "2026-11-07T10:00:00Z", data: { session_id: "ses_1", stop_reason: "awaiting_approval" } });
+  JSON.stringify({
+    id,
+    type: "session.idle",
+    created_at: "2026-11-07T10:00:00Z",
+    data: { session_id: "ses_1", stop_reason: "awaiting_approval" },
+  });
 
 const headers = (sig: string, ts: number) => {
   const h = new Map([
@@ -25,34 +30,58 @@ describe("verifyNaiveSignature", () => {
   const base = { rawBody: body, timestampHeader: String(ts), nowMs: NOW };
 
   it("accepts a valid signature", () => {
-    expect(verifyNaiveSignature({ ...base, signatureHeader: signNaive(SECRET, body, ts), secrets: [SECRET] })).toEqual({ ok: true });
+    expect(
+      verifyNaiveSignature({ ...base, signatureHeader: signNaive(SECRET, body, ts), secrets: [SECRET] }),
+    ).toEqual({ ok: true });
   });
 
   it("rejects a stale timestamp", () => {
     const old = ts - 301;
-    const r = verifyNaiveSignature({ ...base, timestampHeader: String(old), signatureHeader: signNaive(SECRET, body, old), secrets: [SECRET] });
+    const r = verifyNaiveSignature({
+      ...base,
+      timestampHeader: String(old),
+      signatureHeader: signNaive(SECRET, body, old),
+      secrets: [SECRET],
+    });
     expect(r).toEqual({ ok: false, reason: "stale" });
   });
 
   it("rejects the wrong secret", () => {
-    const r = verifyNaiveSignature({ ...base, signatureHeader: signNaive("nope", body, ts), secrets: [SECRET] });
+    const r = verifyNaiveSignature({
+      ...base,
+      signatureHeader: signNaive("nope", body, ts),
+      secrets: [SECRET],
+    });
     expect(r).toEqual({ ok: false, reason: "bad_signature" });
   });
 
   it("rejects a tampered body", () => {
-    const r = verifyNaiveSignature({ ...base, rawBody: body + " ", signatureHeader: signNaive(SECRET, body, ts), secrets: [SECRET] });
+    const r = verifyNaiveSignature({
+      ...base,
+      rawBody: body + " ",
+      signatureHeader: signNaive(SECRET, body, ts),
+      secrets: [SECRET],
+    });
     expect(r.ok).toBe(false);
   });
 
   it("accepts either signature during a rotation, and our previous secret", () => {
     const both = `${signNaive(OLD, body, ts)},${signNaive(SECRET, body, ts)}`;
     expect(verifyNaiveSignature({ ...base, signatureHeader: both, secrets: [SECRET] }).ok).toBe(true);
-    expect(verifyNaiveSignature({ ...base, signatureHeader: signNaive(OLD, body, ts), secrets: [SECRET, OLD] }).ok).toBe(true);
+    expect(
+      verifyNaiveSignature({ ...base, signatureHeader: signNaive(OLD, body, ts), secrets: [SECRET, OLD] }).ok,
+    ).toBe(true);
   });
 
   it("refuses without a configured secret or headers", () => {
-    expect(verifyNaiveSignature({ ...base, signatureHeader: "v1=00", secrets: [undefined] })).toEqual({ ok: false, reason: "no_secret" });
-    expect(verifyNaiveSignature({ ...base, signatureHeader: null, secrets: [SECRET] })).toEqual({ ok: false, reason: "missing" });
+    expect(verifyNaiveSignature({ ...base, signatureHeader: "v1=00", secrets: [undefined] })).toEqual({
+      ok: false,
+      reason: "no_secret",
+    });
+    expect(verifyNaiveSignature({ ...base, signatureHeader: null, secrets: [SECRET] })).toEqual({
+      ok: false,
+      reason: "missing",
+    });
   });
 });
 

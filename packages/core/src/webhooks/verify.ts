@@ -5,7 +5,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { WEBHOOK_TOLERANCE_SECONDS } from "../constants";
 
-export type VerifyResult = { ok: true } | { ok: false; reason: "missing" | "stale" | "bad_signature" | "no_secret" };
+export type VerifyResult =
+  { ok: true } | { ok: false; reason: "missing" | "stale" | "bad_signature" | "no_secret" };
 
 function safeEqualHex(a: string, b: string): boolean {
   const x = Buffer.from(a, "utf8");
@@ -32,14 +33,17 @@ export function verifyNaiveSignature(opts: {
   const ts = Number(opts.timestampHeader);
   if (!Number.isFinite(ts)) return { ok: false, reason: "missing" };
   const now = (opts.nowMs ?? Date.now()) / 1000;
-  if (Math.abs(now - ts) > (opts.toleranceSeconds ?? WEBHOOK_TOLERANCE_SECONDS)) return { ok: false, reason: "stale" };
+  if (Math.abs(now - ts) > (opts.toleranceSeconds ?? WEBHOOK_TOLERANCE_SECONDS))
+    return { ok: false, reason: "stale" };
   const presented = opts.signatureHeader
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p.startsWith("v1="))
     .map((p) => p.slice(3));
   for (const secret of secrets) {
-    const expected = createHmac("sha256", secret).update(`${opts.timestampHeader}.${opts.rawBody}`).digest("hex");
+    const expected = createHmac("sha256", secret)
+      .update(`${opts.timestampHeader}.${opts.rawBody}`)
+      .digest("hex");
     if (presented.some((p) => safeEqualHex(p, expected))) return { ok: true };
   }
   return { ok: false, reason: "bad_signature" };

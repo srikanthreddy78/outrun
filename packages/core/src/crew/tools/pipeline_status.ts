@@ -21,12 +21,21 @@ export function pipelineStatus(settings: PipelineSettings, followupsDue: Followu
     handler: async (_input, ctx) => {
       const db = ctx.db;
       const since = startOfDayIn(CRON_TZ, ctx.now());
-      const stageRows = await db.select({ stage: prospects.stage, n: count() }).from(prospects).groupBy(prospects.stage);
+      const stageRows = await db
+        .select({ stage: prospects.stage, n: count() })
+        .from(prospects)
+        .groupBy(prospects.stage);
       const stages = Object.fromEntries(PROSPECT_STAGES.map((s) => [s, 0])) as Record<ProspectStage, number>;
       for (const r of stageRows) stages[r.stage] = Number(r.n);
 
-      const [candidates] = await db.select({ n: count() }).from(companies).where(eq(companies.kind, "candidate"));
-      const [filedToday] = await db.select({ n: count() }).from(prospects).where(gte(prospects.createdAt, since));
+      const [candidates] = await db
+        .select({ n: count() })
+        .from(companies)
+        .where(eq(companies.kind, "candidate"));
+      const [filedToday] = await db
+        .select({ n: count() })
+        .from(prospects)
+        .where(gte(prospects.createdAt, since));
       const [sentToday] = await db
         .select({ n: count() })
         .from(messages)
@@ -38,7 +47,10 @@ export function pipelineStatus(settings: PipelineSettings, followupsDue: Followu
             gte(messages.updatedAt, since),
           ),
         );
-      const [waiting] = await db.select({ n: count() }).from(messages).where(eq(messages.status, "awaiting_approval"));
+      const [waiting] = await db
+        .select({ n: count() })
+        .from(messages)
+        .where(eq(messages.status, "awaiting_approval"));
 
       return {
         stages,

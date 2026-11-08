@@ -60,7 +60,8 @@ export function naiveHandlers(rt: Pick<Runtime, "db" | "emit" | "integrations">)
         }
         case "tool.confirm.resolved": {
           const toolCallId = typeof data.tool_call_id === "string" ? data.tool_call_id : undefined;
-          const decision = data.decision === "allow" ? "approved" : data.decision === "deny" ? "rejected" : undefined;
+          const decision =
+            data.decision === "allow" ? "approved" : data.decision === "deny" ? "rejected" : undefined;
           if (!toolCallId || !decision) return;
           const rows = await deps.db
             .update(messages)
@@ -89,7 +90,13 @@ export function naiveHandlers(rt: Pick<Runtime, "db" | "emit" | "integrations">)
           return;
         }
         default:
-          await deps.emit({ actor: "provider:naive", type: "naive.event_ignored", entityType: "system", entityId: e.id, payload: { type: e.type } });
+          await deps.emit({
+            actor: "provider:naive",
+            type: "naive.event_ignored",
+            entityType: "system",
+            entityId: e.id,
+            payload: { type: e.type },
+          });
       }
     },
   };

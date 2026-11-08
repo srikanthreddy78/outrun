@@ -13,7 +13,11 @@ const SECRET = "crew-secret-test";
 async function rpc(res: Response): Promise<{ result?: Record<string, unknown>; error?: unknown }> {
   const text = await res.text();
   if ((res.headers.get("content-type") ?? "").includes("text/event-stream")) {
-    const data = text.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).filter(Boolean);
+    const data = text
+      .split("\n")
+      .filter((l) => l.startsWith("data:"))
+      .map((l) => l.slice(5).trim())
+      .filter(Boolean);
     return JSON.parse(data.at(-1)!);
   }
   return JSON.parse(text);
@@ -70,7 +74,16 @@ describe("crew MCP server", () => {
     const r = await rpc(
       await call(
         "orchestrator",
-        { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } } },
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: { name: "test", version: "1" },
+          },
+        },
         crewToken(SECRET, "orchestrator"),
       ),
     );
@@ -79,24 +92,38 @@ describe("crew MCP server", () => {
 
   it("lists only the agent's own tools, unprefixed", async () => {
     const o = await rpc(await call("orchestrator", list, crewToken(SECRET, "orchestrator")));
-    expect((o.result?.tools as { name: string }[]).map((x) => x.name).sort()).toEqual(["ping", "pipeline_status"]);
+    expect((o.result?.tools as { name: string }[]).map((x) => x.name).sort()).toEqual([
+      "ping",
+      "pipeline_status",
+    ]);
     const s = await rpc(await call("sdr", list, crewToken(SECRET, "sdr")));
     expect((s.result?.tools as { name: string }[]).map((x) => x.name)).toEqual(["ping"]);
   });
 
   it("runs a tool and records the call with actor naive:<agent>", async () => {
     const r = await rpc(
-      await call("orchestrator", { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "pipeline_status", arguments: {} } }, crewToken(SECRET, "orchestrator")),
+      await call(
+        "orchestrator",
+        { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "pipeline_status", arguments: {} } },
+        crewToken(SECRET, "orchestrator"),
+      ),
     );
     const content = (r.result?.content as { text: string }[])[0]!;
-    expect(JSON.parse(content.text)).toMatchObject({ capsLeft: { send: 30, discovery: 200 }, approvalsWaiting: 0 });
+    expect(JSON.parse(content.text)).toMatchObject({
+      capsLeft: { send: 30, discovery: 200 },
+      approvalsWaiting: 0,
+    });
     const evs = await t.db.select().from(events).where(eq(events.type, "tool.called"));
     expect(evs.at(-1)).toMatchObject({ actor: "naive:orchestrator", entityId: "pipeline_status" });
   });
 
   it("an agent cannot call a tool it wasn't given", async () => {
     const r = await rpc(
-      await call("sdr", { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "pipeline_status", arguments: {} } }, crewToken(SECRET, "sdr")),
+      await call(
+        "sdr",
+        { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "pipeline_status", arguments: {} } },
+        crewToken(SECRET, "sdr"),
+      ),
     );
     const text = JSON.stringify(r);
     expect(text).not.toContain("capsLeft");
