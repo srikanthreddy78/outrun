@@ -4,9 +4,9 @@ import { logger } from "@outrun/core/log";
 import type { Handlers } from "@outrun/core/queue";
 import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { naiveHandlers } from "./jobs/naive";
-import { stripeHandlers } from "./jobs/stripe";
 import { auditHandlers } from "./jobs/audit";
 import { growthHandlers } from "./jobs/growth";
+import { stripeHandlers } from "./jobs/stripe";
 import { stubHandlers } from "./stubs";
 
 export interface Worker {
@@ -32,8 +32,7 @@ export interface StartOptions {
 
 /** The real handlers merged so far. Each card adds its jobs here. */
 export function realHandlers(rt: Runtime): Handlers {
-  // start_audit is registered by both the audit and Stripe handlers; the Stripe one comes last on
-  // purpose: it is cycle-aware (initial purchase vs. each Growth renewal) and checks the order state.
+  // Stripe owns start_audit because its payload carries the billing cycle for Growth renewals.
   return { ...naiveHandlers(rt), ...auditHandlers(rt), ...growthHandlers(rt), ...stripeHandlers(rt) };
 }
 

@@ -35,8 +35,8 @@ export function allTools(opts: {
     ping,
     pipelineStatus(opts.settings, opts.followupsDue),
     planDay(opts.settings, opts.followupsDue),
-    createCheckoutLink(opts.orders ?? noOrders),
     scanDomainTool,
     ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl) : []),
+    createCheckoutLink(opts.orders ?? noOrders),
   ] as unknown as ToolDef[];
 }

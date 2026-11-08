@@ -8,6 +8,8 @@ import { createOrder, getOrder } from "@outrun/core/orders";
 import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
 import { acceptStripeEvent, handleStripeWebhook, jobPayload } from "@outrun/core/webhooks/stripe";
 import { handleStripeEvent, startAudit, type StripeJobDeps } from "./stripe";
+import { realHandlers } from "../worker";
+import type { Runtime } from "@outrun/core/runtime";
 
 const SECRET = "whsec_test_current";
 const OLD = "whsec_test_previous";
@@ -225,5 +227,29 @@ describe("Stripe jobs", () => {
     const renewed = await t.db.select().from(events).where(eq(events.type, "order.renewed"));
     expect(renewed.map((e) => e.entityId)).toEqual([o.id]);
     expect((await t.db.select().from(orders).where(eq(orders.id, o.id)))[0]!.product).toBe("growth");
+  });
+
+  it("routes a delivered Growth renewal through the cycle-aware audit handler", async () => {
+    const o = await order("growth");
+    await t.db.update(orders).set({ state: "delivered", deliveredAt: new Date() }).where(eq(orders.id, o.id));
+    const runtime = {
+      db: t,
+      emit: deps.emit,
+      queue,
+      integrations: deps.integrations,
+      config: { appUrl: deps.appUrl },
+    } as unknown as Runtime;
+    await realHandlers(runtime).start_audit!(
+      { payload: { orderId: o.id, cycle: "in_renewal" }, traceId: "renewal" } as never,
+      {} as never,
+    );
+    expect((await getOrder(t.db, o.id))!.state).toBe("auditing");
+    expect(
+      naive.calls.some(
+        (call) =>
+          call.method === "startSession" &&
+          (call.args[0] as { idempotencyKey?: string }).idempotencyKey === `audit:${o.id}:in_renewal`,
+      ),
+    ).toBe(true);
   });
 });
