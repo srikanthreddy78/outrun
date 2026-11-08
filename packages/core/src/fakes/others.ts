@@ -30,7 +30,7 @@ export class FakeStripe implements StripeGateway {
     const hit = this.byKey.get(req.idempotencyKey);
     if (hit) return hit;
     const checkoutId = `cs_test_fake_${h(req.idempotencyKey).slice(0, 16)}`;
-    const out = { checkoutId, url: `https://checkout.stripe.test/c/${checkoutId}` };
+    const out = { checkoutId, url: `https://checkout.stripe.com/c/pay/${checkoutId}` };
     this.checkouts.push({
       orderId: req.orderId,
       product: req.product,

@@ -16,7 +16,7 @@ import { createNaiveClient } from "./integrations/naive";
 import { ApifyClient } from "./integrations/apify";
 import { createStripeGateway } from "./integrations/stripe";
 import { createAgentMailClient } from "./integrations/agentmail";
-import { hasMx } from "./email/mx";
+import { hasMx, type MxLookup } from "./email/mx";
 import type { Integrations } from "./integrations/types";
 import { createLlm, type Llm } from "./llm";
 import { Queue, type QueueOptions } from "./queue";
@@ -29,6 +29,8 @@ export interface Runtime {
   integrations: Integrations;
   registry: ToolRegistry;
   llm: Llm;
+  /** The MX lookup the send rules use (real DNS unless a test replaces it). */
+  mx: MxLookup;
   fakes: string[];
   close(): Promise<void>;
 }
@@ -41,6 +43,10 @@ export interface RuntimeOptions {
   poolMax?: number;
   /** "producer" for the web app: enqueue only (see Queue). */
   queueRole?: "worker" | "producer";
+  /** Replace the MX lookup (tests and e2e: no DNS). */
+  mx?: MxLookup;
+  /** Replace the audit crawl's first fetch of the site (e2e: no network). */
+  sitePreflight?: (url: string) => Promise<unknown>;
   /** Retry and polling timing; tests shorten it. */
   queue?: Pick<QueueOptions, "retryDelaySeconds" | "retryBackoff" | "pollingIntervalSeconds">;
 }
@@ -76,12 +82,17 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
     ...opts.queue,
   });
   if (opts.startQueue ?? true) await queue.start();
+  const mx = opts.mx ?? hasMx;
   const registry = new ToolRegistry(
     allTools({
       settings: config.settings,
       orders: { stripe: integrations.stripe, emit, appUrl: config.appUrl },
-      audit: { apify: integrations.apify, appUrl: config.appUrl },
-      outreach: { appUrl: config.appUrl, settings: config.settings, mx: hasMx },
+      audit: {
+        apify: integrations.apify,
+        appUrl: config.appUrl,
+        ...(opts.sitePreflight ? { preflight: opts.sitePreflight } : {}),
+      },
+      outreach: { appUrl: config.appUrl, settings: config.settings, mx },
       prospecting: { settings: config.settings, enrich: integrations.enrich },
     }),
   );
@@ -94,6 +105,7 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
     integrations,
     registry,
     llm,
+    mx,
     fakes: selected.fakes.filter((f) => !(f in (opts.integrations ?? {}))),
     async close() {
       await queue.stop();

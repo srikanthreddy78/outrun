@@ -18,7 +18,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
 import { FOLLOWUP_OFFSETS_DAYS, PRODUCTS } from "../../constants";
 import type { Db } from "../../db/client";
-import { companies, contacts, messages, prospects, scans } from "../../db/schema";
+import { companies, contacts, messages, orders, prospects, scans } from "../../db/schema";
 import { assertDemoRecipient } from "../../demo";
 import type { MxLookup } from "../../email/mx";
 import { effectiveSendCap, isSuppressed, sentToday } from "../../email/rules";
@@ -114,6 +114,8 @@ export function groundingProblems(opts: {
   citedCheckIds: readonly string[];
   scanCheckIds: ReadonlySet<string> | null;
   allowedHosts: readonly string[];
+  /** Checkout session ids from this prospect's own orders: their Stripe links are allowed. */
+  checkoutIds?: readonly string[];
 }): string[] {
   const out: string[] = [];
   const text = `${opts.subject}\n${opts.body}`;
@@ -135,8 +137,13 @@ export function groundingProblems(opts: {
   }
   if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(text))
     out.push("no email addresses in the email; recipients are fixed");
-  for (const m of text.matchAll(/https?:\/\/([^\s/)>\]"']+)/gi)) {
+  for (const m of text.matchAll(/https?:\/\/([^\s/)>\]"']+)[^\s)>\]"']*/gi)) {
     const host = m[1]!.toLowerCase().replace(/^www\./, "");
+    if (host === "checkout.stripe.com") {
+      if (!(opts.checkoutIds ?? []).some((id) => m[0].includes(id)))
+        out.push("a Stripe link must be one outrun.create_checkout_link made for this prospect");
+      continue;
+    }
     if (!opts.allowedHosts.some((h) => host === h || host.endsWith(`.${h}`)))
       out.push(`link to ${host} isn't allowed; link only to our pages or the prospect's own site`);
   }
@@ -237,6 +244,14 @@ export function checkDraft(deps: OutreachDeps) {
           citedCheckIds: input.citedCheckIds,
           scanCheckIds: scan ? new Set(scan.checks.map((c) => c.id)) : null,
           allowedHosts: [new URL(deps.appUrl).hostname.replace(/^www\./, ""), r.domain],
+          checkoutIds: (
+            await ctx.db
+              .select({ id: orders.stripeCheckoutId })
+              .from(orders)
+              .where(eq(orders.prospectId, input.prospectId))
+          )
+            .map((o) => o.id)
+            .filter((id): id is string => !!id),
         }),
       );
       if (r.contact && deps.settings.demo) {
@@ -424,7 +439,15 @@ export const markOutcome = defineTool({
     // A paid or unsubscribed prospect keeps its stage; the closer can't undo either.
     const locked = ["won", "unsubscribed", "checkout_sent"].includes(r.prospect.stage) && outcome !== "lost";
     const stage = locked ? r.prospect.stage : outcome;
-    if (!locked) await ctx.db.update(prospects).set({ stage }).where(eq(prospects.id, prospectId));
+    if (!locked) {
+      await ctx.db.update(prospects).set({ stage }).where(eq(prospects.id, prospectId));
+      await ctx.enqueue({
+        type: "sync_crm",
+        payload: { prospectId },
+        idempotencyKey: `crm:${prospectId}:outcome:${outcome}`,
+        traceId: randomUUID(),
+      });
+    }
     await ctx.emit({
       actor: `naive:${ctx.agent}`,
       type: "prospect.outcome",
