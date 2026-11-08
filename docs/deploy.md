@@ -25,13 +25,25 @@ into Vercel env, Render env and the Naive vault, never into git, prompts or chat
 - New Blueprint from `render.yaml`, which gives one starter background worker and runs migrations before each deploy.
 - Fill in the `sync: false` secrets when Render asks for them.
 
-## 4. Naive
+## 4. Stripe
+
+- With a test key in `.env`, run `pnpm stripe:sync --dry-run`, then `pnpm stripe:sync`. It creates both
+  products and their prices under the lookup keys `outrun_auditKit` and `outrun_growth` from `PRODUCTS`.
+  A live key needs `--live` and Srikanth's go.
+- Add a webhook endpoint at `https://<app>/api/webhooks/stripe` for `checkout.session.completed`,
+  `checkout.session.expired`, `payment_intent.succeeded`, `charge.refunded`, `invoice.paid` and
+  `customer.subscription.deleted`. Put its signing secret in Vercel as `STRIPE_WEBHOOK_SECRET`.
+- To rotate the secret, move the old value to `STRIPE_WEBHOOK_SECRET_PREVIOUS`, roll the endpoint's
+  secret in Stripe, set the new one, then clear the previous one after a day.
+- Locally: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` and `stripe trigger checkout.session.completed`.
+
+## 5. Naive
 
 - Run `pnpm naive:dry-run` and read the plan.
 - `OUTRUN_APPLY=yes pnpm naive:up` runs only from `main`. Read the apply report, not the exit code.
 - `pnpm naive:sync` sets up agents, the roster check and the webhook. The webhook secret lands in `.naive/webhook-secret`. Copy it into Vercel as `NAIVE_WEBHOOK_SECRET`, then delete the file.
 
-## 5. Check
+## 6. Check
 
 - Run `CREW_TOKEN_SECRET=… pnpm smoke https://<app>`. It must be green, with no fakes and the webhook secret set.
 - With a go, start one real orchestrator session that calls `outrun.ping`. The `tool.called` event shows up in the ledger.

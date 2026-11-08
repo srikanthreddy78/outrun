@@ -10,11 +10,14 @@
   },
   "dependencies": {
     "@outrun/core": "workspace:*",
-    "zod": "^4.1.12",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "zod": "^4.1.12"
   },
   "exports": {
     ".": "./src/index.ts",
     "./*": "./src/*.ts"
+  },
+  "devDependencies": {
+    "stripe": "^19.3.1"
   }
 }
