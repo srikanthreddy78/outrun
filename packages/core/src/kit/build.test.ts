@@ -48,6 +48,9 @@ describe("Kit asset validation", () => {
   it("rejects unsupported citations and invalid server metadata", () => {
     expect(() => validateKitAsset("llms.txt", "# Example\nInvented claim [f2]", audit)).toThrow();
     expect(() =>
+      validateKitAsset("quickstart.md", "# Quickstart\nFix docs [f1]\nUnsupported claim", audit),
+    ).toThrow();
+    expect(() =>
       validateKitAsset(
         "server.json",
         JSON.stringify({

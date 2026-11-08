@@ -38,11 +38,11 @@ export function isAllowedTeamAccount(email: string | null | undefined, allowlist
     .filter(Boolean)
     .includes(email.toLowerCase());
 }
-export function summarizeLedger(events: LedgerEvent[]): DashboardSummary {
+export function summarizeLedger(events: LedgerEvent[], naiveSpendUsd = 0): DashboardSummary {
   const count = (type: string) =>
     new Set(events.filter((event) => event.type === type).map((event) => event.entityId ?? event.id)).size;
   const deliveredAudits = count("report.delivered");
-  const costsUsd = events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0);
+  const costsUsd = events.reduce((sum, event) => sum + (event.costUsd ?? 0), naiveSpendUsd);
   return {
     candidates: count("candidate.discovered"),
     scanned: count("scan.completed"),

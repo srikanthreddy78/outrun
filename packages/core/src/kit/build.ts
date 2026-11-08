@@ -46,6 +46,19 @@ export function validateKitAsset(name: string, content: string, audit: AuditData
     throw new AppError("bad_request", `${name} must cite a saved finding`);
   if (name === "llms.txt" && !/^#\s+\S/.test(content))
     throw new AppError("bad_request", "llms.txt needs a top-level heading");
+  if (name !== "server.json") {
+    let codeBlock = false;
+    for (const rawLine of content.split("\n")) {
+      const line = rawLine.trim();
+      if (line.startsWith("```")) {
+        codeBlock = !codeBlock;
+        continue;
+      }
+      if (!line || codeBlock || line.startsWith("#")) continue;
+      if (![...citations].some((id) => line.includes(`[${id}]`)))
+        throw new AppError("bad_request", `${name} has an uncited claim`);
+    }
+  }
   if (name === "server.json") {
     let raw: unknown;
     try {
@@ -63,6 +76,8 @@ export function validateKitAsset(name: string, content: string, audit: AuditData
       .safeParse(raw);
     if (!server.success || server.data.remotes.some((remote) => !remote.url.startsWith("https://")))
       throw new AppError("bad_request", "server.json does not describe a remote MCP server");
+    if (![...citations].some((id) => server.data.description.includes(`[${id}]`)))
+      throw new AppError("bad_request", "server.json description has no finding citation");
   }
 }
 

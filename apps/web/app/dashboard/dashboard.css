@@ -68,6 +68,25 @@
 .team-content p {
   line-height: 1.5;
 }
+.team-table-wrap {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+.team-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.team-table th,
+.team-table td {
+  text-align: left;
+  border-bottom: 1px solid #d5e0d7;
+  padding: 10px 12px;
+  vertical-align: top;
+}
+.team-table th {
+  font-weight: 700;
+}
 .team-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

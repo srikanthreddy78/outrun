@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "../../auth";
 import { dashboardAccess } from "../../lib/team-access";
+import { AutoRefresh } from "./_components/AutoRefresh";
 import "./dashboard.css";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           </form>
         </div>
       </aside>
-      <main className="team-content">{children}</main>
+      <main className="team-content">
+        <AutoRefresh />
+        {children}
+      </main>
     </div>
   );
 }

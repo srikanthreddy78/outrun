@@ -381,6 +381,7 @@ test("signed-in ledger uses event totals and shows agent stop reasons", () => {
     integrations: { apify: "healthy" as const },
   };
   assert.equal(summarizeLedger(input.events).costPerDeliveredAuditUsd, 3);
+  assert.equal(summarizeLedger(input.events, 1.5).costPerDeliveredAuditUsd, 4.5);
   assert.equal(isAllowedTeamAccount("Team@example.com", "team@example.com,owner@example.com"), true);
   assert.equal(isAllowedTeamAccount("outsider@example.com", "team@example.com"), false);
   assert.equal(renderDashboard("ledger", input, false).status, 302);
