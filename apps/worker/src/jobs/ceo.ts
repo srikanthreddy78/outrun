@@ -1,18 +1,43 @@
 /**
- * send_ceo_brief: emails the CEO's brief for one day to the team, once (keyed `ceo:brief:<day>`).
- * Without ALERT_EMAIL the brief stays on /dashboard/agency only.
+ * send_ceo_brief: emails the CEO's brief for one day to the team, once (keyed `ceo:brief:<day>`),
+ * or with `kind: "board_memo"` the week's board memo to the owner (keyed `ceo:memo:<week>`), in a
+ * fixed template. Without ALERT_EMAIL both stay on /dashboard/agency only.
+ * score_predictions: daily (CRON.score_predictions), scores the CEO's due predictions once each.
  */
+import { boardMemoEmail, scorePredictions } from "@outrun/core/brain";
 import { latestBrief } from "@outrun/core/crew/tools/agency";
 import type { Handlers } from "@outrun/core/queue";
 import type { Runtime } from "@outrun/core/runtime";
 import { z } from "zod";
 
-const Payload = z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
+const Payload = z.union([
+  z.object({ kind: z.literal("board_memo"), week: z.string().regex(/^\d{4}-W\d{2}$/) }),
+  z.object({ kind: z.literal("brief").optional(), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }),
+]);
 
 export function ceoHandlers(rt: Pick<Runtime, "db" | "emit" | "integrations" | "config">): Handlers {
   return {
     send_ceo_brief: async (env) => {
-      const { day } = Payload.parse(env.payload);
+      const p = Payload.parse(env.payload);
+      if (p.kind === "board_memo") {
+        const mail = await boardMemoEmail(rt.db.db, p.week, rt.config.appUrl);
+        if (!mail || !rt.config.alertEmail) return;
+        await rt.integrations.sendTransactional({
+          to: rt.config.alertEmail,
+          subject: mail.subject,
+          text: mail.text,
+          idempotencyKey: `ceo:memo:${p.week}`,
+        });
+        await rt.emit({
+          actor: "worker",
+          type: "ceo.board_memo_sent",
+          entityType: "system",
+          entityId: `ceo:memo:${p.week}`,
+          payload: { week: p.week },
+        });
+        return;
+      }
+      const { day } = p;
       const brief = await latestBrief(rt.db.db, day);
       if (!brief || !rt.config.alertEmail) return;
       await rt.integrations.sendTransactional({
@@ -28,6 +53,9 @@ export function ceoHandlers(rt: Pick<Runtime, "db" | "emit" | "integrations" | "
         entityId: `ceo:brief:${day}`,
         payload: { day },
       });
+    },
+    score_predictions: async () => {
+      await scorePredictions({ db: rt.db.db, emit: rt.emit, now: () => new Date() });
     },
   };
 }

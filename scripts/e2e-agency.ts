@@ -12,6 +12,8 @@
  *   call to action after Acme approves.
  *   Then the CEO learns: it reads Acme's insights, sets Acme's focus and proposes an ICP change
  *   with the numbers; the owner accepts, and Acme's confirmed profile carries the change.
+ *   Then the CEO lists problems, predicts Acme's reply rate and records a lesson; a week on,
+ *   score_predictions scores the prediction once.
  *
  * Both clients prospect the same company and the same person, so it also proves: drafts,
  * approvals, inboxes, unsubscribes and replies never cross clients, and Outrun is untouched.
@@ -28,7 +30,8 @@ import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 import type { AgentName } from "@outrun/core/contracts";
 import type { ToolContext } from "@outrun/core/crew";
 import { agencyOverview } from "@outrun/core/crew/tools/agency";
-import { and, clientCandidates, clients, desc, eq, events, messages, prospects } from "@outrun/core/db";
+import { scorePredictions, trackRecord } from "@outrun/core/brain";
+import { and, clientCandidates, clients, desc, eq, events, messages, prospects, sql } from "@outrun/core/db";
 import { isSuppressed } from "@outrun/core/email/rules";
 import { readUnsubscribeToken, unsubscribeContact } from "@outrun/core/email/unsubscribe";
 import { createFakes, FakeLlmProvider, FakeNaiveClient } from "@outrun/core/fakes";
@@ -630,6 +633,80 @@ async function main(): Promise<void> {
       "Beta's profile untouched",
     );
     ok("the CEO read Acme's insights, set its focus and proposed an ICP change; the owner accepted it");
+
+    console.log("F2. the CEO checks for problems, predicts, learns, and is scored");
+    naive.script("ceo", [
+      { tool: "list_problems", input: {} },
+      {
+        tool: "make_prediction",
+        input: {
+          clientId: acme,
+          decision: "focus 10 -> 12",
+          metric: "replyRate",
+          low: 0.5,
+          high: 1,
+          dueDays: 7,
+        },
+      },
+      {
+        tool: "record_lesson",
+        input: {
+          clientId: acme,
+          lesson: "CFOs at invoicing firms reply",
+          evidence: "invoicing: 1 of 1 replied",
+        },
+      },
+    ]);
+    await startAgent("outrun", "ceo", { type: "system", id: "ceo-brain" });
+    await waitFor("the CEO's lesson", async () => {
+      noFailures();
+      const [l] = await db.select().from(events).where(eq(events.type, "ceo.lesson"));
+      return l;
+    });
+    const problems = naive.toolCalls.find((c) => c.tool === "list_problems")?.result as {
+      deadJobs: unknown[];
+      health: { db: boolean };
+    };
+    check(
+      problems.health.db && problems.deadJobs.length === 0,
+      "list_problems: the database is up, no dead job",
+    );
+    // Move the prediction a week into the past, so Acme's sends and reply fall in its window and
+    // it is due; then score it as the daily job would, twice.
+    const weekAgo = new Date(Date.now() - 7 * 24 * 3_600_000);
+    await db
+      .update(events)
+      .set({
+        ts: weekAgo,
+        payload: sql`jsonb_set(${events.payload}, '{dueAt}', to_jsonb(${new Date(Date.now() - 1000).toISOString()}::text))`,
+      })
+      .where(eq(events.type, "ceo.prediction"));
+    const now = () => new Date();
+    check((await scorePredictions({ db, emit: rt.emit, now })).scored === 1, "the due prediction is scored");
+    check((await scorePredictions({ db, emit: rt.emit, now })).scored === 0, "and only once");
+    const record = await trackRecord(db);
+    check(
+      record.made === 1 && record.scored === 1 && record.hits === 1 && record.recent[0]?.actual === 1,
+      `Acme replied as predicted (${JSON.stringify(record.recent[0])})`,
+    );
+    await deps.enqueue({
+      type: "score_predictions",
+      payload: {},
+      idempotencyKey: "e2e:score_predictions",
+      traceId: randomUUID(),
+    });
+    await waitFor("the score_predictions job", async () => {
+      const [d] = await db
+        .select()
+        .from(events)
+        .where(and(eq(events.type, "job.done"), sql`${events.payload}->>'job' = 'score_predictions'`));
+      return d;
+    });
+    check(
+      (await db.select().from(events).where(eq(events.type, "ceo.prediction_scored"))).length === 1,
+      "the job runs and scores nothing twice",
+    );
+    ok("the CEO listed problems, predicted Acme's reply rate, recorded a lesson, and was scored once");
 
     console.log("G. a third client hires the agency itself");
     const GAMMA: ClientSpec = {

@@ -7,6 +7,7 @@
  *   steps:                       # the tool calls the agent makes, in order
  *     - { tool: send_email, input: { draftId: "...", hash: "..." } }
  *   seed: demo                   # optional: the demo prospect and a scan (llms_txt fails, openapi passes)
+ *   seed: agency                 # optional: active client ...a001 and client ...a002, paused by its owner
  *   decisions: [deny]            # answers to held (ask) calls, in order
  *   expect:
  *     calls:                     # what actually ran, in order
@@ -31,7 +32,8 @@ import { allTools } from "@outrun/core/crew/tools";
 import { createEmitter } from "@outrun/core/events";
 import { FakeNaiveClient } from "@outrun/core/fakes";
 import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
-import { scans } from "@outrun/core/db";
+import { clients, scans } from "@outrun/core/db";
+import { setPaused } from "@outrun/core/clients";
 import { DEMO_PLACEHOLDER, seedDemo } from "@outrun/core/seed";
 import { loadConfig } from "@outrun/core";
 import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
@@ -40,7 +42,7 @@ const ToolName = z.enum(Object.keys(CREW_TOOLS) as [CrewToolName, ...CrewToolNam
 const Scenario = z.object({
   name: z.string(),
   agent: z.enum(AGENTS),
-  seed: z.enum(["demo"]).optional(),
+  seed: z.enum(["demo", "agency"]).optional(),
   steps: z.array(z.object({ tool: ToolName, input: z.unknown().default({}) })).min(1),
   decisions: z.array(z.enum(["allow", "deny"])).default([]),
   expect: z.object({
@@ -93,6 +95,49 @@ async function seedScenario(db: TempDb["db"]) {
   return ids;
 }
 
+/** Two confirmed clients for CEO scenarios: one active, one its owner paused. */
+async function seedAgency(db: TempDb["db"]) {
+  const profile = {
+    summary: "Invoicing software for small firms.",
+    icp: {
+      description: "Small accounting firms",
+      includeKeywords: ["invoicing"],
+      excludeKeywords: [],
+      buyerRoles: ["CFO"],
+      companySizes: [],
+    },
+    offer: { pitch: "A demo", callToActionUrl: "https://acme.example/demo", prices: [] },
+  };
+  const base = {
+    status: "active" as const,
+    dnsStatus: "verified" as const,
+    profileConfirmedAt: new Date(),
+    profile,
+  };
+  await db.insert(clients).values([
+    {
+      ...base,
+      id: "0190f0f0-0000-7000-8000-00000000a001",
+      slug: "acme",
+      name: "Acme",
+      domain: "acme.example",
+    },
+    {
+      ...base,
+      id: "0190f0f0-0000-7000-8000-00000000a002",
+      slug: "beta",
+      name: "Beta",
+      domain: "beta.example",
+    },
+  ]);
+  await setPaused(
+    { db, emit: createEmitter(db) },
+    "0190f0f0-0000-7000-8000-00000000a002",
+    true,
+    "user:owner",
+  );
+}
+
 /** Replaces "$prospectId", "$draftId" and "$hash" when the step runs. */
 function withRefs(input: unknown, prospectId: string | undefined): unknown {
   const text = JSON.stringify(input);
@@ -128,6 +173,7 @@ async function runScenario(s: Scenario): Promise<string[]> {
       }),
     );
     const seeded = s.seed === "demo" ? await seedScenario(t.db) : null;
+    if (s.seed === "agency") await seedAgency(t.db);
     const enqueued: JobEnvelopeInput[] = [];
     const emit = createEmitter(t.db);
     const naive = new FakeNaiveClient({
