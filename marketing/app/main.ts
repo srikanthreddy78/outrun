@@ -13,6 +13,7 @@ import {
   postsFor,
   videoJob,
   type Db,
+  ledgerPosts,
 } from "./db.ts";
 import { handleMcp, sameSecret } from "./mcp.ts";
 import { fileNames } from "./naive.ts";
@@ -101,6 +102,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
         clientPage({
           client: c as unknown as Record<string, unknown>,
           posts: await postsFor(d, c.id),
+          ledger: await ledgerPosts(d, { clientId: c.id }),
           comments: await commentsFor(d, c.id),
           insights: await insightsFor(d, c.id),
           media,

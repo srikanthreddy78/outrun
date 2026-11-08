@@ -1,6 +1,6 @@
 /**
  * The studio's MCP tools, offered to the marketing agents as `outrun-studio.<tool>`. JSON-RPC over
- * POST, implemented by hand. The tools that send are send_summary and post_direct, which Naive
+ * POST, implemented by hand. Posts for X go in a ledger (queue_post) and are published by hand. The tools that send are send_summary and post_direct, which Naive
  * holds for approval. send_summary takes no recipient or body, so an agent can't redirect or
  * rewrite what goes out.
  * The video job tools only change the studio's records: they hand out work and return.
@@ -20,6 +20,10 @@ import {
   finishVideoJob,
   getMeta,
   latestInsight,
+  ledgerPosts,
+  ledgerEntry,
+  markLedgerPosted,
+  queueLedgerPost,
   listClients,
   logEvent,
   markDirectSending,
@@ -216,6 +220,46 @@ export const TOOLS = [
     inputSchema: obj(
       { client: str("Client id, host or app URL"), identity_id: str("The identity id, idn_...") },
       ["client", "identity_id"],
+    ),
+  },
+  {
+    name: "queue_post",
+    description:
+      "Record a post in the ledger for a person to publish by hand on X or Reddit. This publishes nothing. Queuing the same post twice keeps one entry.",
+    inputSchema: obj(
+      {
+        client: str("Client id, host or app URL"),
+        platform: { type: "string", enum: ["x", "reddit"], description: "Where it will go. Defaults to x" },
+        text: str("The post's text: at most 280 characters on X, 10000 on Reddit"),
+        title: str("Reddit only: the post's title, at most 300 characters"),
+        subreddit: str("Reddit only: the subreddit, without r/"),
+        file_id: str("Optional: the Naive file id of its poster or short"),
+      },
+      ["client", "text"],
+    ),
+  },
+  {
+    name: "list_ledger",
+    description:
+      "The post ledger across every app, oldest first, for X and Reddit. status is queued or posted.",
+    inputSchema: obj(
+      {
+        client: str("Optional: client id, host or app URL"),
+        status: { type: "string", enum: ["queued", "posted"], description: "Only this status" },
+      },
+      [],
+    ),
+  },
+  {
+    name: "mark_posted",
+    description:
+      "Mark a ledger entry as published by hand, with its live URL. For X this also registers the post so its replies can be read.",
+    inputSchema: obj(
+      {
+        id: { type: "integer", description: "The ledger entry id" },
+        url: str("https://x.com/<account>/status/<digits>"),
+      },
+      ["id", "url"],
     ),
   },
   {
@@ -525,6 +569,80 @@ async function call(
         throw error;
       }
       return { saved: true, client: c.id, identity_id: identityId };
+    }
+    case "queue_post": {
+      const d = await db();
+      const c = await client(d, need(p, "client"));
+      const platform = opt(p, "platform") ?? "x";
+      if (platform !== "x" && platform !== "reddit") throw new ToolError("platform must be x or reddit");
+      const text = need(p, "text");
+      const limit = platform === "x" ? 280 : 10_000;
+      if ([...text].length > limit)
+        throw new ToolError(`text is over ${limit} characters; nothing was queued`);
+      let title = "";
+      let subreddit = "";
+      if (platform === "reddit") {
+        title = need(p, "title");
+        if ([...title].length > 300) throw new ToolError("title is over 300 characters; nothing was queued");
+        subreddit = need(p, "subreddit").replace(/^\/?r\//i, "");
+        if (!/^[A-Za-z0-9_]{2,21}$/.test(subreddit))
+          throw new ToolError("subreddit is not a valid name; nothing was queued");
+      }
+      const fileId = opt(p, "file_id") ?? "";
+      if (fileId !== "") {
+        const media = (await mediaFor(d, c.id)).find((m) => m["file_id"] === fileId);
+        if (!media) throw new ToolError("that file isn't recorded under this app; nothing was queued");
+        if (media["kind"] === "short" && (await reviewFor(d, fileId))?.verdict !== "approved")
+          throw new ToolError("that short has no approved review; nothing was queued");
+      }
+      const entry = await queueLedgerPost(d, { clientId: c.id, platform, text, fileId, title, subreddit });
+      if (entry.created) await logEvent(d, c.id, "post_queued", `ledger ${entry.id} ${platform}`);
+      return { queued: true, id: entry.id, new: entry.created, published: false };
+    }
+    case "list_ledger": {
+      const d = await db();
+      const ref = opt(p, "client");
+      const status = opt(p, "status");
+      const c = ref === undefined ? undefined : await client(d, ref);
+      return {
+        posts: await ledgerPosts(d, {
+          ...(c === undefined ? {} : { clientId: c.id }),
+          ...(status === undefined ? {} : { status }),
+        }),
+      };
+    }
+    case "mark_posted": {
+      const d = await db();
+      const id = Number(p["id"]);
+      if (!Number.isSafeInteger(id)) throw new ToolError("id is required");
+      const entry = await ledgerEntry(d, id);
+      if (entry === null) throw new ToolError("no ledger entry with that id");
+      const given = need(p, "url");
+      if (entry.platform === "reddit") {
+        if (
+          !/^https:\/\/(www\.|old\.)?reddit\.com\/r\/[A-Za-z0-9_]+\/comments\/[a-z0-9]+(\/[^\s?#]*)?$/.test(
+            given,
+          )
+        )
+          throw new ToolError("url must look like https://www.reddit.com/r/<subreddit>/comments/<id>/...");
+        if (entry.status === "posted") return { marked: true, id, url: given, already: true };
+        await markLedgerPosted(d, id, given);
+        await logEvent(d, entry.client_id, "post_published", `ledger ${id} reddit`);
+        return { marked: true, id, url: given, already: false };
+      }
+      const tweetId = tweetIdFrom(given);
+      if (tweetId === null) throw new ToolError("url must look like https://x.com/<account>/status/<digits>");
+      const url = tweetUrl(tweetId);
+      if (entry.status === "posted") return { marked: true, id, url, already: true, post_id: `x_${tweetId}` };
+      await markLedgerPosted(d, id, url);
+      await trackPost(d, {
+        id: `x_${tweetId}`,
+        clientId: entry.client_id,
+        url,
+        content: entry.text.slice(0, 2_000),
+      });
+      await logEvent(d, entry.client_id, "post_published", `ledger ${id} x`);
+      return { marked: true, id, url, already: false, post_id: `x_${tweetId}` };
     }
     case "track_post": {
       const d = await db();

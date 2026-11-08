@@ -21,6 +21,12 @@ Playbooks are in `skills/`. The studio's agent tools are in `app/mcp.ts`.
   it with `read_test_inbox`. The AgentMail key stays on the studio's server, and those inboxes
   never send.
 
+## Publishing to X and Reddit
+
+X and Reddit posting are manual for now. The promoter records each post with `queue_post`, and it shows in the
+**Post ledger** on the app's dashboard page. Publish from the ledger by hand, then mark the entry
+with `mark_posted` and the live URL, which on X also registers the post so its replies can be read. Reddit replies aren't read yet.
+
 ## Deploy
 
 ```sh

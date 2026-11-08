@@ -137,6 +137,7 @@ export function home(clients: Record<string, unknown>[]): string {
 export function clientPage(data: {
   client: Record<string, unknown>;
   posts: Record<string, unknown>[];
+  ledger: Record<string, unknown>[];
   comments: Record<string, unknown>[];
   insights: Record<string, unknown>[];
   media: Record<string, unknown>[];
@@ -170,6 +171,9 @@ export function clientPage(data: {
 <h2>Suggestions</h2>${insights.map((i) => `<p class="sub">${when(i["created_at"])} · ${esc(i["summary"])}</p>${suggestions(i)}`).join("") || "<p class='sub'>None yet.</p>"}
 <h2>Comments read</h2><div class="wrap"><table><thead><tr><th>When</th><th>Comment</th><th>Post</th><th>Used</th></tr></thead><tbody>
 ${comments.map((c) => `<tr><td>${when(c["posted_at"])}</td><td>${esc(c["text"])}</td><td>${esc(c["post_id"])}</td><td>${c["insight_id"] ? "yes" : "new"}</td></tr>`).join("") || `<tr><td colspan="4">No comments yet.</td></tr>`}
+</tbody></table></div>
+<h2>Post ledger (published by hand)</h2><div class="wrap"><table><thead><tr><th>#</th><th>Where</th><th>Post</th><th>File</th><th>Status</th></tr></thead><tbody>
+${data.ledger.map((l) => `<tr><td>${esc(l["id"])}</td><td>${esc(l["platform"])}${l["subreddit"] ? ` r/${esc(l["subreddit"])}` : ""}</td><td>${l["title"] ? `<b>${esc(l["title"])}</b><br>` : ""}${esc(l["text"])}</td><td>${esc(l["file_id"] || "–")}</td><td><span class="tag">${esc(l["status"])}</span> ${link(l["url"], l["url"] ? "open post" : "")}</td></tr>`).join("") || `<tr><td colspan="5">Nothing queued.</td></tr>`}
 </tbody></table></div>
 <h2>Posts</h2><div class="wrap"><table><thead><tr><th>When</th><th>Post</th><th>Status</th></tr></thead><tbody>
 ${posts.map((p) => `<tr><td>${when(p["posted_at"])}</td><td>${esc(p["content"])}<br>${link(p["url"], p["url"] ? "open on X" : "")}</td><td>${esc(p["status"])}</td></tr>`).join("") || `<tr><td colspan="3">No posts yet.</td></tr>`}

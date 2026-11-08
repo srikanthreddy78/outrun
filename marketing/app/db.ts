@@ -52,6 +52,22 @@ create table if not exists st_meta (
   key text primary key,
   value text not null
 );
+create table if not exists st_post_ledger (
+  id serial primary key,
+  client_id text not null references st_clients(id),
+  platform text not null default 'x',
+  text text not null,
+  file_id text not null default '',
+  status text not null default 'queued',
+  url text,
+  created_at timestamptz not null default now(),
+  posted_at timestamptz,
+  unique (client_id, platform, text, file_id)
+);
+alter table st_post_ledger add column if not exists title text not null default '';
+alter table st_post_ledger add column if not exists subreddit text not null default '';
+alter table st_post_ledger drop constraint if exists st_post_ledger_client_id_platform_text_file_id_key;
+create unique index if not exists st_post_ledger_key on st_post_ledger (client_id, platform, text, file_id, subreddit);
 create table if not exists st_test_inboxes (
   inbox_id text primary key,
   client_id text not null,
@@ -685,4 +701,52 @@ export async function directPostsDue(
 
 export async function markRepliesRead(db: Db, key: string): Promise<void> {
   await db.query("update st_direct_posts set replies_read_at = now() where key = $1", [key]);
+}
+
+/** Records a post to be made by hand. Queuing the same post again changes nothing. */
+export async function queueLedgerPost(
+  db: Db,
+  e: { clientId: string; platform: string; text: string; fileId: string; title: string; subreddit: string },
+): Promise<{ id: number; created: boolean }> {
+  const { rows } = await db.query<{ id: number; created: boolean }>(
+    `insert into st_post_ledger (client_id, platform, text, file_id, title, subreddit) values ($1, $2, $3, $4, $5, $6)
+     on conflict (client_id, platform, text, file_id, subreddit) do update set title = excluded.title
+     returning id, (xmax = 0) as created`,
+    [e.clientId, e.platform, e.text, e.fileId, e.title, e.subreddit],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("the ledger did not return a row");
+  return row;
+}
+
+export async function ledgerPosts(
+  db: Db,
+  filter: { clientId?: string; status?: string } = {},
+): Promise<Record<string, unknown>[]> {
+  return (
+    await db.query(
+      `select l.*, c.name as app_name, c.host from st_post_ledger l join st_clients c on c.id = l.client_id
+        where ($1::text is null or l.client_id = $1) and ($2::text is null or l.status = $2)
+        order by l.id`,
+      [filter.clientId ?? null, filter.status ?? null],
+    )
+  ).rows;
+}
+
+export async function ledgerEntry(
+  db: Db,
+  id: number,
+): Promise<{ client_id: string; platform: string; text: string; status: string } | null> {
+  const { rows } = await db.query<{ client_id: string; platform: string; text: string; status: string }>(
+    "select client_id, platform, text, status from st_post_ledger where id = $1",
+    [id],
+  );
+  return rows[0] ?? null;
+}
+
+export async function markLedgerPosted(db: Db, id: number, url: string): Promise<void> {
+  await db.query(
+    "update st_post_ledger set status = 'posted', url = $2, posted_at = now() where id = $1 and status = 'queued'",
+    [id, url],
+  );
 }
