@@ -1,0 +1,3 @@
+# The assembled app and this machine's deploy state (generated secrets). Never commit either.
+.build/
+.state.json

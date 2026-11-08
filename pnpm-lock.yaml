@@ -266,6 +266,28 @@ importers:
         specifier: ^19.3.1
         version: 19.3.1(@types/node@22.20.5)
 
+  marketing:
+    dependencies:
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.19.0
+        version: 22.20.5
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.23.1
+      '@usenaive-sdk/blueprints':
+        specifier: ^0.18.0
+        version: 0.18.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
   packages/core:
     dependencies:
       drizzle-orm:
