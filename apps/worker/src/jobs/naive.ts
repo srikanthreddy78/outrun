@@ -19,7 +19,13 @@ import { recordSessionState, startSession } from "@outrun/core/sessions";
 import { z } from "zod";
 
 const SEND_TOOLS = new Set(["outrun.send_email", "outrun.reply_email"]);
-const StartPayload = z.object({ agent: AgentName, message: z.string(), entity: Entity });
+/** `clientId` picks the client's crew; Outrun's when absent. */
+const StartPayload = z.object({
+  agent: AgentName,
+  message: z.string(),
+  entity: Entity,
+  clientId: z.string().uuid().optional(),
+});
 const DraftArgs = z.object({ draftId: z.string().uuid() });
 const Resolved = z.object({
   tool_call_id: z.string(),

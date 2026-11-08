@@ -6,9 +6,11 @@
  * `onIdle` fires on every idle the way the session.idle webhook does.
  */
 import { randomUUID } from "node:crypto";
-import { AGENTS, type AgentName, CREW_TOOLS, type CrewToolName, type StopReason } from "../../contracts";
+import { type AgentName, CREW_TOOLS, type CrewToolName, type StopReason } from "../../contracts";
 import type { ToolRegistry } from "../crew/registry";
 import type { ToolContext } from "../crew/types";
+import { parseNaiveAgentName } from "../crew/identity";
+import { AppError } from "../errors";
 import type { NaiveClient, NaiveEvent, NaiveSession } from "../integrations/types";
 
 export interface ScriptedCall {
@@ -29,6 +31,7 @@ export interface ToolCallRecord {
 
 interface FakeSession extends NaiveSession {
   agent: AgentName;
+  clientSlug: string;
   steps: ScriptedCall[];
   cursor: number;
   messages: string[];
@@ -42,13 +45,14 @@ export class FakeNaiveClient implements NaiveClient {
   readonly sessions = new Map<string, FakeSession>();
   private readonly byKey = new Map<string, string>();
   private readonly sentKeys = new Set<string>();
-  private readonly scripts = new Map<AgentName, ScriptedCall[][]>();
+  private readonly scripts = new Map<string, ScriptedCall[][]>();
   readonly spend = new Map<string, number>();
 
   constructor(
     private readonly opts: {
       registry?: ToolRegistry;
-      ctx?: (agent: AgentName) => ToolContext;
+      /** The tool context for a crew member: its role, and its client by slug. */
+      ctx?: (agent: AgentName, clientSlug: string) => ToolContext;
       /** Called on every idle, like Naive's session.idle webhook. */
       onIdle?: (sessionId: string, stopReason: StopReason) => void | Promise<void>;
     } = {},
@@ -57,21 +61,23 @@ export class FakeNaiveClient implements NaiveClient {
   /** Who the fake records as deciding a confirmation. */
   actor: { type: "user" | "key" | "system"; id: string } = { type: "user", id: "usr_fake" };
 
-  agentIdOf(agent: AgentName): string {
-    return `agt_fake_${agent}`;
+  /** By Naive agent name: the role for Outrun's crew, `<slug>-<role>` for another client's. */
+  agentIdOf(name: string): string {
+    return `agt_fake_${name}`;
   }
 
-  /** Queue a script for the next session this agent starts. */
-  script(agent: AgentName, steps: ScriptedCall[]): this {
+  /** Queue a script for the next session this agent (by Naive agent name) starts. */
+  script(agent: string, steps: ScriptedCall[]): this {
     const list = this.scripts.get(agent) ?? [];
     list.push(steps);
     this.scripts.set(agent, list);
     return this;
   }
 
-  async resolveAgentId(agent: AgentName): Promise<string> {
-    this.calls.push({ method: "resolveAgentId", args: [agent] });
-    return this.agentIdOf(agent);
+  async resolveAgentId(name: string): Promise<string> {
+    this.calls.push({ method: "resolveAgentId", args: [name] });
+    if (!parseNaiveAgentName(name)) throw new AppError("not_configured", `naive: no agent named ${name}`);
+    return this.agentIdOf(name);
   }
 
   async startSession(req: {
@@ -83,14 +89,18 @@ export class FakeNaiveClient implements NaiveClient {
     this.calls.push({ method: "startSession", args: [req] });
     const existing = this.byKey.get(req.idempotencyKey);
     if (existing) return { sessionId: existing };
-    const agent = AGENTS.find((a) => this.agentIdOf(a) === req.agentId);
-    if (!agent) throw new Error(`FakeNaiveClient: unknown agent id ${req.agentId}`);
+    const name = req.agentId.replace(/^agt_fake_/, "");
+    const member = parseNaiveAgentName(name);
+    if (!req.agentId.startsWith("agt_fake_") || !member)
+      throw new Error(`FakeNaiveClient: unknown agent id ${req.agentId}`);
+    const { agent, clientSlug } = member;
     const id = `ses_fake_${randomUUID().slice(0, 8)}`;
-    const steps = this.scripts.get(agent)?.shift() ?? [];
+    const steps = this.scripts.get(name)?.shift() ?? [];
     const s: FakeSession = {
       id,
       agentId: req.agentId,
       agent,
+      clientSlug,
       status: "running",
       stopReason: null,
       pendingActions: [],
@@ -257,7 +267,12 @@ export class FakeNaiveClient implements NaiveClient {
     this.toolCalls.push(rec);
     if (!this.opts.registry || !this.opts.ctx) return;
     try {
-      rec.result = await this.opts.registry.call(s.agent, step.tool, step.input, this.opts.ctx(s.agent));
+      rec.result = await this.opts.registry.call(
+        s.agent,
+        step.tool,
+        step.input,
+        this.opts.ctx(s.agent, s.clientSlug),
+      );
     } catch (err) {
       const e = err as { code?: string; message?: string };
       rec.error = { code: e.code ?? "internal", message: e.message ?? String(err) };

@@ -18,6 +18,7 @@ import {
   sendEmailTool,
   type OutreachDeps,
 } from "./outreach";
+import { OUTRUN_CLIENT_ID } from "../../constants";
 
 const APP = "https://outrun.example";
 const DAY = 86_400_000;
@@ -34,6 +35,7 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
   const ctx = (agent: AgentName = "sdr"): ToolContext => ({
     agent,
     requestId: "r",
+    clientId: OUTRUN_CLIENT_ID,
     db: t.db,
     now: () => now,
     enqueue: async (j) => {
@@ -293,7 +295,7 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
     });
     const at = (d: number) => new Date(sentAt.getTime() + d * DAY);
     const due = async (d: number) =>
-      (await dueFollowups(t.db, at(d))).filter((x) => x.prospectId === p.prospectId);
+      (await dueFollowups(t.db, OUTRUN_CLIENT_ID, at(d))).filter((x) => x.prospectId === p.prospectId);
     const step = (s: number) =>
       t.db.update(prospects).set({ followupStep: s }).where(eq(prospects.id, p.prospectId));
     expect(await due(2)).toEqual([]);

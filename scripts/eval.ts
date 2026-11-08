@@ -34,6 +34,7 @@ import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
 import { scans } from "@outrun/core/db";
 import { DEMO_PLACEHOLDER, seedDemo } from "@outrun/core/seed";
 import { loadConfig } from "@outrun/core";
+import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 
 const ToolName = z.enum(Object.keys(CREW_TOOLS) as [CrewToolName, ...CrewToolName[]]);
 const Scenario = z.object({
@@ -134,6 +135,7 @@ async function runScenario(s: Scenario): Promise<string[]> {
       ctx: (agent) => ({
         agent,
         requestId: "eval",
+        clientId: OUTRUN_CLIENT_ID,
         db: t.db,
         now: () => new Date(),
         enqueue: async (job) => (enqueued.push(job), { jobId: null }),

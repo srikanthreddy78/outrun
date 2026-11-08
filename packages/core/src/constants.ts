@@ -50,6 +50,13 @@ export const PRODUCTS = {
 export const priceOf = (p: PaidProductKey): number => PRODUCTS[p].priceUsd;
 
 /** Email */
+/**
+ * Outrun is client #0 of the agency: rows from before clients existed belong to it, and its
+ * crew keeps the unprefixed agent names, MCP URLs and tokens.
+ */
+export const OUTRUN_CLIENT_ID = "00000000-0000-7000-8000-000000000000";
+export const OUTRUN_CLIENT_SLUG = "outrun";
+
 export const SEND_WARMUP_START_PER_DAY = 10;
 export const SEND_WARMUP_STEP_PER_DAY = 5;
 export const FOLLOWUP_OFFSETS_DAYS = [3, 7] as const;

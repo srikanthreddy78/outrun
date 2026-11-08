@@ -11,6 +11,7 @@ import { createTempDatabase, type TempDb } from "../../testing/db";
 import { ToolRegistry } from "../registry";
 import type { ToolContext } from "../types";
 import { planDay } from "./plan_day";
+import { OUTRUN_CLIENT_ID } from "../../constants";
 
 // 10:00 on Friday 2026-11-06 in Los Angeles (CRON_TZ).
 const NOW = new Date("2026-11-06T18:00:00Z");
@@ -34,6 +35,7 @@ describe("plan_day", () => {
   const ctx = (): ToolContext => ({
     agent: "orchestrator",
     requestId: "req-plan",
+    clientId: OUTRUN_CLIENT_ID,
     db: t.db,
     now: () => NOW,
     enqueue: async (job) => {

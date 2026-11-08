@@ -4,10 +4,12 @@ import { ToolRegistry, defineTool } from "../crew/registry";
 import type { ToolContext } from "../crew/types";
 import { createIntegrations } from "../integrations";
 import { FakeNaiveClient, createFakeScan, createFakes } from ".";
+import { OUTRUN_CLIENT_ID } from "../constants";
 
 const ctx = (agent: ToolContext["agent"]): ToolContext => ({
   agent,
   requestId: "r",
+  clientId: OUTRUN_CLIENT_ID,
   db: {} as never,
   now: () => new Date("2026-11-07T00:00:00Z"),
   enqueue: async () => ({ jobId: null }),

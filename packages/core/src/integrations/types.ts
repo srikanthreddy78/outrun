@@ -3,7 +3,7 @@
  * Real implementations live in src/integrations/<name>.ts (each owned by one track);
  * fakes live in src/fakes. Tests and dev without a key use the fakes.
  */
-import type { AgentName, Domain, PaidProductKey, ScanCheck, StopReason } from "../../contracts";
+import type { Domain, PaidProductKey, ScanCheck, StopReason } from "../../contracts";
 
 /* ---------- LLM providers (Srikanth) ---------- */
 export interface LlmRequest {
@@ -73,7 +73,8 @@ export interface NaiveClient {
   /** Session events after `afterSeq`, oldest first; `includeAccepted` adds tool.confirm.resolved rows. */
   getEvents(sessionId: string, opts: { afterSeq: number; includeAccepted?: boolean }): Promise<NaiveEvent[]>;
   agentSpendUsd(agentId: string): Promise<number>;
-  resolveAgentId(agent: AgentName): Promise<string>;
+  /** By Naive agent name: the role for Outrun's crew, `<slug>-<role>` for another client's. */
+  resolveAgentId(name: string): Promise<string>;
   /** The organization's webhooks, for the "Naive webhook disabled" alert. */
   listWebhooks(): Promise<{ id: string; url: string; enabled: boolean; events: string[] }[]>;
 }

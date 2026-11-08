@@ -157,7 +157,12 @@ export async function runTriage(
         .join(" ");
       await deps.enqueue({
         type: "start_session",
-        payload: { agent: "closer", entity: { type: "prospect", id: m.prospectId }, message },
+        payload: {
+          agent: "closer",
+          entity: { type: "prospect", id: m.prospectId },
+          message,
+          clientId: m.clientId,
+        },
         idempotencyKey: `closer:${m.id}`,
         traceId: randomUUID(),
       });

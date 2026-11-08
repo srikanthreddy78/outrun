@@ -7,7 +7,10 @@ import { EntityType, Id, IsoDateTime, Usd } from "./common";
  */
 export const Actor = z
   .string()
-  .regex(/^(worker|web|system|naive:[a-z_]+|user:[\w.@-]+|provider:[a-z_]+)$/, "unknown actor form");
+  .regex(
+    /^(worker|web|system|naive:(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?[a-z_]+|user:[\w.@-]+|provider:[a-z_]+)$/,
+    "unknown actor form",
+  );
 export type Actor = z.infer<typeof Actor>;
 
 /** Dotted lowercase, e.g. `prospect.filed`, `llm.call`, `job.dead`. */
