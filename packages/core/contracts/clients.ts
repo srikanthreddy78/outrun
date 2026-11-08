@@ -28,6 +28,18 @@ export const ClientSlug = z
 const Text = (max: number) => z.string().trim().min(1).max(max);
 const Https = z.url({ protocol: /^https$/ });
 
+/** Company sizes, as Hunter's company search takes them. */
+export const COMPANY_SIZES = [
+  "1-10",
+  "11-50",
+  "51-200",
+  "201-500",
+  "501-1000",
+  "1001-5000",
+  "5001-10000",
+  "10001+",
+] as const;
+
 /** A price the crew may quote, exactly as written (e.g. "$49/month"). */
 export const ProfilePrice = z.object({ label: Text(80), amount: Text(40) });
 
@@ -43,6 +55,8 @@ export const ClientProfile = z.object({
     excludeKeywords: z.array(Text(40)).max(20).default([]),
     /** Job titles worth emailing. */
     buyerRoles: z.array(Text(60)).min(1).max(10),
+    /** Company sizes to search for; empty means any size. */
+    companySizes: z.array(z.enum(COMPANY_SIZES)).max(8).default([]),
   }),
   offer: z.object({
     /** What the email offers (a demo, a free trial, an audit), in one sentence. */

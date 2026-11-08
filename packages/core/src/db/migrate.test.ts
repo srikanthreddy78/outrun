@@ -19,7 +19,7 @@ describe("migrations", () => {
     );
     const names = r.rows.map((x) => x.table_name);
     for (const name of TABLES) expect(names).toContain(name);
-    expect(TABLES).toHaveLength(13);
+    expect(TABLES).toHaveLength(14);
   });
 
   it("mints UUIDv7 ids and enforces one prospect per company", async () => {

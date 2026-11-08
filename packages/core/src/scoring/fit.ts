@@ -68,3 +68,61 @@ export function scoreFit(input: FitInput): { score: number; parts: FitPart[] } {
   );
   return { score, parts };
 }
+
+/** The part of a client's profile its fit score reads. */
+export interface ClientIcp {
+  includeKeywords: readonly string[];
+  excludeKeywords: readonly string[];
+  buyerRoles: readonly string[];
+  companySizes: readonly string[];
+}
+
+const words = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+const mentions = (text: string, kw: string) => {
+  const k = words(kw).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return k ? new RegExp(`\\b${k}\\b`, "i").test(text) : false;
+};
+
+/** A size range like "11-50" or "10001+" contains n. */
+function inSize(range: string, n: number): boolean {
+  const m = /^(\d+)(?:-(\d+)|\+)$/.exec(range);
+  if (!m) return false;
+  return n >= Number(m[1]) && (m[2] === undefined || n <= Number(m[2]));
+}
+
+/**
+ * A client's fit score, 0-100, from its confirmed ICP: keywords the company matches, keywords
+ * that rule it out, its size against the sizes asked for, and whether the contact is a buyer.
+ */
+export function scoreClientFit(icp: ClientIcp, input: FitInput): { score: number; parts: FitPart[] } {
+  const parts: FitPart[] = [];
+  const add = (signal: string, points: number, reason: string) => parts.push({ signal, points, reason });
+  const text = [input.summary, ...input.facts.map((f) => `${f.key} ${f.value}`)].join(" ");
+
+  const hits = icp.includeKeywords.filter((k) => mentions(text, k));
+  if (hits.length >= 2) add("match", 40, `Matches ${hits.slice(0, 3).join(", ")}`);
+  else if (hits.length === 1) add("match", 25, `Matches ${hits[0]}`);
+  else add("match", input.source === "hunter" ? 10 : 0, "No ICP keyword in the saved facts yet");
+
+  const bad = icp.excludeKeywords.filter((k) => mentions(text, k));
+  if (bad.length) add("excluded", -40, `Ruled out by ${bad.slice(0, 3).join(", ")}`);
+
+  const size = headcount(input.facts);
+  if (!icp.companySizes.length || size === null) add("size", 10, "Size not a constraint or unknown");
+  else if (icp.companySizes.some((r) => inSize(r, size))) add("size", 20, `Size fits (${size})`);
+  else add("size", -10, `Size ${size} is outside ${icp.companySizes.join(", ")}`);
+
+  if (!input.contact) add("contact", 0, "No business contact yet");
+  else if (icp.buyerRoles.some((r) => mentions(input.contact!.role, r)))
+    add("contact", 30, `A buyer: ${input.contact.role}`);
+  else add("contact", 10, "A business contact");
+
+  const score = Math.max(
+    0,
+    Math.min(
+      100,
+      parts.reduce((s, p) => s + p.points, 0),
+    ),
+  );
+  return { score, parts };
+}

@@ -7,6 +7,7 @@ import { startOfDayIn } from "../../time";
 import { effectiveSendCap, sentToday } from "../../email/rules";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
+import { clientCandidatesWaiting } from "../../sources/clientSources";
 
 export interface PipelineSettings {
   sendDailyCap: number;
@@ -43,11 +44,11 @@ export async function pipelineCounts(
   const stages = Object.fromEntries(PROSPECT_STAGES.map((s) => [s, 0])) as Record<ProspectStage, number>;
   for (const r of stageRows) stages[r.stage] = Number(r.n);
 
-  // Discovered candidates are Outrun's; other clients get their own candidate lists.
+  // Outrun's candidates are the shared discovered companies; another client's are its own list.
   const [candidates] =
     clientId === OUTRUN_CLIENT_ID
       ? await db.select({ n: count() }).from(companies).where(eq(companies.kind, "candidate"))
-      : [{ n: 0 }];
+      : [{ n: await clientCandidatesWaiting(db, clientId) }];
   const [filedToday] = await db
     .select({ n: count() })
     .from(prospects)
