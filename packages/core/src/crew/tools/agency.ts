@@ -10,6 +10,7 @@ import { CRON_TZ, OUTRUN_CLIENT_ID, STUCK_APPROVAL_HOURS } from "../../constants
 import type { Db } from "../../db/client";
 import { agentSessions, clients, events, messages, prospects } from "../../db/schema";
 import { AppError } from "../../errors";
+import { saveDraftProfile } from "../../clients";
 import { dayIn } from "../../time";
 import { naiveAgentName } from "../identity";
 import { defineTool } from "../registry";
@@ -40,6 +41,12 @@ export const getClientProfile = defineTool({
       profile: c.profile,
     };
   },
+});
+
+export const saveClientProfile = defineTool({
+  name: "save_client_profile",
+  handler: async ({ profile }, ctx) =>
+    saveDraftProfile({ db: ctx.db, emit: ctx.emit }, ctx.clientId, profile, `naive:${ctx.agent}`),
 });
 
 export const listClients = defineTool({
@@ -253,7 +260,15 @@ export async function latestBrief(db: Db, day?: string) {
   return e ? { ...(e.payload as { day: string; summary: string }), at: e.ts } : null;
 }
 
-export const agencyTools = [getClientProfile, listClients, clientReport, agencyStatus, kickClient, saveBrief];
+export const agencyTools = [
+  getClientProfile,
+  saveClientProfile,
+  listClients,
+  clientReport,
+  agencyStatus,
+  kickClient,
+  saveBrief,
+];
 
 /** /dashboard/agency: every client, its six agents with what each did this week, and the brief. */
 export async function agencyOverview(db: Db, now: Date) {

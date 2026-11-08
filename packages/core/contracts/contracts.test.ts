@@ -101,7 +101,7 @@ describe("contracts round-trip", () => {
 
 describe("crew contract", () => {
   it("has the 20 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(26);
+    expect(CREW_TOOL_NAMES).toHaveLength(27);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 
