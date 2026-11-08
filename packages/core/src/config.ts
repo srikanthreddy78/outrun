@@ -99,6 +99,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     throw new ConfigError(`invalid configuration:\n  ${lines.join("\n  ")}`);
   }
   const e = r.data;
+  if (e.OUTRUN_DEMO && e.STRIPE_SECRET_KEY && /^(sk|rk)_live_/.test(e.STRIPE_SECRET_KEY)) {
+    throw new ConfigError(
+      "invalid configuration:\n  STRIPE_SECRET_KEY: OUTRUN_DEMO needs a Stripe test-mode key",
+    );
+  }
   return {
     env: e.NODE_ENV,
     isProd: e.NODE_ENV === "production",

@@ -20,11 +20,17 @@
     "prepare": "lefthook install || true",
     "db:migrate": "pnpm --filter @outrun/core db:migrate",
     "db:generate": "pnpm --filter @outrun/core db:generate",
-    "e2e:loop": "tsx --env-file-if-exists=.env scripts/e2e-loop.ts"
+    "e2e:loop": "tsx --env-file-if-exists=.env scripts/e2e-loop.ts",
+    "naive:up": "tsx --env-file-if-exists=.env scripts/naive-up.ts",
+    "naive:dry-run": "tsx --env-file-if-exists=.env scripts/naive-up.ts --dry-run",
+    "naive:sync": "tsx --env-file-if-exists=.env scripts/naive-sync.ts",
+    "db:seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "smoke": "tsx --env-file-if-exists=.env scripts/smoke.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@types/node": "^22.19.0",
+    "@usenaive-sdk/blueprints": "^0.18.0",
     "@usenaive-sdk/cli": "^1.0.0",
     "eslint": "^9.39.1",
     "lefthook": "^2.2.2",
@@ -37,6 +43,7 @@
   },
   "dependencies": {
     "@outrun/core": "workspace:*",
-    "@outrun/worker": "workspace:*"
+    "@outrun/worker": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

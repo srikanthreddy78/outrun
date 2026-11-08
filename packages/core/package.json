@@ -7,6 +7,10 @@
     ".": "./src/index.ts",
     "./contracts": "./contracts/index.ts",
     "./db": "./src/db/index.ts",
+    "./crew": "./src/crew/index.ts",
+    "./fakes": "./src/fakes/index.ts",
+    "./integrations": "./src/integrations/index.ts",
+    "./crew/tools": "./src/crew/tools/index.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {

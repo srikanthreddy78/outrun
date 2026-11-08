@@ -5,6 +5,7 @@ export default tseslint.config(
   {
     ignores: [
       "daybreak3/**",
+      ".claude/**",
       "**/node_modules/**",
       "**/.next/**",
       "**/dist/**",

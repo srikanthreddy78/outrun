@@ -172,6 +172,9 @@ importers:
       '@outrun/worker':
         specifier: workspace:*
         version: link:apps/worker
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@eslint/js':
         specifier: ^9.39.1
@@ -179,6 +182,9 @@ importers:
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.5
+      '@usenaive-sdk/blueprints':
+        specifier: ^0.18.0
+        version: 0.18.0
       '@usenaive-sdk/cli':
         specifier: ^1.0.0
         version: 1.0.0
@@ -209,9 +215,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@modelcontextprotocol/server':
+        specifier: ^2.4.0
+        version: 2.4.0
       '@outrun/core':
         specifier: workspace:*
         version: link:../../packages/core
+      mcp-handler:
+        specifier: ^2.3.1
+        version: 2.3.1(@modelcontextprotocol/server@2.4.0)(next@15.5.29(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))
       next:
         specifier: 15.5.29
         version: 15.5.29(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -221,6 +233,9 @@ importers:
       react-dom:
         specifier: 19.2.0
         version: 19.2.0(react@19.2.0)
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/react':
         specifier: ^19.2.2
@@ -234,10 +249,12 @@ importers:
       '@outrun/core':
         specifier: workspace:*
         version: link:../../packages/core
-    devDependencies:
       tsx:
         specifier: ^4.20.6
         version: 4.23.15
+      zod:
+        specifier: ^4.1.12
+        version: 4.6.7
 
   packages/core:
     dependencies:
@@ -953,6 +970,14 @@ packages:
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
 
+  '@modelcontextprotocol/core@2.4.0':
+    resolution: {integrity: sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/server@2.4.0':
+    resolution: {integrity: sha512-rgR9yxSaAJ+bcsi/XroT/S2AfPiIWloXAnrdfYSCms9ivVju0ishu/wW0J21Ho6+ZOR1r7RyeRbjiRuF87ix5Q==}
+    engines: {node: '>=20'}
+
   '@next/env@15.5.29':
     resolution: {integrity: sha512-9SrTiTsgORa+KfhlXXAGC1eSs847E+d2MQTPUX+n7R5XA8g/B6ZitfL6GoYHNMLwG3Hzs1wjDH0/ME5WrGMqBQ==}
 
@@ -1246,10 +1271,18 @@ packages:
     resolution: {integrity: sha512-SB8xqipSzZHUePCCLNeYxqnxq83X61/qzNhjQGbTfjxGZIeOEP7tBgWYX05Tcd6CgE02WdTJnh5b8kMZJ/+bnQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@usenaive-sdk/blueprints@0.18.0':
+    resolution: {integrity: sha512-M5bAdair8aoinnn3JLfNHoWjN56iAH3NHShKaDc470pJNKDG3FdmCQOHfZm4SG3irzLjlqcRW0iDxebLuh6WAQ==}
+    engines: {node: '>=20'}
+
   '@usenaive-sdk/cli@1.0.0':
     resolution: {integrity: sha512-fU75WLBbW0diHXJocfkGfM1Tzg62PXENIluH0ohlTbriRGxDQgBWZWTBUxAvxCQKV1AolODNaGcH49gFwqHWVw==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@usenaive-sdk/managed-agents@0.12.0':
+    resolution: {integrity: sha512-UsNlYbMxlzkB6rbBWV7gM7wqn3vPZeMEomktt79YNJfns78k3hqSOftG1aN2KLELUH5BcRh0hXWu/QRWVNuRmQ==}
+    engines: {node: '>=20'}
 
   '@vitest/expect@3.2.7':
     resolution: {integrity: sha512-E8eBXaKibuvH2pSZErOjdVb5vF4PbKYcrnluBTYxEk1l/VhhwZg1kZQsdtjq+CsF5CFydf2Rdkz7jDHKSisi3w==}
@@ -1344,6 +1377,10 @@ packages:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
     engines: {node: '>=10'}
 
+  chalk@5.6.2:
+    resolution: {integrity: sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA==}
+    engines: {node: ^12.17.0 || ^14.13 || >=16.0.0}
+
   check-error@2.1.3:
     resolution: {integrity: sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA==}
     engines: {node: '>= 16'}
@@ -1357,6 +1394,10 @@ packages:
 
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
+
+  commander@11.1.0:
+    resolution: {integrity: sha512-yPVavfyCcRhmorC7rWlkHn15b4wDVgVmBA7kV4QVBsF7kv/9TKJAbAXVTxvTnwP8HHKjRCJDClKbciiYS7p0DQ==}
+    engines: {node: '>=16'}
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -1749,6 +1790,17 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  mcp-handler@2.3.1:
+    resolution: {integrity: sha512-TkqWhx/r6W23uNcnxMwYfJ+i+pSNOMeN0eJE4j1B0CnXPC83R61YEsjFhCv/OOW6COe8u8h/uPDcdQCw5KiaOQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.0.0
+      next: '>=13.0.0'
+    peerDependenciesMeta:
+      next:
+        optional: true
 
   minimatch@10.2.6:
     resolution: {integrity: sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==}
@@ -2632,6 +2684,15 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
+  '@modelcontextprotocol/core@2.4.0':
+    dependencies:
+      zod: 4.6.7
+
+  '@modelcontextprotocol/server@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      zod: 4.6.7
+
   '@next/env@15.5.29': {}
 
   '@next/swc-darwin-arm64@15.5.29':
@@ -2864,9 +2925,20 @@ snapshots:
       '@typescript-eslint/types': 8.72.1
       eslint-visitor-keys: 5.0.1
 
+  '@usenaive-sdk/blueprints@0.18.0':
+    dependencies:
+      '@usenaive-sdk/managed-agents': 0.12.0
+      ignore: 7.0.14
+      jiti: 2.7.0
+      zod: 4.6.7
+
   '@usenaive-sdk/cli@1.0.0':
     dependencies:
       jiti: 2.7.0
+
+  '@usenaive-sdk/managed-agents@0.12.0':
+    dependencies:
+      zod: 4.6.7
 
   '@vitest/expect@3.2.7':
     dependencies:
@@ -2967,6 +3039,8 @@ snapshots:
       ansi-styles: 4.3.0
       supports-color: 7.2.0
 
+  chalk@5.6.2: {}
+
   check-error@2.1.3: {}
 
   client-only@0.0.1: {}
@@ -2976,6 +3050,8 @@ snapshots:
       color-name: 1.1.4
 
   color-name@1.1.4: {}
+
+  commander@11.1.0: {}
 
   concat-map@0.0.1: {}
 
@@ -3323,6 +3399,14 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  mcp-handler@2.3.1(@modelcontextprotocol/server@2.4.0)(next@15.5.29(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)):
+    dependencies:
+      '@modelcontextprotocol/server': 2.4.0
+      chalk: 5.6.2
+      commander: 11.1.0
+    optionalDependencies:
+      next: 15.5.29(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
 
   minimatch@10.2.6:
     dependencies:

@@ -84,9 +84,20 @@ export const STUCK_ORDER_MINUTES = 60;
 export const STUCK_APPROVAL_HOURS = 24;
 export const LLM_BUDGET_ALERT_RATIO = 0.8;
 
-/** In-app models (the smart model is OUTRUN_SMART_MODEL). */
-export const BULK_MODEL = "openai/gpt-5-mini";
+/** In-app models. The smart model is OUTRUN_SMART_MODEL on OpenAI; bulk and fallback go through OpenRouter. */
+export const BULK_MODEL = "openai/gpt-5.4-mini";
 export const FALLBACK_MODEL = "openai/gpt-5.5";
+export const LLM_TIMEOUT_MS = 60_000;
+/**
+ * USD per million tokens, from OpenRouter's model list on 2026-11-07 (it matches OpenAI's list
+ * price). Used when a provider doesn't return the cost itself; OpenRouter does.
+ */
+export const MODEL_PRICES_PER_MTOK: Record<string, { input: number; output: number }> = {
+  "gpt-5.5": { input: 5, output: 30 },
+  "openai/gpt-5.5": { input: 5, output: 30 },
+  "gpt-5.4-mini": { input: 0.75, output: 4.5 },
+  "openai/gpt-5.4-mini": { input: 0.75, output: 4.5 },
+};
 
 /** Webhooks */
 export const WEBHOOK_TOLERANCE_SECONDS = 300;

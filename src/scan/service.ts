@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { CACHE_TTL_MS, SCAN_VERSION, type PrivateSupplement, type ScanResult, type ScanSource } from './contracts.ts';
+import { SCAN_VERSION, type PrivateSupplement, type ScanResult, type ScanSource } from './contracts.ts';
 import { fullScan, normalizeDomain, quickScan, withPrivateSupplement } from './scan.ts';
 
 export interface ScanStore {
