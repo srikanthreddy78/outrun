@@ -46,7 +46,7 @@ export function authorizeCrew(
     !agentParam ||
     !clientSlug ||
     !CLIENT_SLUG_RE.test(clientSlug) ||
-    (parts.length === 2 && clientSlug === OUTRUN_CLIENT_SLUG) ||
+    (parts.length === 2 && (clientSlug === OUTRUN_CLIENT_SLUG || agentParam === "ceo")) ||
     !(AGENTS as readonly string[]).includes(agentParam)
   ) {
     return { response: errorResponse(new AppError("not_found", "unknown agent"), requestId) };

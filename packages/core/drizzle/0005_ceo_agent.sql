@@ -1,0 +1,1 @@
+ALTER TYPE "public"."agent_name" ADD VALUE 'ceo';

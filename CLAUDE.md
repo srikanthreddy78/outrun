@@ -11,6 +11,7 @@ pnpm e2e:full             the whole business through the real handlers, on fakes
 pnpm db:migrate           apply migrations to your DATABASE_URL
 pnpm db:seed              seed the demo prospect
 pnpm smoke                check a deployed environment
+pnpm clients:export       list client crews for naive up (.naive/clients.json); run before naive up
 pnpm naive:sync           agents, vault tokens and the webhook; run after every naive up
 pnpm eval:crew            real Naive sessions in demo mode; spends credits, ask first
 naive up --dry-run        preview crew changes; only Srikanth runs naive up, from main

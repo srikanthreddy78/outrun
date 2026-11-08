@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { AGENTS, type AgentName } from "../../contracts";
+import { AGENTS, type AgentName, CLIENT_ROLES } from "../../contracts";
 import { OUTRUN_CLIENT_SLUG } from "../constants";
 
 /**
@@ -39,6 +39,12 @@ export function crewTokenEnvAll(
   clientSlugs: readonly string[] = [OUTRUN_CLIENT_SLUG],
 ): Record<string, string> {
   return Object.fromEntries(
-    clientSlugs.flatMap((slug) => AGENTS.map((a) => [crewTokenEnv(a, slug), crewToken(secret, a, slug)])),
+    clientSlugs.flatMap((slug) =>
+      // The CEO is the agency's, not a client's: only Outrun's slug carries it.
+      (slug === OUTRUN_CLIENT_SLUG ? AGENTS : CLIENT_ROLES).map((a) => [
+        crewTokenEnv(a, slug),
+        crewToken(secret, a, slug),
+      ]),
+    ),
   );
 }

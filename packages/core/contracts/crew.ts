@@ -15,9 +15,26 @@ import {
   Source,
 } from "./domain";
 
-export const AGENTS = ["orchestrator", "prospector", "researcher", "sdr", "closer", "auditor"] as const;
+/**
+ * The six roles on every client's crew. The agency runs one crew per client: Outrun's own
+ * keeps the bare names (`sdr`), any other client's is `<slug>-<role>` on Naive.
+ */
+export const CLIENT_ROLES = ["orchestrator", "prospector", "researcher", "sdr", "closer", "auditor"] as const;
+export type ClientRole = (typeof CLIENT_ROLES)[number];
+/** Every agent: the client roles, plus the agency's one CEO, which serves no single client. */
+export const AGENTS = [...CLIENT_ROLES, "ceo"] as const;
 export const AgentName = z.enum(AGENTS);
 export type AgentName = z.infer<typeof AgentName>;
+
+const ClientStatus = z.enum([
+  "draft",
+  "profiling",
+  "awaiting_confirmation",
+  "email_setup",
+  "active",
+  "paused",
+]);
+const CrewMember = z.object({ role: AgentName, naiveAgent: z.string() });
 
 /** The MCP server name agents see; tools appear as `outrun.<tool>`. */
 export const MCP_SERVER_NAME = "outrun";
@@ -278,6 +295,102 @@ export const CREW_TOOLS = {
     }),
     output: z.object({ reportId: Id }),
   },
+  get_client_profile: {
+    agents: [...CLIENT_ROLES],
+    policy: "allow",
+    description:
+      "The client your crew works for: its name, domain, status, and the confirmed target customer, offer, prices and links. Read it before any client-facing work.",
+    input: z.object({}),
+    output: z.object({
+      clientId: Id,
+      slug: z.string(),
+      name: z.string(),
+      domain: z.string(),
+      status: ClientStatus,
+      confirmed: z.boolean(),
+      profile: z.record(z.string(), z.unknown()),
+    }),
+  },
+  list_clients: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Every client of the agency: status, profile and email setup, and the six agents on its crew.",
+    input: z.object({}),
+    output: z.object({
+      clients: z.array(
+        z.object({
+          clientId: Id,
+          slug: z.string(),
+          name: z.string(),
+          domain: z.string(),
+          status: ClientStatus,
+          profileConfirmed: z.boolean(),
+          dnsStatus: z.string(),
+          crew: z.array(CrewMember),
+        }),
+      ),
+    }),
+  },
+  client_report: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "One client over the last N days: pipeline by stage, sent, replies and wins, approvals waiting, and per agent its sessions, failures, last run and spend.",
+    input: z.object({ clientId: Id, days: Limit(30, 7) }),
+    output: z.object({
+      clientId: Id,
+      slug: z.string(),
+      stages: z.record(ProspectStage, z.number().int().nonnegative()),
+      sent: z.number().int().nonnegative(),
+      replies: z.number().int().nonnegative(),
+      won: z.number().int().nonnegative(),
+      approvalsWaiting: z.number().int().nonnegative(),
+      oldestApprovalHours: z.number().nonnegative().nullable(),
+      agents: z.array(
+        CrewMember.extend({
+          sessions: z.number().int().nonnegative(),
+          failed: z.number().int().nonnegative(),
+          lastSessionAt: IsoDateTime.nullable(),
+          spendUsd: z.number().nonnegative(),
+        }),
+      ),
+    }),
+  },
+  agency_status: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "The whole agency at a glance: clients by status, totals for the last 7 days, and the clients that need attention and why.",
+    input: z.object({}),
+    output: z.object({
+      clients: z.record(ClientStatus, z.number().int().nonnegative()),
+      totals: z.object({
+        sent: z.number().int().nonnegative(),
+        replies: z.number().int().nonnegative(),
+        won: z.number().int().nonnegative(),
+        approvalsWaiting: z.number().int().nonnegative(),
+        spendUsd: z.number().nonnegative(),
+      }),
+      attention: z.array(z.object({ clientId: Id, slug: z.string(), reason: z.string() })),
+    }),
+  },
+  kick_client: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Starts an active client's orchestrator for today's run, once per client per day. Refuses a client that isn't active or whose profile isn't confirmed.",
+    input: z.object({ clientId: Id }),
+    output: z.object({ enqueued: z.boolean(), reason: z.string().nullable() }),
+  },
+  save_brief: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Saves today's brief for the owner: what each client's crew did and what needs a person. Our code emails it to the team once a day.",
+    input: z.object({ summary: z.string().min(1).max(4000) }),
+    output: z.object({ saved: z.literal(true) }),
+  },
   ping: {
     agents: [...AGENTS],
     policy: "allow",
@@ -301,6 +414,14 @@ export const CREW_TOOL_NAMES = Object.keys(CREW_TOOLS) as CrewToolName[];
 export type ToolInput<N extends CrewToolName> = z.output<(typeof CREW_TOOLS)[N]["input"]>;
 export type ToolOutput<N extends CrewToolName> = z.input<(typeof CREW_TOOLS)[N]["output"]>;
 
+/** Tools only Outrun's own crew gets: they sell Outrun's products through Outrun's Stripe. */
+export const OUTRUN_ONLY_TOOLS: readonly CrewToolName[] = ["create_checkout_link"];
+
+/** A crew member's tools: its role's, less Outrun-only ones on another client's crew. */
+export function toolsForMember(agent: AgentName, isOutrun: boolean): CrewToolName[] {
+  return toolsForAgent(agent).filter((t) => isOutrun || !OUTRUN_ONLY_TOOLS.includes(t));
+}
+
 /** Name as Naive sees it: `outrun.send_email`. */
 export const qualified = (tool: CrewToolName): string => `${MCP_SERVER_NAME}.${tool}`;
 
@@ -320,4 +441,5 @@ export const BUILTIN_TOOLS: Record<AgentName, readonly string[]> = {
   sdr: ["read_skill"],
   closer: ["read_skill"],
   auditor: ["read_skill", "web_search", "web_fetch"],
+  ceo: ["read_skill"],
 };

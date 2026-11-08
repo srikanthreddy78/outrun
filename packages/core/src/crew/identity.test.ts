@@ -25,8 +25,12 @@ describe("crew identity: a client's role", () => {
   });
 
   it("gives every crew member its own token", () => {
+    // Outrun's six and the CEO, then six for each other client: no client has a CEO.
     const all = crewTokenEnvAll("s", ["outrun", "acme", "beta"]);
-    expect(Object.keys(all)).toHaveLength(18);
-    expect(new Set(Object.values(all)).size).toBe(18);
+    expect(Object.keys(all)).toHaveLength(19);
+    expect(new Set(Object.values(all)).size).toBe(19);
+    expect(all.CREW_TOKEN_CEO).toBeDefined();
+    expect(all.CREW_TOKEN_ACME_CEO).toBeUndefined();
+    expect(parseNaiveAgentName("acme-ceo")).toBeNull();
   });
 });

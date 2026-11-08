@@ -33,7 +33,7 @@ describe("contracts round-trip", () => {
       traceId: "t1",
     };
     expect(roundTrip(JobEnvelope, env)).toEqual(env);
-    expect(JOB_TYPES).toHaveLength(14);
+    expect(JOB_TYPES).toHaveLength(15);
   });
 
   it("event", () => {
@@ -101,7 +101,7 @@ describe("contracts round-trip", () => {
 
 describe("crew contract", () => {
   it("has the 20 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(20);
+    expect(CREW_TOOL_NAMES).toHaveLength(26);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 
@@ -112,7 +112,20 @@ describe("crew contract", () => {
 
   it("every agent gets ping and its own tools", () => {
     for (const a of AGENTS) expect(toolsForAgent(a)).toContain("ping");
-    expect(toolsForAgent("orchestrator").sort()).toEqual(["ping", "pipeline_status", "plan_day"]);
+    expect(toolsForAgent("orchestrator").sort()).toEqual([
+      "get_client_profile",
+      "ping",
+      "pipeline_status",
+      "plan_day",
+    ]);
+    expect(toolsForAgent("ceo").sort()).toEqual([
+      "agency_status",
+      "client_report",
+      "kick_client",
+      "list_clients",
+      "ping",
+      "save_brief",
+    ]);
     expect(toolsForAgent("sdr")).not.toContain("reply_email");
     expect(toolsForAgent("closer")).not.toContain("send_email");
   });
