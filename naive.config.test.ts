@@ -13,7 +13,7 @@ import {
   toolsForAgent,
 } from "./packages/core/contracts";
 import { crewToken, crewTokenEnv, verifyCrewToken } from "./packages/core/src/crew/tokens";
-import { BUDGETS, SCHEDULE, TEAM } from "./naive/crew";
+import { BUDGETS, SCHEDULE } from "./naive/crew";
 
 const APP_URL = "https://outrun.example";
 
@@ -28,7 +28,8 @@ type Agent = {
   mcp_servers: { name: string; url: string }[];
   skills: string[];
   identity: string;
-  multiagent?: { type: string; agents: unknown[]; board?: boolean };
+  multiagent?: unknown;
+  handoffs?: unknown;
   schedules?: { cron: string; timezone: string; budget_micro_usd: number }[];
 };
 type Project = {
@@ -37,7 +38,7 @@ type Project = {
   skills: { slug: string; file: string }[];
   vaults: {
     name: string;
-    identity: string;
+    identity?: string;
     credentials: { kind: string; mcp_server_url: string; value: { from_env: string } }[];
   }[];
 };
@@ -120,13 +121,18 @@ describe("naive.config.ts", () => {
     }
   });
 
-  it("makes the orchestrator the coordinator of the planned-work members, with a board", () => {
-    const o = agent("orchestrator");
-    expect(o.multiagent?.type).toBe("coordinator");
-    expect(o.multiagent?.board).toBe(true);
-    expect(o.multiagent?.agents).toEqual(TEAM.map((name) => ({ type: "agent", name })));
-    for (const a of project.agents.filter((x) => x.name !== "orchestrator"))
+  it("builds no team: no multiagent roster, no handoffs, no team built-ins", () => {
+    for (const a of project.agents) {
       expect(a.multiagent).toBeUndefined();
+      expect(a.handoffs).toBe(false);
+      for (const t of ["board_read", "board_write", "send_to_agent", "wait_for_agents", "list_agents"])
+        expect(a.tools.configs[t]).toBeUndefined();
+    }
+    expect(agent("orchestrator").tools.configs["outrun.plan_day"]?.permission).toBe("allow");
+  });
+
+  it("keeps the crew vault org-wide, not bound to the persona", () => {
+    expect(project.vaults[0]!.identity).toBeUndefined();
   });
 
   it("schedules only the orchestrator, weekdays at 09:00 Los Angeles", () => {

@@ -95,6 +95,7 @@ describe("crew MCP server", () => {
     expect((o.result?.tools as { name: string }[]).map((x) => x.name).sort()).toEqual([
       "ping",
       "pipeline_status",
+      "plan_day",
     ]);
     const s = await rpc(await call("sdr", list, crewToken(SECRET, "sdr")));
     expect((s.result?.tools as { name: string }[]).map((x) => x.name)).toEqual(["ping"]);

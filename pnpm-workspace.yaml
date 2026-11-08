@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # Shane's user-acquisition Naive project (outreach app, landing page, crew); see its README.
+  - user_acquisition
 # daybreak3/ is Matthew's standalone template app; it is not part of the workspace.
 allowBuilds:
   esbuild: true

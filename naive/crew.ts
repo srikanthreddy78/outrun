@@ -44,20 +44,22 @@ export const BUDGETS: Record<
   auditor: { cap_micro_usd: 10 * USD, max_task_micro_usd: 3 * USD, period: "day" },
 };
 
-/** The orchestrator's members, who take board cards from it. The closer and auditor are event-driven. */
-export const TEAM: readonly AgentName[] = ["prospector", "researcher", "sdr"];
-
+/**
+ * No team: Naive lists multiagent teams as coming soon. The orchestrator plans with
+ * outrun.plan_day, which enqueues one session per unit of work; the closer and auditor are
+ * started by our code when a reply or a payment arrives.
+ */
 export const SCHEDULE = {
   agent: "orchestrator" as const,
   cron: "0 9 * * 1-5",
   timezone: "America/Los_Angeles",
   input:
-    "Weekday run. Call outrun.pipeline_status, then plan today's work on the board: one card per prospect, assigned to its member. Never wait on a card.",
+    "Weekday run. Call outrun.pipeline_status, then outrun.plan_day once, summarize what it enqueued, and stop.",
   budget_micro_usd: 1 * USD,
 };
 
 const DESCRIPTIONS: Record<AgentName, string> = {
-  orchestrator: "Turns the day's goal into board cards and assigns each one to a member.",
+  orchestrator: "Plans the day with outrun.plan_day, which starts each member's sessions.",
   prospector: "Picks candidates that fit the ICP and files them as prospects.",
   researcher: "Finds facts and business contacts for a prospect; our code scores the fit.",
   sdr: "Writes first emails and follow-ups in which every claim cites a scan check.",
@@ -98,7 +100,6 @@ export interface CrewAgent {
   skills: string[];
   tools: ReturnType<typeof toolsetFor>;
   mcpUrl: string;
-  team?: readonly AgentName[];
   schedule?: typeof SCHEDULE;
 }
 
@@ -112,6 +113,6 @@ export function crew(appUrl: string): CrewAgent[] {
     skills: [name],
     tools: toolsetFor(name),
     mcpUrl: crewMcpUrl(appUrl, name),
-    ...(name === "orchestrator" ? { team: TEAM, schedule: SCHEDULE } : {}),
+    ...(name === "orchestrator" ? { schedule: SCHEDULE } : {}),
   }));
 }

@@ -16,7 +16,6 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:mt": "node --experimental-strip-types --test tests/*.test.ts",
     "eval": "tsx scripts/eval.ts",
     "prepare": "lefthook install || true",
     "db:migrate": "pnpm --filter @outrun/core db:migrate",
