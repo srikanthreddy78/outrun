@@ -110,7 +110,7 @@ export function AmbientContainer({ onStartRoutine }: AmbientContainerProps) {
     }
   }, []);
 
-  // "good evening, matthew." → lead "good evening," + name "matthew."
+  // "good evening, alex." → lead "good evening," + name "alex."
   const commaIndex = greeting.indexOf(", ");
   const greetingLead = commaIndex !== -1 ? greeting.slice(0, commaIndex + 1) : "";
   const greetingName = commaIndex !== -1 ? greeting.slice(commaIndex + 2) : greeting;

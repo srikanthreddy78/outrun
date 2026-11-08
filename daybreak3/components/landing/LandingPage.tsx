@@ -46,19 +46,19 @@ export function LandingPage() {
           {/* Story */}
           <div className="flex flex-col gap-7">
             <p className="text-[#2A1F18]/80 text-lg font-[Inter] font-light leading-relaxed">
-              <strong className="font-medium">I&apos;ve believed this for as long as I can remember.</strong> If I don&apos;t start my morning right, I tend to feel unproductive, restless, and scatter-brained throughout the rest of the day. As such, I have always put heavy emphasis on getting my mornings right.
+              <strong className="font-medium">The first few minutes of a day matter.</strong> A thoughtful start can make the rest of the day feel calmer, clearer, and more intentional.
             </p>
             <p className="text-[#2A1F18]/80 text-lg font-[Inter] font-light leading-relaxed">
-              <strong className="font-medium">But doing so was way harder than it should&apos;ve been</strong> — my main problems being consistency (completing all the steps in the routine each day) and a lack of structure (without a basis for how long each part should take, it always felt like I was moving through routines instead of actually being in them).
+              <strong className="font-medium">That should not require another noisy dashboard.</strong> A morning ritual needs just enough structure to feel supportive, without turning into another task list.
             </p>
             <p className="text-[#2A1F18]/80 text-lg font-[Inter] font-light leading-relaxed">
-              Naturally, I turned to the plethora of morning routine apps available on the app store, but none of them really stuck. They were all cluttered, feature-heavy, and packed with metrics and streaks and reminders — which, to me, is <strong className="font-medium">the complete opposite of what a morning should feel like</strong>. And underneath the noise, something more subtle was off: <strong className="font-medium">I never really felt like the morning was mine</strong>. The apps were focused on the act of building a routine — adding habits, checking boxes, hitting goals.
+              Many routine tools are crowded with metrics, streaks, and reminders. Daybreak keeps the focus on a small set of moments you choose for yourself.
             </p>
             <p className="text-[#2A1F18]/80 text-lg font-[Inter] font-light leading-relaxed">
-              But I don&apos;t think of my morning as a routine. I think of it as a ritual. Checking the weather. A quote to sit with. Words of positivity left from days prior. <strong className="font-medium">A breath before the day begins.</strong>
+              Check the weather, sit with a quote, write a note, or take a breath before the day begins. <strong className="font-medium">Your ritual can be as simple as it needs to be.</strong>
             </p>
             <p className="text-[#2A1F18]/80 text-lg font-[Inter] font-light leading-relaxed">
-              That&apos;s what I wanted, and I couldn&apos;t find it. <strong className="font-medium">So I built it.</strong>
+              Daybreak is a local-first template for building that kind of morning.
             </p>
           </div>
 
@@ -109,10 +109,6 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Footer */}
-          <p className="text-[#4A3728] text-xs font-[Inter] opacity-25 text-center pb-4">
-            Built by Matthew Huang.
-          </p>
         </motion.div>
       </div>
     </main>
