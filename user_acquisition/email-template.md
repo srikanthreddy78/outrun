@@ -12,7 +12,7 @@ person's approval, so nothing below goes out until someone approves it.
 | ------- | ------------------------------------------------------------------------------------------- |
 | From    | `hello@launchpad-marketing-prgqe7.usenaive.ai` until an inbox exists on a domain of our own |
 | To      | `{{contact_email}}`, one recipient only                                                     |
-| Subject | `Marketing your coding agent can run, for {{company}}`                                      |
+| Subject | `You built {{company}}. Hand us the marketing.`                                             |
 
 ## Body
 
@@ -32,8 +32,14 @@ reviews, Reddit threads, and which hooks got attention. If the hook that lands i
 your streak" but your landing page leads with "beautiful habit tracking", your agent gets a
 ticket to change the headline, not just a report.
 
-We're opening early access. Reply "yes" and we'll send the details, or point your agent at
-heyoutrun.com/SKILL.md and it can take it from there.
+Early access starts one of two ways:
+
+1. Email us: reply to this email with the subject "Outrun early access: {{company}}" and four
+   lines: App name, Product link, Brand style, Marketing theme.
+2. Or hand it to your agent. Paste this into Claude Code, Codex or whichever agent builds
+   {{company}}:
+   "Use Outrun to market this app. Read https://heyoutrun.com/SKILL.md and draft the handoff
+   email for me to approve."
 
 The Outrun team
 ```
@@ -68,10 +74,13 @@ Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.a
 - Anonymous: signed "The Outrun team", never a person's name, title, phone or personal email.
 - No invented facts: no metrics, customer names, results or prices. The streak example is the
   illustration from `wiki/PRODUCT.md`, phrased as a hypothetical ("If the hook that lands...").
-- Don't promise what doesn't exist yet: no install command or public CLI/MCP connector. Early
-  access is by reply, or through `heyoutrun.com/SKILL.md`.
-- A reply of "yes" lands in the inbox, where `inbox-triage` logs it as a human reply. Someone has
-  to answer it with the early-access details; nothing answers automatically yet.
+- Don't promise what doesn't exist yet: no install command or public CLI/MCP connector.
+- Two ways to start, both exactly as the landing page puts them: the handoff email (subject
+  `Outrun early access: <app>` and the four required lines), or the paste-in prompt that points
+  the prospect's agent at `heyoutrun.com/SKILL.md`. Keep the wording identical to the page.
+- A handoff email, whether a reply to this one or sent by the prospect's agent, lands in the
+  inbox, where `inbox-triage` logs it as a human reply. Someone has to answer it with next
+  steps; nothing answers automatically yet.
 
 ## Follow-ups
 
@@ -84,8 +93,9 @@ automated yet; each would go through the same prepare-and-approve path.
 Hi {{first_name_or_team}},
 
 A quick nudge on Outrun. Your coding agent hands us the product, we run the marketing, and
-what we learn comes back as tickets it can ship. Reply "yes" for early access, or point your
-agent at heyoutrun.com/SKILL.md.
+what we learn comes back as tickets it can ship. To start, reply with the subject
+"Outrun early access: {{company}}" and your app name, product link, brand style and
+marketing theme, or have your agent read https://heyoutrun.com/SKILL.md.
 
 The Outrun team
 ```
@@ -95,8 +105,8 @@ The Outrun team
 ```text
 Hi {{first_name_or_team}},
 
-Last note from us. If you ever want your coding agent to hand off {{company}}'s marketing,
-reply any time, or have it read heyoutrun.com/SKILL.md.
+Last note from us. If you ever want to hand off {{company}}'s marketing, reply any time, or
+have your coding agent read https://heyoutrun.com/SKILL.md.
 
 The Outrun team
 ```

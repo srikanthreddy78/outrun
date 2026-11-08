@@ -1,6 +1,6 @@
 From: hello@launchpad-marketing-prgqe7.usenaive.ai
 To: contact@renderform.io
-Subject: Marketing your coding agent can run, for RenderForm
+Subject: You built RenderForm. Hand us the marketing.
 
 Hi RenderForm team,
 
@@ -18,8 +18,14 @@ reviews, Reddit threads, and which hooks got attention. If the hook that lands i
 your streak" but your landing page leads with "beautiful habit tracking", your agent gets a
 ticket to change the headline, not just a report.
 
-We're opening early access. Reply "yes" and we'll send the details, or point your agent at
-heyoutrun.com/SKILL.md and it can take it from there.
+Early access starts one of two ways:
+
+1. Email us: reply to this email with the subject "Outrun early access: RenderForm" and four
+   lines: App name, Product link, Brand style, Marketing theme.
+2. Or hand it to your agent. Paste this into Claude Code, Codex or whichever agent builds
+   RenderForm:
+   "Use Outrun to market this app. Read https://heyoutrun.com/SKILL.md and draft the handoff
+   email for me to approve."
 
 The Outrun team
 

@@ -12,6 +12,12 @@ export const TIMEZONE = "America/Los_Angeles";
 const MODEL = "anthropic/claude-sonnet-5";
 
 /**
+ * The Studio's sidebar lists an agent only when its metadata carries a `pin` (1-3), so each agent
+ * declares one. An apply sets metadata to exactly what's declared, so leaving it out would hide
+ * the agent again on the next `naive up`.
+ */
+
+/**
  * Naive gives scheduled runs a board card to report on. Reading and closing it is harmless, so it's
  * allowed: left at the default, every scheduled run would park waiting for someone to approve it.
  */
@@ -41,6 +47,7 @@ export const SENDER: AgentDecl = {
   budget: { cap_micro_usd: 2_000_000, max_task_micro_usd: 500_000, period: "day" },
   identity: IDENTITY,
   handoffs: false,
+  metadata: { pin: 2 },
   tools: tools(["outreach.prepare_email", "outreach.is_suppressed", "email.inboxes"], ["email.send"]),
   system: [
     "You send Outrun's outreach email, one message per request, in two steps.",
@@ -63,6 +70,7 @@ export const PROSPECTOR: AgentDecl = {
   budget: { cap_micro_usd: 30_000_000, max_task_micro_usd: 3_000_000, period: "day" },
   identity: IDENTITY,
   handoffs: false,
+  metadata: { pin: 1 },
   tools: tools(["web_search", "web_fetch", "outreach.save_prospect", "outreach.list_prospects"]),
   system: [
     "You find prospects for Outrun, an agency that makes companies readable and usable by AI agents. You never email anyone; you have no tool that can.",
@@ -89,6 +97,7 @@ export const INBOX: AgentDecl = {
   budget: { cap_micro_usd: 3_000_000, max_task_micro_usd: 500_000, period: "day" },
   identity: IDENTITY,
   handoffs: false,
+  metadata: { pin: 3 },
   tools: tools([
     "email.inboxes",
     "email.read",

@@ -6,7 +6,8 @@
  *   the one-click unsubscribe page at `/u/<token>`, and the suppression list in the app's Postgres;
  * - the prospects table, filled by `prospector` with emails `outreach.save_prospect` verifies;
  * - the `landing` app: the static landing page in `landing_page/`, served at heyoutrun.com;
- * - the CRM page in the Studio, Naive's built-in CRM loaded by `crm/sync.ts` with fit scores;
+ * - Naive's built-in CRM, loaded by `crm/sync.ts` (not by `naive up`) with every prospect and its fit
+ *   score; the outreach app's leads dashboard shows the same fit scores in the Studio;
  * - the three agents in `crew/agents.ts`.
  *
  * The inbox lives on `OUTREACH_MAIL_DOMAIN` when set (a domain bought or connected in Naive), and on
@@ -23,28 +24,6 @@ export default defineProject({
   title: "Outrun user acquisition",
   description:
     "Outreach email for Outrun: approved sends with one-click unsubscribe, and an inbox agent that handles every reply.",
-
-  /** Naive's built-in CRM in the Studio, filled by `crm/sync.ts` with every prospect and its fit score. */
-  mini_apps: [
-    {
-      slug: "crm",
-      name: "CRM",
-      icon: "person",
-      pages: [
-        {
-          slug: "leads",
-          title: "Leads",
-          spec: {
-            root: "page",
-            elements: {
-              page: { type: "Page", props: {}, children: ["crm"] },
-              crm: { type: "Crm", props: {} },
-            },
-          },
-        },
-      ],
-    },
-  ],
 
   identities: [
     {
