@@ -30,6 +30,26 @@ export type DashboardSummary = {
   costsUsd: number;
   costPerDeliveredAuditUsd: number | null;
 };
+export function summarizeStoredTotals(input: {
+  candidates: number;
+  scanned: number;
+  paidOrders: number;
+  deliveredAudits: number;
+  revenueUsd: number;
+  eventCostUsd: number;
+  naiveCostUsd: number;
+}): DashboardSummary {
+  const costsUsd = input.eventCostUsd + input.naiveCostUsd;
+  return {
+    candidates: input.candidates,
+    scanned: input.scanned,
+    paidOrders: input.paidOrders,
+    deliveredAudits: input.deliveredAudits,
+    revenueUsd: input.revenueUsd,
+    costsUsd,
+    costPerDeliveredAuditUsd: input.deliveredAudits ? costsUsd / input.deliveredAudits : null,
+  };
+}
 export function isAllowedTeamAccount(email: string | null | undefined, allowlist: string): boolean {
   if (!email) return false;
   return allowlist
@@ -38,11 +58,11 @@ export function isAllowedTeamAccount(email: string | null | undefined, allowlist
     .filter(Boolean)
     .includes(email.toLowerCase());
 }
-export function summarizeLedger(events: LedgerEvent[]): DashboardSummary {
+export function summarizeLedger(events: LedgerEvent[], naiveSpendUsd = 0): DashboardSummary {
   const count = (type: string) =>
     new Set(events.filter((event) => event.type === type).map((event) => event.entityId ?? event.id)).size;
   const deliveredAudits = count("report.delivered");
-  const costsUsd = events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0);
+  const costsUsd = events.reduce((sum, event) => sum + (event.costUsd ?? 0), naiveSpendUsd);
   return {
     candidates: count("candidate.discovered"),
     scanned: count("scan.completed"),

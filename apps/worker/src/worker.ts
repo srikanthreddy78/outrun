@@ -5,6 +5,8 @@ import type { Handlers } from "@outrun/core/queue";
 import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { naiveHandlers } from "./jobs/naive";
 import { stripeHandlers } from "./jobs/stripe";
+import { auditHandlers } from "./jobs/audit";
+import { growthHandlers } from "./jobs/growth";
 import { stubHandlers } from "./stubs";
 
 export interface Worker {
@@ -30,7 +32,9 @@ export interface StartOptions {
 
 /** The real handlers merged so far. Each card adds its jobs here. */
 export function realHandlers(rt: Runtime): Handlers {
-  return { ...naiveHandlers(rt), ...stripeHandlers(rt) };
+  // start_audit is registered by both the audit and Stripe handlers; the Stripe one comes last on
+  // purpose: it is cycle-aware (initial purchase vs. each Growth renewal) and checks the order state.
+  return { ...naiveHandlers(rt), ...auditHandlers(rt), ...growthHandlers(rt), ...stripeHandlers(rt) };
 }
 
 export async function startWorker(opts: StartOptions): Promise<Worker> {

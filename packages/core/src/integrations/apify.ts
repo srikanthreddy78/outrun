@@ -1,51 +1,99 @@
 import { timingSafeEqual } from "node:crypto";
-import { normalizeDomain } from "../scan/scan";
+import { z } from "zod";
 import { AUDIT_MAX_PAGES } from "../constants";
+import { normalizeDomain } from "../scan/scan";
+import type { ApifyClient as ApifyPort } from "./types";
 
-export type CrawlPage = { url: string; title?: string; text?: string; markdown?: string };
-export class ApifyClient {
-  private token: string;
-  private fetcher: typeof fetch;
-  constructor(token: string, fetcher: typeof fetch = fetch) {
-    this.token = token;
-    this.fetcher = fetcher;
+const API = "https://api.apify.com/v2";
+const PublicCrawlInput = z.strictObject({
+  startUrls: z.array(z.strictObject({ url: z.url() })).length(1),
+  maxCrawlPages: z.literal(AUDIT_MAX_PAGES),
+  maxResults: z.literal(AUDIT_MAX_PAGES),
+  maxCrawlDepth: z.number().int().min(0).max(3),
+  useSitemaps: z.literal(false),
+});
+
+/** Public pages only. Test-account credentials never enter this client. */
+export class ApifyClient implements ApifyPort {
+  constructor(
+    private readonly token: string,
+    private readonly webhookSecret: string,
+    private readonly fetcher: typeof fetch = fetch,
+  ) {
+    if (!token || !webhookSecret) throw new Error("Apify token and webhook secret are required");
   }
-  private async api(path: string, init?: RequestInit): Promise<unknown> {
-    const response = await this.fetcher(`https://api.apify.com/v2/${path}`, {
-      ...init,
-      headers: {
-        authorization: `Bearer ${this.token}`,
-        "content-type": "application/json",
-        ...init?.headers,
-      },
+
+  async runActor(req: Parameters<ApifyPort["runActor"]>[0]): ReturnType<ApifyPort["runActor"]> {
+    if (req.actorId !== "apify~website-content-crawler") throw new Error("Unsupported crawl actor");
+    if (new URL(req.webhookUrl).protocol !== "https:") throw new Error("Apify webhook URL must use HTTPS");
+    const input = PublicCrawlInput.parse(req.input);
+    if (input.startUrls[0]!.url !== `https://${normalizeDomain(input.startUrls[0]!.url)}/`)
+      throw new Error("Crawl must start at a public HTTPS domain root");
+    const webhook = {
+      eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED", "ACTOR.RUN.TIMED_OUT", "ACTOR.RUN.ABORTED"],
+      requestUrl: req.webhookUrl,
+      headersTemplate: JSON.stringify({ "x-outrun-apify-secret": this.webhookSecret }),
+      idempotencyKey: req.idempotencyKey,
+    };
+    const params = new URLSearchParams({
+      maxItems: String(AUDIT_MAX_PAGES),
+      webhooks: Buffer.from(JSON.stringify([webhook])).toString("base64"),
     });
-    if (!response.ok) throw new Error(`Apify HTTP ${response.status}`);
-    return response.json();
-  }
-  async runActor(domainInput: string): Promise<{ runId: string }> {
-    const domain = normalizeDomain(domainInput);
-    const result = (await this.api("acts/apify~website-content-crawler/runs?maxItems=50", {
+    const response = await this.fetcher(`${API}/actors/${req.actorId}/runs?${params}`, {
       method: "POST",
-      body: JSON.stringify({
-        startUrls: [{ url: `https://${domain}/` }],
-        maxCrawlPages: AUDIT_MAX_PAGES,
-        maxCrawlDepth: 3,
-        useSitemaps: false,
-      }),
-    })) as { data?: { id?: string } };
-    if (!result.data?.id) throw new Error("Apify run ID missing");
-    return { runId: result.data.id };
+      headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Apify run HTTP ${response.status}`);
+    const body = (await response.json()) as { data?: { id?: unknown; defaultDatasetId?: unknown } };
+    const runId = body.data?.id;
+    const datasetId = body.data?.defaultDatasetId;
+    if (typeof runId !== "string" || typeof datasetId !== "string")
+      throw new Error("Apify run response missing identifiers");
+    return { runId, datasetId };
   }
-  async getDataset(runId: string): Promise<CrawlPage[]> {
-    if (!/^[A-Za-z0-9]+$/.test(runId)) throw new Error("Invalid run ID");
-    const result = await this.api(`actor-runs/${runId}/dataset/items?limit=${AUDIT_MAX_PAGES}`);
-    if (!Array.isArray(result)) throw new Error("Invalid dataset");
-    return result
-      .slice(0, AUDIT_MAX_PAGES)
-      .filter((item) => item && typeof item.url === "string")
-      .map((item) => ({ url: item.url, title: item.title, text: item.text, markdown: item.markdown }));
+
+  async getDataset(
+    datasetId: string,
+    opts: { offset: number; limit: number },
+  ): ReturnType<ApifyPort["getDataset"]> {
+    if (!/^[A-Za-z0-9]+$/.test(datasetId)) throw new Error("Invalid dataset ID");
+    if (!Number.isInteger(opts.offset) || opts.offset < 0 || !Number.isInteger(opts.limit) || opts.limit < 1)
+      throw new Error("Invalid dataset page");
+    const limit = Math.min(opts.limit, AUDIT_MAX_PAGES);
+    const params = new URLSearchParams({ offset: String(opts.offset), limit: String(limit), format: "json" });
+    const response = await this.fetcher(`${API}/datasets/${datasetId}/items?${params}`, {
+      headers: { authorization: `Bearer ${this.token}`, accept: "application/json" },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Apify dataset HTTP ${response.status}`);
+    const body: unknown = await response.json();
+    if (!Array.isArray(body)) throw new Error("Invalid Apify dataset");
+    const items = body.slice(0, limit).flatMap((value): { url: string; title: string; text: string }[] => {
+      if (!value || typeof value !== "object") return [];
+      const page = value as Record<string, unknown>;
+      if (typeof page.url !== "string") return [];
+      return [
+        {
+          url: page.url,
+          title: typeof page.title === "string" ? page.title.slice(0, 500) : "",
+          text: (typeof page.text === "string"
+            ? page.text
+            : typeof page.markdown === "string"
+              ? page.markdown
+              : ""
+          ).slice(0, 20_000),
+        },
+      ];
+    });
+    const headerTotal = Number(response.headers.get("x-apify-pagination-total"));
+    const total =
+      Number.isInteger(headerTotal) && headerTotal >= 0 ? headerTotal : opts.offset + items.length;
+    return { items, total };
   }
 }
+
 export function verifyApifyWebhookHeader(header: string | undefined, secret: string): boolean {
   if (!header || !secret) return false;
   const received = Buffer.from(header);

@@ -33,7 +33,7 @@ describe("contracts round-trip", () => {
       traceId: "t1",
     };
     expect(roundTrip(JobEnvelope, env)).toEqual(env);
-    expect(JOB_TYPES).toHaveLength(13);
+    expect(JOB_TYPES).toHaveLength(14);
   });
 
   it("event", () => {

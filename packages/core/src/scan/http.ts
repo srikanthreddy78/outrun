@@ -45,10 +45,17 @@ export async function scoreApi(
       body: JSON.stringify(result),
     };
   } catch (error) {
-    if (error instanceof RateLimitError)
+    // Next can load the service and route through separate module instances.
+    if (
+      error instanceof RateLimitError ||
+      (typeof error === "object" && error !== null && "code" in error && error.code === "rate_limited")
+    )
       return {
         status: 429,
-        headers: { "content-type": "application/json", "retry-after": String(error.retryAfter) },
+        headers: {
+          "content-type": "application/json",
+          "retry-after": String(error instanceof RateLimitError ? error.retryAfter : 3600),
+        },
         body: JSON.stringify({ error: "rate_limited" }),
       };
     return {

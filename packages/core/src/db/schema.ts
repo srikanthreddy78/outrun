@@ -1,5 +1,5 @@
 /**
- * The ten tables. Postgres is the source of truth; HubSpot only mirrors it.
+ * Postgres is the source of truth; HubSpot only mirrors it.
  * Ids are UUIDv7 minted in code. Money in our ledger is numeric USD.
  */
 import { sql } from "drizzle-orm";
@@ -208,6 +208,23 @@ export const reports = pgTable(
   (t) => [uniqueIndex("reports_token_uq").on(t.accessToken), uniqueIndex("reports_order_uq").on(t.orderId)],
 );
 
+/** One public Apify crawl per paid order. A claimed row prevents duplicate run starts. */
+export const auditCrawls = pgTable(
+  "audit_crawls",
+  {
+    orderId: uuid("order_id")
+      .primaryKey()
+      .references(() => orders.id),
+    runId: text("run_id").unique(),
+    datasetId: text("dataset_id"),
+    costUsd: numeric("cost_usd", { precision: 12, scale: 6 }),
+    status: text("status").notNull().default("starting"),
+    startedAt: createdAt(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("audit_crawls_status_idx").on(t.status)],
+);
+
 export const agentSessions = pgTable(
   "agent_sessions",
   {
@@ -274,7 +291,7 @@ export const suppressions = pgTable(
   (t) => [uniqueIndex("suppressions_value_uq").on(t.value)],
 );
 
-/** The ten tables, for tests and tooling. */
+/** Application tables, for tests and tooling. */
 export const TABLES = [
   "companies",
   "contacts",
@@ -283,6 +300,7 @@ export const TABLES = [
   "messages",
   "orders",
   "reports",
+  "audit_crawls",
   "agent_sessions",
   "events",
   "suppressions",

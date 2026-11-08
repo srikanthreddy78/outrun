@@ -228,7 +228,7 @@ export async function startAudit(
     {
       agent: "auditor",
       entity: { type: "order", id: order.id },
-      message: `Audit order ${order.id} (${PRODUCTS[order.product].name}, cycle ${p.cycle}) for the domain ${order.domain}. Start the crawl, then save the audit.`,
+      message: `Audit order ${order.id} (${PRODUCTS[order.product].name}, cycle ${p.cycle}) for the domain ${order.domain}. Begin with the saved public scan, then start the crawl and save the audit.`,
       idempotencyKey: `audit:${order.id}:${p.cycle}`,
     },
   );

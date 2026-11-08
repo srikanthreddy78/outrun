@@ -26,7 +26,8 @@
     "naive:sync": "tsx --env-file-if-exists=.env scripts/naive-sync.ts",
     "db:seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
     "smoke": "tsx --env-file-if-exists=.env scripts/smoke.ts",
-    "stripe:sync": "tsx --env-file-if-exists=.env scripts/stripe-sync.ts"
+    "stripe:sync": "tsx --env-file-if-exists=.env scripts/stripe-sync.ts",
+    "mobile:check": "tsx --env-file-if-exists=.env scripts/mobile-onboarding.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
