@@ -13,7 +13,7 @@
  * In production it also fails on fakes in use or a missing webhook secret.
  */
 import { CREW_TOOLS } from "@outrun/core/contracts";
-import { AGENTS } from "@outrun/core/contracts";
+import { OUTRUN_AGENTS } from "@outrun/core/contracts";
 import { toolsForAgent } from "@outrun/core/contracts";
 import { crewToken } from "@outrun/core/crew/tokens";
 
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
   await check("crew MCP: no token 401", async () => expectStatus(await mcp("orchestrator", list), 401));
 
   if (secret) {
-    for (const agent of AGENTS) {
+    for (const agent of OUTRUN_AGENTS) {
       await check(`crew MCP: ${agent} sees only its tools`, async () => {
         const r = await rpcResult(await mcp(agent, list, crewToken(secret, agent)));
         const got = new Set((r.tools as { name: string }[]).map((t) => t.name));

@@ -91,6 +91,11 @@ export const clients = pgTable(
       .notNull()
       .default("none"),
     dailySendCap: integer("daily_send_cap").notNull().default(30),
+    /** The roles on this client's crew: the six core roles plus any the CEO staffed. Never shrinks. */
+    crewRoles: text("crew_roles")
+      .array()
+      .notNull()
+      .default(sql`'{orchestrator,prospector,researcher,sdr,closer,auditor}'::text[]`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

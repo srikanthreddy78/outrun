@@ -8,7 +8,9 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  AGENTS,
+  CORE_CLIENT_ROLES,
+  OPTIONAL_CLIENT_ROLES,
+  OUTRUN_AGENTS,
   BUILTIN_TOOLS,
   CLIENT_ROLES,
   CREW_TOOLS,
@@ -48,10 +50,10 @@ type Project = {
   }[];
 };
 
-/** Two clients besides Outrun, as pnpm clients:export would write them. */
+/** Two clients besides Outrun, as pnpm clients:export would write them; the CEO staffed Blue Sky an account manager. */
 const CLIENTS = [
-  { slug: "acme", name: "Acme Analytics" },
-  { slug: "blue-sky", name: "Blue Sky Labs" },
+  { slug: "acme", name: "Acme Analytics", roles: [...CORE_CLIENT_ROLES] },
+  { slug: "blue-sky", name: "Blue Sky Labs", roles: [...CORE_CLIENT_ROLES, "account_manager"] },
 ];
 
 let project: Project;
@@ -70,12 +72,17 @@ const pathOf = (a: Agent) => {
 };
 
 describe("naive.config.ts", () => {
-  it("declares the CEO, Outrun's six, and six per client", () => {
+  it("declares the CEO, Outrun's six, and each client's staffed roles", () => {
     const names = project.agents.map((a) => a.name).sort();
-    expect(names).toHaveLength(AGENTS.length + 6 * CLIENTS.length);
-    const want = [...AGENTS, ...CLIENTS.flatMap((c) => CLIENT_ROLES.map((r) => `${c.slug}-${r}`))].sort();
+    expect(names).toHaveLength(OUTRUN_AGENTS.length + 6 + 7);
+    const want = [
+      ...OUTRUN_AGENTS,
+      ...CLIENTS.flatMap((c) => c.roles.map((r) => `${c.slug}-${r.replace(/_/g, "-")}`)),
+    ].sort();
     expect(names).toEqual(want);
     expect(names).not.toContain("acme-ceo");
+    expect(names).not.toContain("acme-account-manager");
+    expect(agent("blue-sky-account-manager").tools.default_config.permission).toBe("deny");
   });
 
   it("tells each client's agents who they work for", () => {
@@ -102,8 +109,9 @@ describe("naive.config.ts", () => {
     const daily = Object.values(BUDGETS).reduce((s, b) => s + b.cap_micro_usd, 0) / 1e6;
     expect(daily).toBe(38);
     expect(agent("acme-sdr").budget).toEqual(CLIENT_BUDGETS.sdr);
-    const perClient = Object.values(CLIENT_BUDGETS).reduce((s, b) => s + b.cap_micro_usd, 0) / 1e6;
+    const perClient = CORE_CLIENT_ROLES.reduce((s, r) => s + CLIENT_BUDGETS[r].cap_micro_usd, 0) / 1e6;
     expect(perClient).toBe(13.5);
+    for (const r of OPTIONAL_CLIENT_ROLES) expect(CLIENT_BUDGETS[r].cap_micro_usd / 1e6).toBe(2);
   });
 
   it("denies by default", () => {
@@ -186,10 +194,12 @@ describe("naive.config.ts", () => {
   it("gives Outrun's crew and the CEO their own skills, and every client crew the agency set", () => {
     for (const a of project.agents) {
       const m = member(a);
-      expect(a.skills).toEqual([m.clientSlug === "outrun" ? m.agent : `agency-${m.agent}`]);
+      expect(a.skills).toEqual([
+        m.clientSlug === "outrun" ? m.agent : `agency-${m.agent.replace(/_/g, "-")}`,
+      ]);
     }
     expect(project.skills.map((s) => s.slug).sort()).toEqual(
-      [...AGENTS, ...CLIENT_ROLES.map((r) => `agency-${r}`)].sort(),
+      [...OUTRUN_AGENTS, ...CLIENT_ROLES.map((r) => `agency-${r.replace(/_/g, "-")}`)].sort(),
     );
   });
 

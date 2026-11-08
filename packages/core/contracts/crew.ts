@@ -20,10 +20,31 @@ import {
  * The six roles on every client's crew. The agency runs one crew per client: Outrun's own
  * keeps the bare names (`sdr`), any other client's is `<slug>-<role>` on Naive.
  */
-export const CLIENT_ROLES = ["orchestrator", "prospector", "researcher", "sdr", "closer", "auditor"] as const;
+/** The six roles every client's crew starts with. */
+export const CORE_CLIENT_ROLES = [
+  "orchestrator",
+  "prospector",
+  "researcher",
+  "sdr",
+  "closer",
+  "auditor",
+] as const;
+/** Roles the CEO adds to a client's crew when its needs call for them (outrun.staff_client). */
+export const OPTIONAL_CLIENT_ROLES = ["account_manager", "signal_scout", "experimenter"] as const;
+export type OptionalClientRole = (typeof OPTIONAL_CLIENT_ROLES)[number];
+export const CLIENT_ROLES = [...CORE_CLIENT_ROLES, ...OPTIONAL_CLIENT_ROLES] as const;
 export type ClientRole = (typeof CLIENT_ROLES)[number];
+export const ClientRoleName = z.enum(CLIENT_ROLES);
+export const OptionalClientRoleName = z.enum(OPTIONAL_CLIENT_ROLES);
+/** A client's roles in CLIENT_ROLES order, always including the six core roles. */
+export function staffedRoles(roles?: readonly string[] | null): ClientRole[] {
+  const want = new Set<string>([...CORE_CLIENT_ROLES, ...(roles ?? [])]);
+  return CLIENT_ROLES.filter((r) => want.has(r));
+}
 /** Every agent: the client roles, plus the agency's one CEO, which serves no single client. */
 export const AGENTS = [...CLIENT_ROLES, "ceo"] as const;
+/** Outrun's own crew: the six core roles plus the agency's CEO. */
+export const OUTRUN_AGENTS = [...CORE_CLIENT_ROLES, "ceo"] as const;
 export const AgentName = z.enum(AGENTS);
 export type AgentName = z.infer<typeof AgentName>;
 
@@ -541,5 +562,8 @@ export const BUILTIN_TOOLS: Record<AgentName, readonly string[]> = {
   sdr: ["read_skill"],
   closer: ["read_skill"],
   auditor: ["read_skill", "web_search", "web_fetch"],
+  account_manager: ["read_skill"],
+  signal_scout: ["read_skill", "web_search", "web_fetch"],
+  experimenter: ["read_skill"],
   ceo: ["read_skill"],
 };

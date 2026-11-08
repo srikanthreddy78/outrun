@@ -26,6 +26,6 @@ if (!dryRun && process.env.OUTRUN_APPLY !== "yes") {
 
 const r = spawnSync("pnpm", ["exec", "naive", "up", ...args], {
   stdio: "inherit",
-  env: { ...process.env, ...crewTokenEnvAll(secret, ["outrun", ...loadClientCrews().map((c) => c.slug)]) },
+  env: { ...process.env, ...crewTokenEnvAll(secret, ["outrun", ...loadClientCrews()]) },
 });
 process.exit(r.status ?? 1);

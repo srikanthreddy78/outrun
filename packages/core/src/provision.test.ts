@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { SCHEDULE, agentConfig, clientCrew } from "../../../naive/crew";
-import { CLIENT_ROLES } from "../contracts";
+import { CORE_CLIENT_ROLES as CLIENT_ROLES } from "../contracts";
 import { addClient } from "./clients";
 import { crewToken } from "./crew/tokens";
 import { clients, events } from "./db/schema";
@@ -98,6 +98,22 @@ describe("provision_client_crew", () => {
     expect({ a: naive.agents.length, c: naive.credentials.length, d: naive.deployments.length }).toEqual(
       before,
     );
+
+    // The CEO staffed two optional roles: the next run makes exactly those, and nothing else changes.
+    await t.db
+      .update(clients)
+      .set({ crewRoles: [...CLIENT_ROLES, "signal_scout", "account_manager"] })
+      .where(eq(clients.id, c.id));
+    const staffed = await provisionClientCrew(deps(naive), c.id);
+    expect(staffed).toMatchObject({
+      status: "provisioned",
+      created: ["gamma-grid-account-manager", "gamma-grid-signal-scout"],
+      credentials: 2,
+    });
+    expect(naive.agents).toHaveLength(8);
+    const scout = naive.credentials.find((x) => x.key === "crew-gamma-grid-signal-scout")!;
+    expect(scout).toMatchObject({ mcp_server_url: `${APP}/api/crew/mcp/gamma-grid/signal_scout` });
+    expect(scout.value).toBe(crewToken(SECRET, "signal_scout", "gamma-grid"));
   });
 
   it("deploys the orchestrator's schedule once, when the crew has one", async () => {
