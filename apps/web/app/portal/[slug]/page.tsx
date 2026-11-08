@@ -9,6 +9,7 @@ import { portalClients } from "@outrun/core/portal";
 import { portalAskAction, portalDecideAction, signOutAction } from "../../../lib/portal";
 import { portalEmail } from "../../../lib/portal-session";
 import { getRuntime } from "../../../lib/runtime";
+import { Masthead } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -79,14 +80,15 @@ export default async function ClientPortal({
   const questions = await clientQuestions(rt.db.db, c.id, 10);
   const hasAm = staffedRoles(c.crewRoles).includes("account_manager");
   const p = c.profile as Profile;
+  const crew = staffedRoles(c.crewRoles);
+  const prospects = Object.values(counts.stages).reduce((a, n) => a + n, 0);
+  const stages = Object.entries(counts.stages).filter(([, n]) => n > 0);
 
   return (
-    <main style={{ maxWidth: "52rem", margin: "2rem auto", padding: "0 1rem" }}>
-      <div
-        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "1rem 0" }}
-      >
-        <span>
-          {c.name} · signed in as {email}
+    <>
+      <Masthead>
+        <span className="p-mast__email">
+          {email}
           {mine.length > 1 && (
             <>
               {" "}
@@ -95,184 +97,255 @@ export default async function ClientPortal({
           )}
         </span>
         <form action={signOutAction}>
-          <button type="submit">Sign out</button>
+          <button type="submit" className="p-btn p-btn--small">
+            Sign out
+          </button>
         </form>
-      </div>
+      </Masthead>
 
-      <h1>Emails waiting for you</h1>
-      <p>
-        Your agents wrote these. Nothing is sent until you approve it; a rejection reason goes back to the
-        agent.
-      </p>
-      {pending.length === 0 ? (
-        <p>Nothing is waiting.</p>
-      ) : (
-        <form action={portalDecideAction}>
-          <input type="hidden" name="slug" value={c.slug} />
-          {pending.map((m) => (
-            <article
-              key={m.id}
-              style={{ border: "1px solid #ccc", borderRadius: 8, padding: "0.75rem", marginBottom: "1rem" }}
-            >
-              <label style={{ display: "flex", gap: "0.5rem", alignItems: "baseline" }}>
-                <input type="checkbox" name="ids" value={m.id} defaultChecked={pending.length === 1} />
-                <strong>{m.subject || "(No subject)"}</strong>
-              </label>
-              <p>
-                To {m.toEmail ?? "—"} · {m.kind} · {m.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+      <main className="p-main">
+        <p className="p-kicker">Client portal · {c.name}</p>
+        <h1 className="p-h1">
+          {c.name}&apos;s growth crew
+          <em>is on it.</em>
+        </h1>
+        <p className="p-lede">
+          {pending.length > 0
+            ? `${pending.length} ${pending.length === 1 ? "email is" : "emails are"} waiting for your approval. Nothing is sent until you approve it.`
+            : "Your agents are researching and drafting. Nothing is sent until you approve it."}
+        </p>
+
+        <div className="p-stats">
+          <div className={pending.length > 0 ? "p-stat p-stat--hot" : "p-stat"}>
+            <b>{pending.length}</b>
+            <span>Waiting for you</span>
+          </div>
+          <div className="p-stat">
+            <b>{prospects}</b>
+            <span>Prospects</span>
+          </div>
+          <div className="p-stat">
+            <b>{recent.length}</b>
+            <span>Recently sent</span>
+          </div>
+          <div className="p-stat">
+            <b>{counts.capsLeft.send}</b>
+            <span>Sends left today</span>
+          </div>
+        </div>
+
+        <section className="p-section">
+          <p className="p-kicker">Your crew</p>
+          <h2 className="p-h2">{crew.length} agents working for you</h2>
+          <ul className="p-crew">
+            {crew.map((r) => (
+              <li key={r}>{r.replace(/_/g, " ")}</li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="p-section">
+          <p className="p-kicker">Approvals</p>
+          <h2 className="p-h2">Emails waiting for you</h2>
+          <p className="p-muted">
+            Your agents wrote these. Nothing is sent until you approve it; a rejection reason goes back to the
+            agent.
+          </p>
+          {pending.length === 0 ? (
+            <p className="p-note">Nothing is waiting right now.</p>
+          ) : (
+            <form action={portalDecideAction}>
+              <input type="hidden" name="slug" value={c.slug} />
+              {pending.map((m) => (
+                <article key={m.id} className="p-card">
+                  <label className="p-card__head">
+                    <input type="checkbox" name="ids" value={m.id} defaultChecked={pending.length === 1} />
+                    <span className="p-card__subject">{m.subject || "(No subject)"}</span>
+                  </label>
+                  <p className="p-card__meta">
+                    To {m.toEmail ?? "—"} · {m.kind} ·{" "}
+                    {m.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                  </p>
+                  <pre>{m.body}</pre>
+                </article>
+              ))}
+              <div className="p-decide">
+                <label className="p-field">
+                  Reason (optional; sent to the agent on a rejection)
+                  <input type="text" name="reason" maxLength={500} />
+                </label>
+                <div className="p-actions">
+                  <button type="submit" name="decision" value="allow" className="p-btn">
+                    Approve selected <span aria-hidden="true">&rarr;</span>
+                  </button>
+                  <button type="submit" name="decision" value="deny" className="p-btn p-btn--ghost">
+                    Reject selected
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+        </section>
+
+        <section className="p-section">
+          <p className="p-kicker">Weekly report</p>
+          <h2 className="p-h2">How it&apos;s going</h2>
+          {latest ? (
+            <>
+              <p className="p-lede">
+                Week to {latest.report.day}: {latest.report.sent} emails sent · {latest.report.replies}{" "}
+                replies · {latest.report.won} won · {latest.report.approvalsWaiting} waiting for you
               </p>
-              <pre style={{ whiteSpace: "pre-wrap" }}>{m.body}</pre>
-            </article>
-          ))}
-          <label>
-            Reason (optional; sent to the agent on a rejection)
-            <input type="text" name="reason" maxLength={500} style={{ width: "100%" }} />
-          </label>
-          <p style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="submit" name="decision" value="allow">
-              Approve selected
-            </button>
-            <button type="submit" name="decision" value="deny">
-              Reject selected
-            </button>
-          </p>
-        </form>
-      )}
+              {latest.report.goal && (
+                <p className="p-note">
+                  Goal: {latest.report.goal.current} of {latest.report.goal.target}{" "}
+                  {latest.report.goal.metric} by {latest.report.goal.by} ·{" "}
+                  {latest.report.goal.met ? "met" : latest.report.goal.onTrack ? "on track" : "behind"}
+                </p>
+              )}
+              {latest.report.note && <p style={{ whiteSpace: "pre-wrap" }}>{latest.report.note}</p>}
+            </>
+          ) : (
+            <p className="p-muted">Your first report arrives after your crew&apos;s first week.</p>
+          )}
+        </section>
 
-      <h2>Your weekly report</h2>
-      {latest ? (
-        <section>
+        <section className="p-section">
+          <p className="p-kicker">Questions</p>
+          <h2 className="p-h2">Ask your account manager</h2>
+          {asked && ASKED[asked] && <p className="p-note">{ASKED[asked]}</p>}
+          <form action={portalAskAction} className="p-ask">
+            <input type="hidden" name="slug" value={c.slug} />
+            <textarea
+              name="question"
+              required
+              maxLength={CLIENT_QUESTION_MAX_CHARS}
+              rows={3}
+              aria-label="Your question"
+              placeholder="Which companies are you reaching out to this week?"
+            />
+            <button type="submit" className="p-btn">
+              Ask <span aria-hidden="true">&rarr;</span>
+            </button>
+          </form>
+          {!hasAm && <p className="p-muted">Your agency reads these and answers here.</p>}
+          {questions.length > 0 && (
+            <ul className="p-list">
+              {questions.map((q) => (
+                <li key={q.questionId}>
+                  <p>
+                    <span className="p-tag">You asked</span> {q.question}
+                  </p>
+                  <p>
+                    {q.answer ? (
+                      <>
+                        <span className="p-tag">Answer</span> {q.answer.text}
+                      </>
+                    ) : (
+                      <span className="p-muted">Waiting for an answer.</span>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="p-section">
+          <p className="p-kicker">Pipeline</p>
+          <h2 className="p-h2">Who we&apos;re reaching</h2>
           <p>
-            Week to {latest.report.day}: {latest.report.sent} emails sent · {latest.report.replies} replies ·{" "}
-            {latest.report.won} won · {latest.report.approvalsWaiting} waiting for you
+            {stages.map(([st, n]) => `${st} ${n}`).join(" · ") || "No prospects yet."} ·{" "}
+            {counts.candidatesWaiting} companies found and not yet reviewed
           </p>
-          {latest.report.goal && (
-            <p>
-              Goal: {latest.report.goal.current} of {latest.report.goal.target} {latest.report.goal.metric} by{" "}
-              {latest.report.goal.by} ·{" "}
-              {latest.report.goal.met ? "met" : latest.report.goal.onTrack ? "on track" : "behind"}
+          {recent.length > 0 && (
+            <ul className="p-list">
+              {recent.map((m, i) => (
+                <li key={i}>
+                  <span className="p-tag">{m.at.toISOString().slice(0, 10)}</span> {m.subject} → {m.toEmail}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="p-section">
+          <p className="p-kicker">Profile</p>
+          <h2 className="p-h2">What we sell for you</h2>
+          {c.profileConfirmedAt ? (
+            <dl className="p-profile">
+              <dt>What you sell</dt>
+              <dd>{p.summary}</dd>
+              <dt>Who we look for</dt>
+              <dd>
+                {p.icp?.description} ({(p.icp?.buyerRoles ?? []).join(", ")})
+              </dd>
+              <dt>The offer</dt>
+              <dd>
+                {p.offer?.pitch} → {p.offer?.callToActionUrl}
+              </dd>
+              <dt>Prices we may quote</dt>
+              <dd>{(p.offer?.prices ?? []).map((x) => `${x.label}: ${x.amount}`).join(", ") || "none"}</dd>
+              <dt>Signed as</dt>
+              <dd>
+                {p.sender?.name}
+                {p.sender?.title ? `, ${p.sender.title}` : ""} · {p.sender?.postalAddress}
+              </dd>
+            </dl>
+          ) : (
+            <p className="p-note">
+              Your researcher is drafting your profile now. Your agency will confirm it with you.
             </p>
           )}
-          {latest.report.note && <p style={{ whiteSpace: "pre-wrap" }}>{latest.report.note}</p>}
+          <p className="p-muted">To change anything here, reply to your agency.</p>
         </section>
-      ) : (
-        <p>No report yet.</p>
-      )}
 
-      <h2>Ask your account manager</h2>
-      {asked && ASKED[asked] && <p>{ASKED[asked]}</p>}
-      <form action={portalAskAction}>
-        <input type="hidden" name="slug" value={c.slug} />
-        <textarea
-          name="question"
-          required
-          maxLength={CLIENT_QUESTION_MAX_CHARS}
-          rows={3}
-          style={{ width: "100%" }}
-          aria-label="Your question"
-        />
-        <button type="submit">Ask</button>
-      </form>
-      {!hasAm && <p>Your agency reads these and answers here.</p>}
-      {questions.length > 0 && (
-        <ul>
-          {questions.map((q) => (
-            <li key={q.questionId}>
-              <p style={{ whiteSpace: "pre-wrap" }}>
-                <strong>You asked:</strong> {q.question}
-              </p>
-              <p style={{ whiteSpace: "pre-wrap" }}>
-                {q.answer ? (
-                  <>
-                    <strong>Answer:</strong> {q.answer.text}
-                  </>
-                ) : (
-                  "Waiting for an answer."
-                )}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h2>Pipeline</h2>
-      <p>
-        {Object.entries(counts.stages)
-          .filter(([, n]) => n > 0)
-          .map(([s, n]) => `${s} ${n}`)
-          .join(" · ") || "No prospects yet."}{" "}
-        · {counts.candidatesWaiting} companies found and not yet reviewed · {counts.capsLeft.send} sends left
-        today
-      </p>
-      {recent.length > 0 && (
-        <ul>
-          {recent.map((m, i) => (
-            <li key={i}>
-              {m.at.toISOString().slice(0, 10)} · {m.subject} → {m.toEmail}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <h2>Your profile</h2>
-      {c.profileConfirmedAt ? (
-        <dl>
-          <dt>What you sell</dt>
-          <dd>{p.summary}</dd>
-          <dt>Who we look for</dt>
-          <dd>
-            {p.icp?.description} ({(p.icp?.buyerRoles ?? []).join(", ")})
-          </dd>
-          <dt>The offer</dt>
-          <dd>
-            {p.offer?.pitch} → {p.offer?.callToActionUrl}
-          </dd>
-          <dt>Prices we may quote</dt>
-          <dd>{(p.offer?.prices ?? []).map((x) => `${x.label}: ${x.amount}`).join(", ") || "none"}</dd>
-          <dt>Signed as</dt>
-          <dd>
-            {p.sender?.name}
-            {p.sender?.title ? `, ${p.sender.title}` : ""} · {p.sender?.postalAddress}
-          </dd>
-        </dl>
-      ) : (
-        <p>Your profile is being drafted and checked. Your agency will confirm it with you.</p>
-      )}
-      <p>To change anything here, reply to your agency.</p>
-
-      <h2>Email setup</h2>
-      <p>
-        Sending from {c.sendingDomain ?? c.domain}: <strong>{c.dnsStatus}</strong>
-        {c.agentmailInboxId ? ` (inbox ${c.agentmailInboxId})` : ""}.
-      </p>
-      {c.dnsRecords.length > 0 && c.dnsStatus !== "verified" && (
-        <>
-          <p>Add these records at your DNS host. We check again every 15 minutes.</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Name</th>
-                <th>Value</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {c.dnsRecords.map((r) => (
-                <tr key={`${r.type}:${r.name}:${r.value}`}>
-                  <td>{r.type}</td>
-                  <td>{r.name}</td>
-                  <td style={{ wordBreak: "break-all" }}>
-                    {r.priority !== undefined ? `${r.priority} ` : ""}
-                    {r.value}
-                  </td>
-                  <td>{r.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-    </main>
+        <section className="p-section">
+          <p className="p-kicker">Email setup</p>
+          <h2 className="p-h2">Sending domain</h2>
+          <p>
+            Sending from {c.sendingDomain ?? c.domain}{" "}
+            <span className={c.dnsStatus === "verified" ? "p-pill p-pill--ok" : "p-pill p-pill--wait"}>
+              {c.dnsStatus === "none"
+                ? "not set up"
+                : c.dnsStatus === "verified"
+                  ? "verified"
+                  : "waiting for DNS"}
+            </span>
+            {c.agentmailInboxId ? ` · inbox ${c.agentmailInboxId}` : ""}
+          </p>
+          {c.dnsRecords.length > 0 && c.dnsStatus !== "verified" && (
+            <>
+              <p className="p-muted">Add these records at your DNS host. We check again every 15 minutes.</p>
+              <div className="p-table-wrap">
+                <table className="p-table">
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Name</th>
+                      <th>Value</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {c.dnsRecords.map((r) => (
+                      <tr key={`${r.type}:${r.name}:${r.value}`}>
+                        <td>{r.type}</td>
+                        <td>{r.name}</td>
+                        <td style={{ wordBreak: "break-all" }}>
+                          {r.priority !== undefined ? `${r.priority} ` : ""}
+                          {r.value}
+                        </td>
+                        <td>{r.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </section>
+      </main>
+    </>
   );
 }

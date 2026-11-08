@@ -1,4 +1,5 @@
 import { signInAction } from "../../../../lib/portal";
+import { Masthead } from "../../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -9,12 +10,24 @@ export const dynamic = "force-dynamic";
 export default async function PortalAuth({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   return (
-    <main style={{ maxWidth: "32rem", margin: "3rem auto", padding: "0 1rem" }}>
-      <h1>Sign in to the client portal</h1>
-      <form action={signInAction}>
-        <input type="hidden" name="token" value={token} />
-        <button type="submit">Sign in</button>
-      </form>
-    </main>
+    <>
+      <Masthead />
+      <main className="p-main p-main--narrow">
+        <p className="p-kicker">Client portal</p>
+        <h1 className="p-h1">
+          Meet your
+          <em>growth crew.</em>
+        </h1>
+        <p className="p-lede">
+          Sign in to see the agents working for you, and approve every email before it goes out.
+        </p>
+        <form action={signInAction} style={{ marginTop: "2rem" }}>
+          <input type="hidden" name="token" value={token} />
+          <button type="submit" className="p-btn">
+            Sign in <span aria-hidden="true">&rarr;</span>
+          </button>
+        </form>
+      </main>
+    </>
   );
 }
