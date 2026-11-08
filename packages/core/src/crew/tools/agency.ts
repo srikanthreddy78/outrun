@@ -19,6 +19,17 @@ import { agentSessions, clients, events, messages, prospects } from "../../db/sc
 import { AppError } from "../../errors";
 import { saveDraftProfile } from "../../clients";
 import {
+  listProblems,
+  makePrediction,
+  pauseClient,
+  readPlaybook,
+  recordLesson,
+  resumeClient,
+  saveBoardMemo,
+  trackRecord,
+} from "../../brain";
+import { replayDeadJob } from "../../replay";
+import {
   clientInsights,
   goalProgress,
   insightsSince,
@@ -318,6 +329,79 @@ export const setClientFocusTool = defineTool({
   },
 });
 
+/** record_lesson: a lesson with numbers, for one client or the whole agency. */
+export const recordLessonTool = defineTool({
+  name: "record_lesson",
+  handler: async (input, ctx) => recordLesson({ db: ctx.db, emit: ctx.emit }, input, `naive:${ctx.agent}`),
+});
+
+/** read_playbook: this client's lessons, the agency's, similar clients' and experiments. */
+export const readPlaybookTool = defineTool({
+  name: "read_playbook",
+  handler: async ({ clientId }, ctx) => readPlaybook(ctx.db, clientId),
+});
+
+/** make_prediction: what a decision should do, scored by score_predictions when due. */
+export const makePredictionTool = defineTool({
+  name: "make_prediction",
+  handler: async (input, ctx) =>
+    makePrediction({ db: ctx.db, emit: ctx.emit, now: ctx.now }, input, `naive:${ctx.agent}`),
+});
+
+export const ceoTrackRecordTool = defineTool({
+  name: "ceo_track_record",
+  handler: async (_input, ctx) => trackRecord(ctx.db),
+});
+
+/** list_problems: brain.listProblems plus the clients attentionReasons flags. */
+export const listProblemsTool = defineTool({
+  name: "list_problems",
+  handler: async (_input, ctx) => {
+    const now = ctx.now();
+    const since = new Date(now.getTime() - 7 * 24 * HOUR);
+    const problems = await listProblems({ db: ctx.db, now: ctx.now });
+    const attention: { clientId: string; slug: string; reason: string }[] = [];
+    for (const c of await ctx.db.select().from(clients).orderBy(clients.createdAt)) {
+      const n = await clientNumbers(ctx.db, c.id, since, now);
+      for (const reason of attentionReasons(c, n)) attention.push({ clientId: c.id, slug: c.slug, reason });
+    }
+    return { ...problems, attention };
+  },
+});
+
+/** replay_job: the dashboard's replay, for the CEO. */
+export const replayJobTool = defineTool({
+  name: "replay_job",
+  handler: async ({ jobId }, ctx) =>
+    replayDeadJob(
+      { db: ctx.db, emit: ctx.emit, enqueue: (job) => ctx.enqueue(job) },
+      { jobId },
+      `naive:${ctx.agent}`,
+    ),
+});
+
+export const pauseClientTool = defineTool({
+  name: "pause_client",
+  handler: async (input, ctx) => pauseClient({ db: ctx.db, emit: ctx.emit }, input, `naive:${ctx.agent}`),
+});
+
+/** resume_client: only a pause the CEO made itself. */
+export const resumeClientTool = defineTool({
+  name: "resume_client",
+  handler: async (input, ctx) => resumeClient({ db: ctx.db, emit: ctx.emit }, input, `naive:${ctx.agent}`),
+});
+
+/** save_board_memo: once per ISO week; send_ceo_brief emails it to the owner. */
+export const saveBoardMemoTool = defineTool({
+  name: "save_board_memo",
+  handler: async (input, ctx) =>
+    saveBoardMemo(
+      { db: ctx.db, emit: ctx.emit, now: ctx.now, enqueue: (job) => ctx.enqueue(job) },
+      input,
+      `naive:${ctx.agent}`,
+    ),
+});
+
 /**
  * staff_client: adds optional roles to a client's crew. Unions into clients.crew_roles in SQL, so
  * it never removes one, and enqueues provision_client_crew keyed on the client and its full role
@@ -422,6 +506,15 @@ export const agencyTools = [
   clientInsightsTool,
   proposeProfileChangeTool,
   setClientFocusTool,
+  recordLessonTool,
+  readPlaybookTool,
+  makePredictionTool,
+  ceoTrackRecordTool,
+  listProblemsTool,
+  replayJobTool,
+  pauseClientTool,
+  resumeClientTool,
+  saveBoardMemoTool,
   staffClientTool,
   clientGoalTool,
   markGoalMetTool,

@@ -33,7 +33,7 @@ describe("contracts round-trip", () => {
       traceId: "t1",
     };
     expect(roundTrip(JobEnvelope, env)).toEqual(env);
-    expect(JOB_TYPES).toHaveLength(19);
+    expect(JOB_TYPES).toHaveLength(20);
   });
 
   it("event", () => {
@@ -100,8 +100,8 @@ describe("contracts round-trip", () => {
 });
 
 describe("crew contract", () => {
-  it("has the 36 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(36);
+  it("has the 45 tools, each with at least one agent", () => {
+    expect(CREW_TOOL_NAMES).toHaveLength(45);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 
@@ -120,14 +120,23 @@ describe("crew contract", () => {
     ]);
     expect(toolsForAgent("ceo").sort()).toEqual([
       "agency_status",
+      "ceo_track_record",
       "client_goal",
       "client_insights",
       "client_report",
       "kick_client",
       "list_clients",
+      "list_problems",
+      "make_prediction",
       "mark_goal_met",
+      "pause_client",
       "ping",
       "propose_profile_change",
+      "read_playbook",
+      "record_lesson",
+      "replay_job",
+      "resume_client",
+      "save_board_memo",
       "save_brief",
       "set_client_focus",
       "staff_client",

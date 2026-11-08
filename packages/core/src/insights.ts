@@ -13,7 +13,7 @@
  * code; nothing here moves money, sets a price or deletes data.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { ClientProfile, ProfileChanges } from "../contracts";
 import { validProfileFor } from "./clients";
 import {
@@ -390,8 +390,10 @@ function tally(rows: Map<string, { contacted: number; replied: number; intereste
  *                "contact +30"
  *   byBuyerRole  the profile's buyer role its contact's title matches; "(other)" otherwise
  */
-export async function clientInsights(db: Db, clientId: string, opts: { since: Date }) {
-  const { since } = opts;
+export async function clientInsights(db: Db, clientId: string, opts: { since: Date; until?: Date }) {
+  const { since, until } = opts;
+  const untilIso = until ? until.toISOString() : "infinity";
+  const inRange = (at: Date) => at >= since && (!until || at <= until);
   const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!c) throw new AppError("not_found", `client ${clientId}`);
   const icp = ClientProfile.safeParse(c.profile).data?.icp ?? null;
@@ -405,6 +407,7 @@ export async function clientInsights(db: Db, clientId: string, opts: { since: Da
         eq(messages.direction, "outbound"),
         eq(messages.status, "sent"),
         gte(messages.sentAt, since),
+        until ? lte(messages.sentAt, until) : undefined,
       ),
     );
   const firsts = await db
@@ -426,17 +429,19 @@ export async function clientInsights(db: Db, clientId: string, opts: { since: Da
         eq(messages.kind, "first"),
         eq(messages.status, "sent"),
         gte(messages.sentAt, since),
+        until ? lte(messages.sentAt, until) : undefined,
       ),
     );
   const contacted = new Map<string, (typeof firsts)[number]>();
   for (const f of firsts) if (f.prospectId) contacted.set(f.prospectId, f);
 
   const inbound = await labelledInbound(db, c.id);
-  const inWindow = inbound.filter((m) => m.at >= since);
+  const inWindow = inbound.filter((m) => inRange(m.at));
   const replied = new Set<string>();
   const interested = new Set<string>();
   for (const m of inbound) {
     if (!m.prospectId || !contacted.has(m.prospectId)) continue;
+    if (until && m.at > until) continue;
     if (isReply(m.label)) replied.add(m.prospectId);
     if (isInterest(m.label)) interested.add(m.prospectId);
   }
@@ -481,10 +486,10 @@ export async function clientInsights(db: Db, clientId: string, opts: { since: Da
       and(
         eq(prospects.clientId, c.id),
         // Wrapped whole: and() doesn't parenthesise raw sql, and a bare `or` would escape the client.
-        sql`((${prospects.stage} = 'won' and ${prospects.updatedAt} >= ${since.toISOString()})
+        sql`((${prospects.stage} = 'won' and ${prospects.updatedAt} >= ${since.toISOString()} and ${prospects.updatedAt} <= ${untilIso}::timestamptz)
           or exists (select 1 from events e where e.type = 'prospect.outcome' and e.entity_type = 'prospect'
             and e.entity_id = ${prospects.id}::text
-            and e.ts >= ${since.toISOString()} and (e.payload->>'outcome' = 'won' or e.payload->>'stage' = 'won')))`,
+            and e.ts >= ${since.toISOString()} and e.ts <= ${untilIso}::timestamptz and (e.payload->>'outcome' = 'won' or e.payload->>'stage' = 'won')))`,
       ),
     );
   const approvals = await approvalDecisions(db, c.id, since);

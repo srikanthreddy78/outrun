@@ -103,6 +103,7 @@ export const CRON = {
   refresh_sources: "0 6 * * *",
   growth_rescan: "30 6 * * *",
   check_stuck: "*/5 * * * *",
+  score_predictions: "15 7 * * *",
 } as const;
 
 /** Alerts (SR-10) */
@@ -145,6 +146,15 @@ export const PROPOSAL_COOLDOWN_DAYS = 7;
 /** Rejection reasons and replied-to subject lines kept in client_insights and get_brief's lessons. */
 export const LESSONS_KEPT = 5;
 
+/** The CEO's brain (brain.ts): playbook sizes, replay and stuck-send limits. */
+export const PLAYBOOK_OWN_KEPT = 20;
+export const PLAYBOOK_AGENCY_KEPT = 20;
+export const PLAYBOOK_SIMILAR_CLIENTS = 3;
+export const PLAYBOOK_SIMILAR_KEPT = 5;
+/** replay_job: replays per dead job, ever. */
+export const REPLAY_MAX = 3;
+/** list_problems: a message left `sending` this long is stuck. */
+export const STUCK_SENDING_MINUTES = 15;
 /** The account manager: client questions per client per day from the portal, and their length. */
 export const CLIENT_QUESTIONS_PER_DAY = 5;
 export const CLIENT_QUESTION_MAX_CHARS = 1000;
