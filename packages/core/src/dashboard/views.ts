@@ -30,6 +30,26 @@ export type DashboardSummary = {
   costsUsd: number;
   costPerDeliveredAuditUsd: number | null;
 };
+export function summarizeStoredTotals(input: {
+  candidates: number;
+  scanned: number;
+  paidOrders: number;
+  deliveredAudits: number;
+  revenueUsd: number;
+  eventCostUsd: number;
+  naiveCostUsd: number;
+}): DashboardSummary {
+  const costsUsd = input.eventCostUsd + input.naiveCostUsd;
+  return {
+    candidates: input.candidates,
+    scanned: input.scanned,
+    paidOrders: input.paidOrders,
+    deliveredAudits: input.deliveredAudits,
+    revenueUsd: input.revenueUsd,
+    costsUsd,
+    costPerDeliveredAuditUsd: input.deliveredAudits ? costsUsd / input.deliveredAudits : null,
+  };
+}
 export function isAllowedTeamAccount(email: string | null | undefined, allowlist: string): boolean {
   if (!email) return false;
   return allowlist

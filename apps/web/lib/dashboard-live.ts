@@ -1,5 +1,15 @@
-import { agentSessions, desc, eq, events, messages, orders, sql } from "@outrun/core/db";
-import { summarizeLedger } from "@outrun/core/dashboard/views";
+import {
+  agentSessions,
+  desc,
+  eq,
+  events,
+  messages,
+  orders,
+  prospects,
+  scans,
+  sql,
+} from "@outrun/core/db/query";
+import { summarizeStoredTotals } from "@outrun/core/dashboard/views";
 import { checkHealth } from "@outrun/core/health";
 import { BUDGETS } from "../../../naive/crew";
 import { getRuntime } from "./runtime";
@@ -7,17 +17,33 @@ import { getRuntime } from "./runtime";
 export async function loadDashboardSnapshot() {
   const rt = await getRuntime();
   const db = rt.db.db;
-  const [ledgerRows, sessionRows, orderRows, approvals, naiveSpend, health] = await Promise.all([
-    db.select().from(events).orderBy(desc(events.ts)),
-    db.select().from(agentSessions).orderBy(desc(agentSessions.createdAt)).limit(50),
-    db.select().from(orders).orderBy(desc(orders.createdAt)).limit(50),
-    db
-      .select({ n: sql<number>`count(*)::int` })
-      .from(messages)
-      .where(eq(messages.status, "awaiting_approval")),
-    db.select({ usd: sql<string>`coalesce(sum(${agentSessions.spendUsd}), 0)::text` }).from(agentSessions),
-    checkHealth({ db, demo: rt.config.settings.demo, fakes: rt.fakes }),
-  ]);
+  const [ledgerRows, sessionRows, orderRows, approvals, naiveSpend, eventCosts, funnel, health] =
+    await Promise.all([
+      db.select().from(events).orderBy(desc(events.ts)).limit(100),
+      db.select().from(agentSessions).orderBy(desc(agentSessions.createdAt)).limit(50),
+      db.select().from(orders).orderBy(desc(orders.createdAt)).limit(50),
+      db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(eq(messages.status, "awaiting_approval")),
+      db.select({ usd: sql<string>`coalesce(sum(${agentSessions.spendUsd}), 0)::text` }).from(agentSessions),
+      db.select({ usd: sql<string>`coalesce(sum(${events.costUsd}), 0)::text` }).from(events),
+      db.execute<{
+        candidates: number;
+        scanned: number;
+        paid_orders: number;
+        delivered_audits: number;
+        revenue_usd: string;
+      }>(sql`
+      select
+        (select count(*)::int from ${prospects}) as candidates,
+        (select count(distinct domain)::int from ${scans}) as scanned,
+        (select count(*)::int from ${orders} where state in ('paid', 'auditing', 'delivered')) as paid_orders,
+        (select count(*)::int from ${orders} where state = 'delivered') as delivered_audits,
+        (select coalesce(sum(amount_usd), 0)::text from ${orders} where state in ('paid', 'auditing', 'delivered')) as revenue_usd
+    `),
+      checkHealth({ db, demo: rt.config.settings.demo, fakes: rt.fakes }),
+    ]);
   const ledgerEvents = ledgerRows.map((row) => ({
     id: row.id,
     at: row.ts.toISOString(),
@@ -38,11 +64,20 @@ export async function loadDashboardSnapshot() {
   }
   const naiveCostUsd = Number(naiveSpend[0]?.usd ?? 0);
   // Session spend is a current snapshot; session ledger events intentionally carry zero cost.
-  const summary = summarizeLedger(ledgerEvents, naiveCostUsd);
+  const totals = funnel.rows[0];
+  const summary = summarizeStoredTotals({
+    candidates: totals?.candidates ?? 0,
+    scanned: totals?.scanned ?? 0,
+    paidOrders: totals?.paid_orders ?? 0,
+    deliveredAudits: totals?.delivered_audits ?? 0,
+    revenueUsd: Number(totals?.revenue_usd ?? 0),
+    eventCostUsd: Number(eventCosts[0]?.usd ?? 0),
+    naiveCostUsd,
+  });
   return {
     summary,
     naiveCostUsd,
-    events: ledgerEvents.slice(0, 100),
+    events: ledgerEvents,
     sessions: sessionRows.map((row) => ({
       ...row,
       spendUsd: Number(row.spendUsd),
