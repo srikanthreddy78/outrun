@@ -17,7 +17,7 @@ import { crewToken } from "@outrun/core/crew/tokens";
 const base = (process.argv[2] ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(base);
 const secret = process.env.CREW_TOKEN_SECRET;
-const IMPLEMENTED = new Set(["ping", "pipeline_status"]);
+const IMPLEMENTED = new Set(["ping", "pipeline_status", "plan_day"]);
 
 type Result = { name: string; ok: boolean; detail?: string };
 const results: Result[] = [];
