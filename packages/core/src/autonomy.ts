@@ -3,7 +3,7 @@
  * ledger alone. Who acted (agent, system, human), what got delivered, the decisions agents made
  * and where a human stepped in. `redact` makes it safe for the public /ops page.
  */
-import { and, eq, gt, gte, inArray, lte, or } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, or } from "drizzle-orm";
 import { OUTRUN_CLIENT_ID } from "./constants";
 import type { Db } from "./db/client";
 import { agentSessions, clients, companies, events, messages, prospects } from "./db/schema";
@@ -156,6 +156,8 @@ export async function autonomyReport(
         or(inArray(events.type, [...COUNTED_TYPES, ...EXTRA_TYPES]), gt(events.costUsd, "0")),
       ),
     )
+    // Past the limit, keep the newest rather than an arbitrary slice.
+    .orderBy(desc(events.ts))
     .limit(ROW_LIMIT);
 
   // Resolve every event to its client, and prospects to their domain and stage.
@@ -193,7 +195,12 @@ export async function autonomyReport(
         .where(inArray(prospects.id, prospectIds))
     : [];
   const clientRows = await db
-    .select({ id: clients.id, name: clients.name, domain: clients.domain })
+    .select({
+      id: clients.id,
+      name: clients.name,
+      domain: clients.domain,
+      confirmed: clients.profileConfirmedAt,
+    })
     .from(clients);
 
   const msgById = new Map(msgRows.map((m) => [m.id, m]));
@@ -280,7 +287,10 @@ export async function autonomyReport(
   };
   const clientName = (r: Row) => {
     const id = clientOf(r) ?? (entityOf(r.payload)?.type === "client" ? entityOf(r.payload)?.id : null);
-    return id ? (clientById.get(id)?.name ?? null) : null;
+    const c = id ? clientById.get(id) : undefined;
+    if (!c) return null;
+    // Publicly, a client is named only once the owner confirmed it: a signup's name is its own text.
+    return redact && !c.confirmed ? "a new client" : c.name;
   };
   const prospectDomain = (prospectId: string | null | undefined) => {
     const p = prospectId ? prospectById.get(prospectId) : undefined;
@@ -310,7 +320,7 @@ export async function autonomyReport(
         decisions.push(
           item(
             r,
-            `Filed ${domain} as a prospect from ${str(p.source) ?? "research"}${why ? `: ${why}` : ""}`,
+            `Filed ${domain} as a prospect from ${str(p.source) ?? "research"}${why && !redact ? `: ${why}` : ""}`,
           ),
         );
         break;
@@ -323,7 +333,13 @@ export async function autonomyReport(
         break;
       }
       case "draft.rejected": {
-        const reasons = Array.isArray(p.reasons) ? p.reasons.map(String).join("; ") : "";
+        const list = Array.isArray(p.reasons) ? p.reasons.map(String) : [];
+        // Publicly only how many: the reasons quote prices and links from the draft.
+        const reasons = redact
+          ? list.length
+            ? `${list.length} problem${list.length === 1 ? "" : "s"} found`
+            : ""
+          : list.join("; ");
         decisions.push(
           item(
             r,
@@ -333,7 +349,7 @@ export async function autonomyReport(
         break;
       }
       case "ceo.brief":
-        decisions.push(item(r, `CEO brief: ${str(p.summary) ?? ""}`));
+        decisions.push(item(r, redact ? "CEO wrote its daily brief" : `CEO brief: ${str(p.summary) ?? ""}`));
         break;
       case "prospect.outcome": {
         const note = !redact && str(p.note) ? ` (${str(p.note)})` : "";
@@ -357,7 +373,8 @@ export async function autonomyReport(
       case "session.messaged":
         if (isKick(r)) {
           const e = entityOf(p);
-          const name = e?.id ? (clientById.get(e.id)?.name ?? "a client") : "a client";
+          const k = e?.id ? clientById.get(e.id) : undefined;
+          const name = k && (!redact || k.confirmed) ? k.name : "a client";
           decisions.push(
             item(r, `CEO started ${name}'s day: the orchestrator plans and runs it`, "ceo.kick"),
           );
@@ -376,7 +393,7 @@ export async function autonomyReport(
       case "approval.submitted": {
         const m = msgById.get(r.entityId);
         const verb = p.decision === "deny" ? "Rejected" : "Approved";
-        const reason = str(p.reason) ? `: ${str(p.reason)}` : "";
+        const reason = str(p.reason) && !redact ? `: ${str(p.reason)}` : "";
         stepIns.push(item(r, `${verb} an email to ${prospectDomain(m?.prospectId)}${reason}`));
         break;
       }

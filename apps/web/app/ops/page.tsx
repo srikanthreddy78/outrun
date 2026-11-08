@@ -16,14 +16,39 @@ export const metadata = {
 const WEEK = 7 * 24 * 3_600_000;
 const money = (n: number) => `$${n < 10 ? n.toFixed(2) : n.toFixed(0)}`;
 
-/** Public scoreboard, no login: the redacted autonomy report for the last 7 days. */
-export default async function OpsPage() {
+/** One shared read every few seconds, however many viewers or refresh loops hit the page. */
+const CACHE_MS = 10_000;
+let cached: { at: number; value: Promise<OpsData> } | null = null;
+type OpsData = {
+  now: Date;
+  r: Awaited<ReturnType<typeof autonomyReport>>;
+  overview: Awaited<ReturnType<typeof agencyOverview>>;
+};
+async function load(): Promise<OpsData> {
   const rt = await getRuntime();
   const now = new Date();
   const [r, overview] = await Promise.all([
     autonomyReport(rt.db.db, { since: new Date(now.getTime() - WEEK), until: now, redact: true }),
     agencyOverview(rt.db.db, now),
   ]);
+  // Publicly, only clients the owner confirmed: a fresh signup's name and domain are its own text.
+  return { now, r, overview: { ...overview, clients: overview.clients.filter((c) => c.profileConfirmed) } };
+}
+function opsData(): Promise<OpsData> {
+  const t = Date.now();
+  if (!cached || t - cached.at > CACHE_MS) {
+    const value = load();
+    cached = { at: t, value };
+    value.catch(() => {
+      if (cached?.value === value) cached = null;
+    });
+  }
+  return cached.value;
+}
+
+/** Public scoreboard, no login: the redacted autonomy report for the last 7 days. */
+export default async function OpsPage() {
+  const { now, r, overview } = await opsData();
   const { counts, deliveries: d, spend } = r;
   const pct = (n: number) => (counts.total ? (n / counts.total) * 100 : 0);
   const tiles: [string, number][] = [

@@ -32,7 +32,8 @@ export default async function Hire({ searchParams }: { searchParams: Promise<Rec
       )}
       {q.known && (
         <p role="status">
-          That domain is already a client. Approvers can sign in at <a href="/portal">the portal</a>.
+          That domain has already signed up. If your email is at that domain, check your inbox for a sign-in
+          link; otherwise sign in at <a href="/portal">the portal</a>.
         </p>
       )}
       {q.error && <p role="alert">{q.error}</p>}
