@@ -18,6 +18,7 @@ import {
   sendEmailTool,
   type OutreachDeps,
 } from "./outreach";
+import { OUTRUN_CLIENT_ID } from "../../constants";
 
 const APP = "https://outrun.example";
 const DAY = 86_400_000;
@@ -34,6 +35,7 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
   const ctx = (agent: AgentName = "sdr"): ToolContext => ({
     agent,
     requestId: "r",
+    clientId: OUTRUN_CLIENT_ID,
     db: t.db,
     now: () => now,
     enqueue: async (j) => {
@@ -214,9 +216,23 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       status: "queued",
     });
     await call(sendEmailTool(deps), { draftId: d.draftId, hash: d.hash });
-    expect(jobs.map((j) => j.idempotencyKey)).toEqual([`send:${d.draftId}`]);
+    // A repeat enqueues under the same key, which the queue keeps to one job.
+    expect([...new Set(jobs.map((j) => j.idempotencyKey))]).toEqual([`send:${d.draftId}`]);
     // A first email is drafted once.
     expect(await call(checkDraft(deps), good(p.prospectId))).toMatchObject({ ok: false });
+  });
+
+  it("send_email still queues the send when Naive's approval was reconciled first", async () => {
+    const p = await prospect();
+    const d = await checked(p.prospectId);
+    // The worker read tool.confirm.resolved and marked it approved before the call ran.
+    await t.db.update(messages).set({ status: "approved" }).where(eq(messages.id, d.draftId));
+    jobs.length = 0;
+    expect(await call(sendEmailTool(deps), { draftId: d.draftId, hash: d.hash })).toEqual({
+      messageId: d.draftId,
+      status: "queued",
+    });
+    expect(jobs.map((j) => [j.type, j.idempotencyKey])).toEqual([["send_email", `send:${d.draftId}`]]);
   });
 
   it("send_email refuses a draft edited after checking, a suppressed recipient, and past the cap", async () => {
@@ -293,7 +309,7 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
     });
     const at = (d: number) => new Date(sentAt.getTime() + d * DAY);
     const due = async (d: number) =>
-      (await dueFollowups(t.db, at(d))).filter((x) => x.prospectId === p.prospectId);
+      (await dueFollowups(t.db, OUTRUN_CLIENT_ID, at(d))).filter((x) => x.prospectId === p.prospectId);
     const step = (s: number) =>
       t.db.update(prospects).set({ followupStep: s }).where(eq(prospects.id, p.prospectId));
     expect(await due(2)).toEqual([]);

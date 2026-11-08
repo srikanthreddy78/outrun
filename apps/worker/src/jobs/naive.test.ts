@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { JobEnvelope } from "@outrun/core/contracts";
-import { agentSessions, companies, eq, events, messages, prospects } from "@outrun/core/db";
+import { agentSessions, clients, companies, eq, events, messages, prospects } from "@outrun/core/db";
 import { createEmitter } from "@outrun/core/events";
 import { FakeNaiveClient } from "@outrun/core/fakes";
 import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
@@ -124,6 +124,29 @@ describe("Naive jobs", () => {
     await naive.confirmTool(sid, tc, "allow", "");
     await onIdle(deps, sid);
     expect(await statusOf(d)).toMatchObject({ status: "approved", naiveToolCallId: tc });
+  });
+
+  it("a session never parks another client's draft", async () => {
+    const [other] = await t.db
+      .insert(clients)
+      .values({ slug: "acme-pay", name: "Acme Pay", domain: "acme-pay.dev" })
+      .returning();
+    const [m] = await t.db
+      .insert(messages)
+      .values({
+        clientId: other!.id,
+        direction: "outbound",
+        kind: "first",
+        status: "checked",
+        subject: "s",
+        body: "b",
+        draftHash: "h",
+      })
+      .returning();
+    // Outrun's sdr names the other client's draft in its held send.
+    const sid = await startSdr(m!.id, "ss-cross");
+    await idle(sid, "e-cross");
+    expect(await statusOf(m!.id)).toMatchObject({ status: "checked", naiveSessionId: null });
   });
 
   it("budget.exceeded raises an alert keyed on the session, without the raw payload", async () => {

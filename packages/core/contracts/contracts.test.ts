@@ -33,7 +33,7 @@ describe("contracts round-trip", () => {
       traceId: "t1",
     };
     expect(roundTrip(JobEnvelope, env)).toEqual(env);
-    expect(JOB_TYPES).toHaveLength(14);
+    expect(JOB_TYPES).toHaveLength(20);
   });
 
   it("event", () => {
@@ -100,8 +100,21 @@ describe("contracts round-trip", () => {
 });
 
 describe("crew contract", () => {
-  it("has the 20 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(20);
+  it("has the 50 tools, each with at least one agent", () => {
+    expect(CREW_TOOL_NAMES).toHaveLength(50);
+    expect(toolsForAgent("signal_scout").sort()).toEqual([
+      "find_signals",
+      "get_client_profile",
+      "ping",
+      "save_signal",
+    ]);
+    expect(toolsForAgent("experimenter").sort()).toEqual([
+      "end_experiment",
+      "experiment_results",
+      "get_client_profile",
+      "ping",
+      "start_experiment",
+    ]);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 
@@ -112,9 +125,68 @@ describe("crew contract", () => {
 
   it("every agent gets ping and its own tools", () => {
     for (const a of AGENTS) expect(toolsForAgent(a)).toContain("ping");
-    expect(toolsForAgent("orchestrator").sort()).toEqual(["ping", "pipeline_status", "plan_day"]);
+    expect(toolsForAgent("orchestrator").sort()).toEqual([
+      "get_client_profile",
+      "ping",
+      "pipeline_status",
+      "plan_day",
+    ]);
+    expect(toolsForAgent("ceo").sort()).toEqual([
+      "agency_status",
+      "ceo_track_record",
+      "client_goal",
+      "client_insights",
+      "client_report",
+      "kick_client",
+      "list_clients",
+      "list_problems",
+      "make_prediction",
+      "mark_goal_met",
+      "pause_client",
+      "ping",
+      "propose_profile_change",
+      "read_playbook",
+      "record_lesson",
+      "replay_job",
+      "resume_client",
+      "save_board_memo",
+      "save_brief",
+      "set_client_focus",
+      "staff_client",
+    ]);
+    expect(toolsForAgent("account_manager").sort()).toEqual([
+      "answer_client",
+      "client_questions",
+      "client_weekly_report",
+      "get_client_profile",
+      "ping",
+    ]);
     expect(toolsForAgent("sdr")).not.toContain("reply_email");
     expect(toolsForAgent("closer")).not.toContain("send_email");
+    expect(toolsForAgent("closer")).toContain("get_brief");
+  });
+
+  it("the CEO's profile proposals take ICP changes only, never prices, the offer or the sender", () => {
+    const changes = CREW_TOOLS.propose_profile_change.input.shape.changes;
+    expect(changes.safeParse({ addIncludeKeywords: ["payroll"] }).success).toBe(true);
+    expect(changes.safeParse({}).success).toBe(false);
+    for (const bad of [
+      { prices: [{ label: "Plan", amount: "$1" }] },
+      { offer: { pitch: "x" } },
+      { callToActionUrl: "https://x.example" },
+      { sender: { name: "x" } },
+      { allowedLinkHosts: ["x.example"] },
+      { addIncludeKeywords: ["payroll"], prices: [] },
+    ])
+      expect(changes.safeParse(bad).success).toBe(false);
+    const input = CREW_TOOLS.propose_profile_change.input;
+    const id = "0190f0f0-0000-7000-8000-000000000001";
+    expect(
+      input.safeParse({ clientId: id, changes: { companySizes: [] }, evidence: "no numbers" }).success,
+    ).toBe(false);
+    expect(
+      input.safeParse({ clientId: id, changes: { companySizes: [] }, evidence: "3 of 4 replied" }).success,
+    ).toBe(true);
   });
 
   it("no tool name suggests moving money, setting a price or deleting", () => {
@@ -125,10 +197,10 @@ describe("crew contract", () => {
     expect(qualified("send_email")).toBe("outrun.send_email");
   });
 
-  it("only the researcher and auditor get web tools", () => {
+  it("only the researcher, auditor and signal scout get web tools", () => {
     for (const a of AGENTS) {
       const web = BUILTIN_TOOLS[a].includes("web_fetch");
-      expect(web).toBe(a === "researcher" || a === "auditor");
+      expect(web).toBe(a === "researcher" || a === "auditor" || a === "signal_scout");
     }
   });
 
@@ -148,12 +220,13 @@ describe("crew contract", () => {
     });
   });
 
-  it("public MCP serves exactly four tools", () => {
+  it("public MCP serves exactly five tools", () => {
     expect(Object.keys(PUBLIC_TOOLS).sort()).toEqual([
       "buy_audit",
       "get_order_status",
       "get_quote",
       "get_readiness_score",
+      "hire_agency",
     ]);
   });
 });

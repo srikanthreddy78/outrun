@@ -38,6 +38,7 @@ export const EntityType = z.enum([
   "report",
   "agent_session",
   "job",
+  "client",
   "system",
 ]);
 export type EntityType = z.infer<typeof EntityType>;

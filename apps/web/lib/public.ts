@@ -22,6 +22,11 @@ export async function publicDeps(): Promise<PublicDeps> {
     emit: rt.emit,
     stripe: rt.integrations.stripe,
     appUrl: rt.config.appUrl,
+    selfServe: {
+      enqueue: (j) => rt.queue.enqueue(j),
+      sendTransactional: rt.integrations.sendTransactional,
+      secret: rt.config.keys.crewTokenSecret,
+    },
     scan: async (domain, ip) => {
       const service = await scanService();
       if (!service)
@@ -36,9 +41,10 @@ const READ_ONLY: Record<PublicToolName, boolean> = {
   get_quote: true,
   buy_audit: false,
   get_order_status: true,
+  hire_agency: false,
 };
 
-/** The public MCP server: the four tools, no auth, structured output on every call. */
+/** The public MCP server: the five tools, no auth, structured output on every call. */
 export function publicMcpHandler(deps: () => Promise<PublicDeps>, callerIp: string) {
   return createMcpHandler(
     (server) => {
@@ -85,7 +91,7 @@ export function publicMcpHandler(deps: () => Promise<PublicDeps>, callerIp: stri
     {
       serverInfo: { name: "outrun", version: "1.0.0" },
       instructions:
-        "Outrun scores agent-readiness and sells audits. Call get_quote, then buy_audit with your own idempotencyKey, pay at checkoutUrl, and poll get_order_status until the state is delivered.",
+        "Outrun scores agent-readiness and sells audits. Call get_quote, then buy_audit with your own idempotencyKey, pay at checkoutUrl, and poll get_order_status until the state is delivered. To hire Outrun's agency for a free outbound trial, call hire_agency.",
     },
   );
 }

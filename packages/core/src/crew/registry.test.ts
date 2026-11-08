@@ -4,10 +4,12 @@ import { AppError } from "../errors";
 import { ToolRegistry, defineTool } from "./registry";
 import { scrubText } from "./scrub";
 import type { ToolContext } from "./types";
+import { OUTRUN_CLIENT_ID } from "../constants";
 
 const ctx = (): ToolContext => ({
   agent: "orchestrator",
   requestId: "r1",
+  clientId: OUTRUN_CLIENT_ID,
   db: {} as never,
   now: () => new Date("2026-11-07T10:00:00Z"),
   enqueue: async () => ({ jobId: null }),

@@ -1,26 +1,65 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { AGENTS, type AgentName } from "../../contracts";
+import {
+  type AgentName,
+  CLIENT_ROLES,
+  type ClientRole,
+  CORE_CLIENT_ROLES,
+  OUTRUN_AGENTS,
+} from "../../contracts";
+import { OUTRUN_CLIENT_SLUG } from "../constants";
 
-/** The bearer token one agent presents to /api/crew/mcp/<agent>: HMAC(CREW_TOKEN_SECRET, agent). */
-export function crewToken(secret: string, agent: AgentName): string {
-  return createHmac("sha256", secret).update(`outrun-crew:${agent}`).digest("base64url");
+/**
+ * The bearer token one crew member presents to its crew MCP URL. A crew member is a client's
+ * role: Outrun's crew signs `outrun-crew:<role>` (its tokens predate clients and stay valid);
+ * any other client's signs `outrun-crew:<slug>:<role>`, so no client's token opens another's.
+ */
+export function crewToken(secret: string, agent: AgentName, clientSlug: string = OUTRUN_CLIENT_SLUG): string {
+  const subject = clientSlug === OUTRUN_CLIENT_SLUG ? agent : `${clientSlug}:${agent}`;
+  return createHmac("sha256", secret).update(`outrun-crew:${subject}`).digest("base64url");
 }
 
-/** Constant-time check that `presented` is this agent's token. */
+/** Constant-time check that `presented` is this crew member's token. */
 export function verifyCrewToken(
   secret: string,
   agent: AgentName,
   presented: string | null | undefined,
+  clientSlug: string = OUTRUN_CLIENT_SLUG,
 ): boolean {
   if (!presented) return false;
-  const want = Buffer.from(crewToken(secret, agent));
+  const want = Buffer.from(crewToken(secret, agent, clientSlug));
   const got = Buffer.from(presented);
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
-/** Env var names `naive up` reads the vault credentials from. */
-export const crewTokenEnv = (agent: AgentName): string => `CREW_TOKEN_${agent.toUpperCase()}`;
+/** Client slugs: lowercase letters, digits and single hyphens; they appear in agent names and URLs. */
+export const CLIENT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export function crewTokenEnvAll(secret: string): Record<string, string> {
-  return Object.fromEntries(AGENTS.map((a) => [crewTokenEnv(a), crewToken(secret, a)]));
+/** Env var names `naive up` reads the vault credentials from. */
+export const crewTokenEnv = (agent: AgentName, clientSlug: string = OUTRUN_CLIENT_SLUG): string =>
+  clientSlug === OUTRUN_CLIENT_SLUG
+    ? `CREW_TOKEN_${agent.toUpperCase()}`
+    : `CREW_TOKEN_${clientSlug.replace(/-/g, "_").toUpperCase()}_${agent.toUpperCase()}`;
+
+/**
+ * Every member's vault token by env var name. A client is a slug (six core roles) or
+ * `{slug, roles}` for a crew the CEO staffed with optional roles.
+ */
+export function crewTokenEnvAll(
+  secret: string,
+  clients: readonly (string | { slug: string; roles?: readonly ClientRole[] })[] = [OUTRUN_CLIENT_SLUG],
+): Record<string, string> {
+  return Object.fromEntries(
+    clients.flatMap((c) => {
+      const slug = typeof c === "string" ? c : c.slug;
+      const roles = typeof c === "string" ? undefined : c.roles;
+      // The CEO is the agency's, not a client's: only Outrun's slug carries it.
+      return (
+        slug === OUTRUN_CLIENT_SLUG
+          ? OUTRUN_AGENTS
+          : CLIENT_ROLES.filter(
+              (r) => (CORE_CLIENT_ROLES as readonly string[]).includes(r) || roles?.includes(r),
+            )
+      ).map((a) => [crewTokenEnv(a, slug), crewToken(secret, a, slug)]);
+    }),
+  );
 }

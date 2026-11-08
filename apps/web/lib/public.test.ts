@@ -54,7 +54,7 @@ describe("public MCP server", () => {
       }),
     ).then(rpc);
 
-  it("lists the four tools with input and output schemas, without auth", async () => {
+  it("lists the five tools with input and output schemas, without auth", async () => {
     const r = await call({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
     const tools = (r.result?.tools ?? []) as {
       name: string;

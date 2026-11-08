@@ -9,7 +9,7 @@ import { seedDemo } from "@outrun/core/seed";
 import { createTempDatabase } from "@outrun/core/testing/db";
 import { LOOP_ORDER, startWorker } from "@outrun/worker";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 
 async function waitFor<T>(what: string, fn: () => Promise<T | undefined>): Promise<T> {
   const start = Date.now();

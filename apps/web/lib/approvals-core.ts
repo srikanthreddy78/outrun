@@ -6,11 +6,19 @@ export async function submitDecisions(
   rt: { db: Runtime["db"]; emit: Runtime["emit"]; integrations: Pick<Runtime["integrations"], "naive"> },
   email: string,
   f: { ids: string[]; decision: "allow" | "deny"; reason: string },
+  /** A client approver from the portal: only that client's messages, recorded as client:<email>. */
+  scope?: { clientId: string },
 ): Promise<number> {
   const held = await rt.db.db
     .select({ id: messages.id, sessionId: messages.naiveSessionId, toolCallId: messages.naiveToolCallId })
     .from(messages)
-    .where(and(inArray(messages.id, f.ids), eq(messages.status, "awaiting_approval")));
+    .where(
+      and(
+        inArray(messages.id, f.ids),
+        eq(messages.status, "awaiting_approval"),
+        ...(scope ? [eq(messages.clientId, scope.clientId)] : []),
+      ),
+    );
   let n = 0;
   for (const m of held) {
     if (!m.sessionId || !m.toolCallId) continue;
@@ -24,11 +32,11 @@ export async function submitDecisions(
     const reason = `${f.decision === "allow" ? "approved" : "rejected"} by ${email}${f.reason ? `: ${f.reason}` : ""}`;
     await rt.integrations.naive.confirmTool(m.sessionId, m.toolCallId, f.decision, reason, parkedSeq);
     await rt.emit({
-      actor: `user:${email}`,
+      actor: scope ? `client:${email}` : `user:${email}`,
       type: "approval.submitted",
       entityType: "message",
       entityId: m.id,
-      payload: { decision: f.decision, toolCallId: m.toolCallId },
+      payload: { decision: f.decision, toolCallId: m.toolCallId, reason: f.reason.trim() || null },
     });
     n++;
   }

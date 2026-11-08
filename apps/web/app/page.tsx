@@ -14,7 +14,8 @@ export default function Home() {
       <nav style={{ display: "flex", justifyContent: "space-between", marginBottom: 72 }}>
         <strong>Outrun</strong>
         <span>
-          <a href="/landing.md">For agents</a> · <a href="/dashboard">Team sign in</a>
+          <a href="/ops">Live ops</a> · <a href="/landing.md">For agents</a> ·{" "}
+          <a href="/dashboard">Team sign in</a>
         </span>
       </nav>
       <section>
@@ -36,6 +37,7 @@ export default function Home() {
           Audit + Kit to close the gaps.
         </p>
         <form
+          id="scan"
           action="/score"
           method="get"
           style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "36px 0" }}
@@ -93,19 +95,20 @@ export default function Home() {
             ${PRODUCTS.growth.priceUsd.toLocaleString("en-US")}/month
           </p>
           <p>Initial Audit + Kit, then monthly outbound work, registry submissions, rescans, and reports.</p>
-          <a href="/checkout?package=growth">Start Growth →</a>
+          <a href="/hire">Start with a free trial →</a>
         </article>
         <article style={{ padding: 28, border: "1px solid #9db6a8", borderRadius: 12 }}>
           <p>One-time option</p>
           <h2>{PRODUCTS.auditKit.name}</h2>
           <p style={{ fontSize: 28, fontWeight: 700 }}>${PRODUCTS.auditKit.priceUsd}</p>
           <p>The same initial audit and Kit, without monthly work.</p>
-          <a href="/checkout?package=auditKit">Buy Audit + Kit →</a>
+          <a href="#scan">Scan your domain to buy →</a>
         </article>
       </section>
       <footer style={{ marginTop: 80, paddingTop: 24, borderTop: "1px solid #d4ded7" }}>
         <strong>For agents:</strong> <a href="/landing.md">Markdown overview</a> ·{" "}
-        <a href="/llms.txt">llms.txt</a> · <a href="/openapi.json">OpenAPI</a> · <a href="/api/mcp">MCP</a>
+        <a href="/llms.txt">llms.txt</a> · <a href="/openapi.json">OpenAPI</a> · <a href="/api/mcp">MCP</a> ·{" "}
+        <a href="/ops">See the company run live</a>
       </footer>
     </main>
   );

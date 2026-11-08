@@ -6,10 +6,19 @@
  * `onIdle` fires on every idle the way the session.idle webhook does.
  */
 import { randomUUID } from "node:crypto";
-import { AGENTS, type AgentName, CREW_TOOLS, type CrewToolName, type StopReason } from "../../contracts";
+import { type AgentName, CREW_TOOLS, type CrewToolName, type StopReason } from "../../contracts";
 import type { ToolRegistry } from "../crew/registry";
 import type { ToolContext } from "../crew/types";
-import type { NaiveClient, NaiveEvent, NaiveSession } from "../integrations/types";
+import { parseNaiveAgentName } from "../crew/identity";
+import { AppError } from "../errors";
+import { naiveError } from "../integrations/naive";
+import type {
+  NaiveAgentBody,
+  NaiveClient,
+  NaiveCredentialRow,
+  NaiveEvent,
+  NaiveSession,
+} from "../integrations/types";
 
 export interface ScriptedCall {
   tool: CrewToolName;
@@ -29,6 +38,7 @@ export interface ToolCallRecord {
 
 interface FakeSession extends NaiveSession {
   agent: AgentName;
+  clientSlug: string;
   steps: ScriptedCall[];
   cursor: number;
   messages: string[];
@@ -42,13 +52,14 @@ export class FakeNaiveClient implements NaiveClient {
   readonly sessions = new Map<string, FakeSession>();
   private readonly byKey = new Map<string, string>();
   private readonly sentKeys = new Set<string>();
-  private readonly scripts = new Map<AgentName, ScriptedCall[][]>();
+  private readonly scripts = new Map<string, ScriptedCall[][]>();
   readonly spend = new Map<string, number>();
 
   constructor(
     private readonly opts: {
       registry?: ToolRegistry;
-      ctx?: (agent: AgentName) => ToolContext;
+      /** The tool context for a crew member: its role, and its client by slug. */
+      ctx?: (agent: AgentName, clientSlug: string) => ToolContext | Promise<ToolContext>;
       /** Called on every idle, like Naive's session.idle webhook. */
       onIdle?: (sessionId: string, stopReason: StopReason) => void | Promise<void>;
     } = {},
@@ -57,21 +68,23 @@ export class FakeNaiveClient implements NaiveClient {
   /** Who the fake records as deciding a confirmation. */
   actor: { type: "user" | "key" | "system"; id: string } = { type: "user", id: "usr_fake" };
 
-  agentIdOf(agent: AgentName): string {
-    return `agt_fake_${agent}`;
+  /** By Naive agent name: the role for Outrun's crew, `<slug>-<role>` for another client's. */
+  agentIdOf(name: string): string {
+    return `agt_fake_${name}`;
   }
 
-  /** Queue a script for the next session this agent starts. */
-  script(agent: AgentName, steps: ScriptedCall[]): this {
+  /** Queue a script for the next session this agent (by Naive agent name) starts. */
+  script(agent: string, steps: ScriptedCall[]): this {
     const list = this.scripts.get(agent) ?? [];
     list.push(steps);
     this.scripts.set(agent, list);
     return this;
   }
 
-  async resolveAgentId(agent: AgentName): Promise<string> {
-    this.calls.push({ method: "resolveAgentId", args: [agent] });
-    return this.agentIdOf(agent);
+  async resolveAgentId(name: string): Promise<string> {
+    this.calls.push({ method: "resolveAgentId", args: [name] });
+    if (!parseNaiveAgentName(name)) throw new AppError("not_configured", `naive: no agent named ${name}`);
+    return this.agentIdOf(name);
   }
 
   async startSession(req: {
@@ -83,14 +96,18 @@ export class FakeNaiveClient implements NaiveClient {
     this.calls.push({ method: "startSession", args: [req] });
     const existing = this.byKey.get(req.idempotencyKey);
     if (existing) return { sessionId: existing };
-    const agent = AGENTS.find((a) => this.agentIdOf(a) === req.agentId);
-    if (!agent) throw new Error(`FakeNaiveClient: unknown agent id ${req.agentId}`);
+    const name = req.agentId.replace(/^agt_fake_/, "");
+    const member = parseNaiveAgentName(name);
+    if (!req.agentId.startsWith("agt_fake_") || !member)
+      throw new Error(`FakeNaiveClient: unknown agent id ${req.agentId}`);
+    const { agent, clientSlug } = member;
     const id = `ses_fake_${randomUUID().slice(0, 8)}`;
-    const steps = this.scripts.get(agent)?.shift() ?? [];
+    const steps = this.scripts.get(name)?.shift() ?? [];
     const s: FakeSession = {
       id,
       agentId: req.agentId,
       agent,
+      clientSlug,
       status: "running",
       stopReason: null,
       pendingActions: [],
@@ -194,6 +211,101 @@ export class FakeNaiveClient implements NaiveClient {
     return this.spend.get(agentId) ?? 0;
   }
 
+  /* ---------- runtime provisioning ---------- */
+
+  /** Agents created through createAgent; their ids are agentIdOf(name), so startSession works. */
+  readonly agents: (NaiveAgentBody & { id: string })[] = [];
+  /** The org vault `naive up` made; tests empty it to see the "no vault" path. */
+  readonly vaults: { id: string; name: string }[] = [{ id: "vlt_fake_outrun-crew", name: "outrun-crew" }];
+  /** Credential rows, values included so tests can check them (the real API never returns them). */
+  readonly credentials: (NaiveCredentialRow & { vaultId: string; value: string; agent_id?: string })[] = [];
+  readonly deployments: {
+    id: string;
+    agent_id: string;
+    cron: string;
+    timezone: string;
+    input_template: string;
+    budget_micro_usd: number;
+  }[] = [];
+  /** Answer every provisioning call with this status (401/403 scope errors, 409 conflicts). */
+  provisionStatus: { status: number; code: string } | null = null;
+  private readonly postKeys = new Map<string, { id: string }>();
+
+  private provisionGate(method: string, args: unknown[]): void {
+    this.calls.push({ method, args });
+    const s = this.provisionStatus;
+    if (s) throw naiveError(s.status, s.code, `fake naive: ${method} → ${s.status} ${s.code}`, null);
+  }
+
+  async listAgents() {
+    this.provisionGate("listAgents", []);
+    return this.agents.map((a) => ({ id: a.id, name: a.name }));
+  }
+
+  async createAgent(body: NaiveAgentBody, idempotencyKey: string) {
+    this.provisionGate("createAgent", [body.name, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    if (this.agents.some((a) => a.name === body.name))
+      throw naiveError(409, "already_exists", `fake naive: agent ${body.name} exists`, null);
+    const id = this.agentIdOf(body.name);
+    this.agents.push({ ...body, id });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
+  async listVaults() {
+    this.provisionGate("listVaults", []);
+    return this.vaults.map((v) => ({ ...v }));
+  }
+
+  async listCredentials(vaultId: string) {
+    this.provisionGate("listCredentials", [vaultId]);
+    return this.credentials
+      .filter((c) => c.vaultId === vaultId)
+      .map(({ id, kind, key, mcp_server_url }) => ({ id, kind, key, mcp_server_url }));
+  }
+
+  async createCredential(
+    vaultId: string,
+    body: { kind: "static_bearer"; key: string; value: string; mcp_server_url: string; agent_id?: string },
+    idempotencyKey: string,
+  ) {
+    // Never record the value in `calls`.
+    this.provisionGate("createCredential", [vaultId, body.key, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    if (!this.vaults.some((v) => v.id === vaultId)) throw naiveError(404, "not_found", "no vault", null);
+    const id = `cred_fake_${randomUUID().slice(0, 8)}`;
+    this.credentials.push({ id, vaultId, ...body });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
+  async listDeployments() {
+    this.provisionGate("listDeployments", []);
+    return this.deployments.map(({ id, agent_id, cron }) => ({ id, agent_id, cron }));
+  }
+
+  async createDeployment(
+    body: {
+      agent_id: string;
+      cron: string;
+      timezone: string;
+      input_template: string;
+      budget_micro_usd: number;
+    },
+    idempotencyKey: string,
+  ) {
+    this.provisionGate("createDeployment", [body.agent_id, body.cron, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    const id = `dep_fake_${randomUUID().slice(0, 8)}`;
+    this.deployments.push({ id, ...body });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
   private must(id: string): FakeSession {
     const s = this.sessions.get(id);
     if (!s) throw new Error(`FakeNaiveClient: unknown session ${id}`);
@@ -204,8 +316,11 @@ export class FakeNaiveClient implements NaiveClient {
     s.status = "running";
     while (s.cursor < s.steps.length) {
       const step = s.steps[s.cursor]!;
+      // A step sees its own session's calls, as an agent sees only its own transcript.
       if (typeof step.input === "function")
-        step.input = (step.input as (c: ToolCallRecord[]) => unknown)(this.toolCalls);
+        step.input = (step.input as (c: ToolCallRecord[]) => unknown)(
+          this.toolCalls.filter((c) => c.sessionId === s.id),
+        );
       if (CREW_TOOLS[step.tool].policy === "ask") {
         const toolCallId = `tc_${randomUUID().slice(0, 8)}`;
         const parked = this.event(s, "tool.confirm", {
@@ -257,7 +372,12 @@ export class FakeNaiveClient implements NaiveClient {
     this.toolCalls.push(rec);
     if (!this.opts.registry || !this.opts.ctx) return;
     try {
-      rec.result = await this.opts.registry.call(s.agent, step.tool, step.input, this.opts.ctx(s.agent));
+      rec.result = await this.opts.registry.call(
+        s.agent,
+        step.tool,
+        step.input,
+        await this.opts.ctx(s.agent, s.clientSlug),
+      );
     } catch (err) {
       const e = err as { code?: string; message?: string };
       rec.error = { code: e.code ?? "internal", message: e.message ?? String(err) };

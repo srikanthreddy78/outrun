@@ -6,5 +6,6 @@ export * from "./errors";
 export * from "./api";
 export * from "./mcp";
 export * from "./crew";
+export * from "./clients";
 export * from "./sessions";
 export * from "./webhooks";

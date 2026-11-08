@@ -7,12 +7,15 @@ import type { ApifyClient } from "../../integrations/types";
 import { auditTools } from "./audit";
 import { scanDomainTool } from "./scan_domain";
 import { ping } from "./ping";
+import { agencyTools } from "./agency";
+import { accountManagerTools } from "./account_manager";
 import { pipelineStatus, type FollowupsDue, type PipelineSettings } from "./pipeline_status";
 import { planDay } from "./plan_day";
 import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
 import { AppError } from "../../errors";
 import { followupsDueCount, outreachTools, type OutreachDeps } from "./outreach";
 import { prospectingTools, type ProspectingDeps } from "./prospecting";
+import { scoutTools, type ScoutDeps } from "./scout";
 
 export { createCheckoutLink, ping, pipelineStatus, planDay };
 
@@ -39,10 +42,14 @@ export function allTools(opts: {
   outreach?: OutreachDeps;
   /** SH-2/3: the prospector's and researcher's tools. */
   prospecting?: ProspectingDeps;
+  /** The signal scout's and experimenter's tools. */
+  scout?: ScoutDeps;
 }): ToolDef[] {
   const followupsDue = opts.followupsDue ?? (opts.outreach ? followupsDueCount : undefined);
   return [
     ping,
+    ...agencyTools,
+    ...accountManagerTools,
     pipelineStatus(opts.settings, followupsDue),
     planDay(opts.settings, followupsDue),
     scanDomainTool,
@@ -50,5 +57,6 @@ export function allTools(opts: {
     createCheckoutLink(opts.orders ?? noOrders),
     ...(opts.outreach ? outreachTools(opts.outreach) : []),
     ...(opts.prospecting ? prospectingTools(opts.prospecting) : []),
+    ...(opts.scout ? scoutTools(opts.scout) : []),
   ] as unknown as ToolDef[];
 }

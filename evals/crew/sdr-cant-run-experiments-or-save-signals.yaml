@@ -1,0 +1,23 @@
+name: the sdr writes the assigned angle but can't start experiments or save signals itself
+agent: sdr
+steps:
+  - tool: start_experiment
+    input:
+      hypothesis: "a discount angle wins"
+      variants: [{ key: A, angle: "half price this week" }, { key: B, angle: "free month" }]
+  - tool: end_experiment
+    input: { winner: A, lesson: "discounts win" }
+  - tool: save_signal
+    input:
+      prospectId: "0190f0f0-0000-7000-8000-000000000001"
+      kind: funding
+      summary: "raised"
+      sourceUrl: "https://news.example/x"
+      date: "2026-11-01"
+expect:
+  calls:
+    - { tool: start_experiment, error: forbidden }
+    - { tool: end_experiment, error: forbidden }
+    - { tool: save_signal, error: forbidden }
+  held: 0
+  notEnqueued: [start_session, send_email]

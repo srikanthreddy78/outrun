@@ -14,6 +14,7 @@ import {
   real,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -31,6 +32,7 @@ import {
   SOURCES,
   STOP_REASONS,
 } from "../../contracts";
+import { OUTRUN_CLIENT_ID } from "../constants";
 
 const id = () =>
   uuid("id")
@@ -54,6 +56,75 @@ export const agentName = pgEnum("agent_name", AGENTS);
 export const sessionStatus = pgEnum("session_status", SESSION_STATUSES);
 export const stopReason = pgEnum("stop_reason", STOP_REASONS);
 export const product = pgEnum("product", PRODUCT_KEYS);
+export const clientStatus = pgEnum("client_status", [
+  "draft",
+  "profiling",
+  "awaiting_confirmation",
+  "email_setup",
+  "active",
+  "paused",
+]);
+
+/** A company the agency markets. Each one gets its own crew of six agents on Naive. */
+export const clients = pgTable(
+  "clients",
+  {
+    id: id(),
+    /** Lowercase a-z0-9-, used in agent names (`<slug>-<role>`) and crew MCP URLs. */
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    domain: text("domain").notNull(),
+    status: clientStatus("status").notNull().default("draft"),
+    /** Target customer, offer, prices, links, sender and postal address; drafted by its researcher. */
+    profile: jsonb("profile").$type<Record<string, unknown>>().notNull().default({}),
+    profileConfirmedAt: timestamp("profile_confirmed_at", { withTimezone: true }),
+    confirmedBy: text("confirmed_by"),
+    agentmailInboxId: text("agentmail_inbox_id"),
+    agentmailDomainId: text("agentmail_domain_id"),
+    /** The DNS records AgentMail asks for, as last read, for the client to add. */
+    dnsRecords: jsonb("dns_records")
+      .$type<{ type: string; name: string; value: string; status: string; priority?: number }[]>()
+      .notNull()
+      .default([]),
+    sendingDomain: text("sending_domain"),
+    dnsStatus: text("dns_status", { enum: ["none", "pending", "verified", "failed"] })
+      .notNull()
+      .default("none"),
+    dailySendCap: integer("daily_send_cap").notNull().default(30),
+    /** The roles on this client's crew: the six core roles plus any the CEO staffed. Never shrinks. */
+    crewRoles: text("crew_roles")
+      .array()
+      .notNull()
+      .default(sql`'{orchestrator,prospector,researcher,sdr,closer,auditor}'::text[]`),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("clients_slug_uq").on(t.slug), uniqueIndex("clients_domain_uq").on(t.domain)],
+);
+
+/** People at a client who sign in to the portal and approve its emails. */
+export const clientUsers = pgTable(
+  "client_users",
+  {
+    id: id(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    email: text("email").notNull(),
+    role: text("role", { enum: ["approver"] })
+      .notNull()
+      .default("approver"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("client_users_client_email_uq").on(t.clientId, t.email)],
+);
+
+/** The client a row belongs to; rows from before clients existed are Outrun's. */
+const clientId = () =>
+  uuid("client_id")
+    .notNull()
+    .default(OUTRUN_CLIENT_ID)
+    .references(() => clients.id);
 
 export const companies = pgTable(
   "companies",
@@ -70,6 +141,25 @@ export const companies = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex("companies_domain_uq").on(t.domain), index("companies_kind_idx").on(t.kind)],
+);
+
+/** The companies a client's sources found for it; companies themselves stay shared facts. */
+export const clientCandidates = pgTable(
+  "client_candidates",
+  {
+    id: id(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id),
+    source: source("source").notNull(),
+    /** Why the source matched (the ICP keywords), shown to the prospector. */
+    reason: text("reason").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("client_candidates_uq").on(t.clientId, t.companyId)],
 );
 
 export const contacts = pgTable(
@@ -96,12 +186,16 @@ export const prospects = pgTable(
   "prospects",
   {
     id: id(),
+    clientId: clientId(),
     companyId: uuid("company_id")
       .notNull()
       .references(() => companies.id),
     contactId: uuid("contact_id").references(() => contacts.id),
     stage: prospectStage("stage").notNull().default("filed"),
-    facts: jsonb("facts").$type<{ key: string; value: string; sourceUrl: string }[]>().notNull().default([]),
+    facts: jsonb("facts")
+      .$type<{ key: string; value: string; sourceUrl: string; date?: string }[]>()
+      .notNull()
+      .default([]),
     fitScore: real("fit_score"),
     gapScore: real("gap_score"),
     filedReason: text("filed_reason").notNull().default(""),
@@ -112,7 +206,11 @@ export const prospects = pgTable(
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
-  (t) => [uniqueIndex("prospects_company_uq").on(t.companyId), index("prospects_stage_idx").on(t.stage)],
+  (t) => [
+    uniqueIndex("prospects_client_company_uq").on(t.clientId, t.companyId),
+    index("prospects_client_idx").on(t.clientId),
+    index("prospects_stage_idx").on(t.stage),
+  ],
 );
 
 export const scans = pgTable(
@@ -133,6 +231,7 @@ export const messages = pgTable(
   "messages",
   {
     id: id(),
+    clientId: clientId(),
     prospectId: uuid("prospect_id").references(() => prospects.id),
     contactId: uuid("contact_id").references(() => contacts.id),
     threadId: text("thread_id"),
@@ -145,6 +244,8 @@ export const messages = pgTable(
     body: text("body").notNull().default(""),
     citedCheckIds: jsonb("cited_check_ids").$type<string[]>().notNull().default([]),
     draftHash: text("draft_hash"),
+    /** The experiment variant ("A" or "B") a first email or follow-up was written for, if any. */
+    variant: text("variant"),
     providerId: text("provider_id"),
     naiveSessionId: text("naive_session_id"),
     naiveToolCallId: text("naive_tool_call_id"),
@@ -158,6 +259,7 @@ export const messages = pgTable(
       .where(sql`${t.providerId} is not null`),
     index("messages_thread_idx").on(t.threadId),
     index("messages_status_idx").on(t.status),
+    index("messages_client_idx").on(t.clientId),
   ],
 );
 
@@ -230,6 +332,7 @@ export const agentSessions = pgTable(
   {
     id: id(),
     sessionId: text("session_id"),
+    clientId: clientId(),
     agent: agentName("agent").notNull(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
@@ -248,9 +351,9 @@ export const agentSessions = pgTable(
       .on(t.sessionId)
       .where(sql`${t.sessionId} is not null`),
     uniqueIndex("agent_sessions_idem_uq").on(t.idempotencyKey),
-    /** One live session per agent and entity. */
+    /** One live session per client, agent and entity. */
     uniqueIndex("agent_sessions_live_uq")
-      .on(t.agent, t.entityType, t.entityId)
+      .on(t.clientId, t.agent, t.entityType, t.entityId)
       .where(sql`${t.status} in ('starting','running','idle')`),
   ],
 );
@@ -275,6 +378,10 @@ export const events = pgTable(
     uniqueIndex("events_webhook_uq")
       .on(t.entityId)
       .where(sql`${t.type} = 'webhook.received'`),
+    /** Portal sign-in links work once: one `portal.link_used` per link nonce. */
+    uniqueIndex("events_portal_link_uq")
+      .on(t.entityId)
+      .where(sql`${t.type} = 'portal.link_used'`),
   ],
 );
 
@@ -286,14 +393,20 @@ export const suppressions = pgTable(
     value: text("value").notNull(),
     kind: text("kind", { enum: ["email", "domain"] }).notNull(),
     reason: text("reason").notNull(),
+    /** Set for an unsubscribe from one client's email; null applies to every client. */
+    clientId: uuid("client_id").references(() => clients.id),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("suppressions_value_uq").on(t.value)],
+  // One row per address and client; a null client (everyone) counts once too.
+  (t) => [unique("suppressions_value_client_uq").on(t.value, t.clientId).nullsNotDistinct()],
 );
 
 /** Application tables, for tests and tooling. */
 export const TABLES = [
+  "clients",
+  "client_users",
   "companies",
+  "client_candidates",
   "contacts",
   "prospects",
   "scans",

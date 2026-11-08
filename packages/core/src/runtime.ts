@@ -94,6 +94,7 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
       },
       outreach: { appUrl: config.appUrl, settings: config.settings, mx },
       prospecting: { settings: config.settings, enrich: integrations.enrich },
+      scout: { settings: config.settings, monid: integrations.monid },
     }),
   );
   const llm = createLlm({ providers: integrations.llm, db: db.db, emit, settings: config.settings });

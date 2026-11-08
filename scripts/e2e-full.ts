@@ -17,7 +17,18 @@ import type Stripe from "stripe";
 import { loadConfig } from "@outrun/core";
 import type { AgentName } from "@outrun/core/contracts";
 import type { ToolContext } from "@outrun/core/crew";
-import { and, companies, eq, events, messages, orders, prospects, reports, scans } from "@outrun/core/db";
+import {
+  and,
+  auditCrawls,
+  companies,
+  eq,
+  events,
+  messages,
+  orders,
+  prospects,
+  reports,
+  scans,
+} from "@outrun/core/db";
 import { createFakes, FakeLlmProvider, FakeNaiveClient } from "@outrun/core/fakes";
 import type { LlmRequest } from "@outrun/core/integrations";
 import { callPublicTool } from "@outrun/core/public/service";
@@ -29,8 +40,9 @@ import { handleApifyWebhook } from "@outrun/core/webhooks/apify";
 import { acceptStripeEvent } from "@outrun/core/webhooks/stripe";
 import { startWorker } from "@outrun/worker";
 import { submitDecisions } from "../apps/web/lib/approvals-core";
+import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 const APIFY_SECRET = "e2e-apify-secret"; // gitleaks:allow (throwaway test value)
 const DOMAIN = DEMO_PLACEHOLDER.domain;
 const INBOX = DEMO_PLACEHOLDER.inbox;
@@ -147,6 +159,7 @@ async function main(): Promise<void> {
     naiveOpts.ctx = (agent: AgentName): ToolContext => ({
       agent,
       requestId: randomUUID(),
+      clientId: OUTRUN_CLIENT_ID,
       db,
       now: () => new Date(),
       enqueue: (job, o) => rt!.queue.enqueue(job, o),
@@ -400,9 +413,9 @@ async function main(): Promise<void> {
       const [p] = await db.select().from(prospects).where(eq(prospects.id, prospectId));
       return p?.stage === "won";
     });
-    check(
+    // The receipt is its own job; it can land just after the prospect is won.
+    await waitFor("the receipt", async () =>
       fakes.agentmail.transactional.some((m) => m.subject.startsWith("Outrun receipt")),
-      "a receipt was sent",
     );
     ok("Stripe webhook marked the order paid, sent the receipt and won the prospect");
 
@@ -513,8 +526,30 @@ async function deliverAudit(
   );
   const crawl = naive.toolCalls.find((c) => c.sessionId === session.id && c.tool === "start_crawl");
   if (crawl?.error) throw new Error(`start_crawl failed: ${crawl.error.code} ${crawl.error.message}`);
-  const run = await waitFor("the Apify run", async () => apify.runs.at(-1));
-  // What the auditor does once Naive wakes it with the crawl.
+  // This order's own run: the latest run may still be the previous order's.
+  const run = await waitFor("the Apify run", async () => {
+    const [c] = await db.select().from(auditCrawls).where(eq(auditCrawls.orderId, orderId));
+    return c?.runId && apify.runs.some((r) => r.runId === c.runId) ? { runId: c.runId } : undefined;
+  });
+  // What the auditor does once Naive wakes it with the crawl (queued below, after it finishes).
+  const body = JSON.stringify({
+    eventType: "ACTOR.RUN.SUCCEEDED",
+    resource: { id: run.runId, status: "SUCCEEDED", defaultDatasetId: `ds_${run.runId}`, usageTotalUsd: 0.2 },
+  });
+  const res = await handleApifyWebhook({
+    rawBody: body,
+    header: APIFY_SECRET,
+    secret: APIFY_SECRET,
+    db: rt.db,
+    queue: rt.queue,
+  });
+  check(res.status === 200, `Apify webhook accepted (${JSON.stringify(res.body)})`);
+  // Queue the auditor's next steps only once the crawl is recorded as finished, so nothing that
+  // wakes the session earlier can run get_crawl_pages too soon.
+  await waitFor(`crawl for ${orderId} to finish`, async () => {
+    const [c] = await db.select().from(auditCrawls).where(eq(auditCrawls.orderId, orderId));
+    return c?.status === "succeeded" ? c : undefined;
+  });
   session.steps.push(
     { tool: "get_crawl_pages", input: { orderId, limit: 10 } },
     {
@@ -544,18 +579,16 @@ async function deliverAudit(
       },
     },
   );
-  const body = JSON.stringify({
-    eventType: "ACTOR.RUN.SUCCEEDED",
-    resource: { id: run.runId, status: "SUCCEEDED", defaultDatasetId: `ds_${run.runId}`, usageTotalUsd: 0.2 },
-  });
-  const res = await handleApifyWebhook({
-    rawBody: body,
-    header: APIFY_SECRET,
-    secret: APIFY_SECRET,
-    db: rt.db,
-    queue: rt.queue,
-  });
-  check(res.status === 200, `Apify webhook accepted (${JSON.stringify(res.body)})`);
+  // If the worker's "crawl is ready" message already woke it and it went idle, wake it again.
+  const woken = naive.calls.some(
+    (c) => c.method === "send" && c.args[0] === session.id && String(c.args[2]).startsWith("crawl_ready:"),
+  );
+  if (woken && session.status !== "running" && session.cursor < session.steps.length)
+    await naive.send(
+      session.id,
+      "e2e: the crawl is ready; read it and save the audit.",
+      `e2e:resume:${orderId}`,
+    );
   await waitFor(`order ${orderId} to be delivered`, async () => {
     const bad = naive.toolCalls.find((c) => c.error);
     if (bad) throw new Error(`${bad.tool} failed: ${bad.error!.code} ${bad.error!.message}`);

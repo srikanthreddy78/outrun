@@ -1,12 +1,13 @@
 import { PROSPECT_STAGES, type ProspectStage } from "../../../contracts";
-import { CRON_TZ } from "../../constants";
-import { count, eq, gte } from "drizzle-orm";
+import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
+import { and, count, eq, gte } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { companies, messages, prospects } from "../../db/schema";
 import { startOfDayIn } from "../../time";
 import { effectiveSendCap, sentToday } from "../../email/rules";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
+import { clientCandidatesWaiting } from "../../sources/clientSources";
 
 export interface PipelineSettings {
   sendDailyCap: number;
@@ -24,9 +25,13 @@ export interface PipelineCounts {
   approvalsWaiting: number;
 }
 
-/** Counts per stage, candidates waiting, today's caps left (days in CRON_TZ) and approvals waiting. */
+/**
+ * One client's counts per stage, candidates waiting, today's caps left (days in CRON_TZ) and
+ * approvals waiting.
+ */
 export async function pipelineCounts(
   db: Db,
+  clientId: string,
   settings: Pick<PipelineSettings, "sendDailyCap" | "discoveryDailyCap">,
   now: Date,
 ): Promise<PipelineCounts> {
@@ -34,18 +39,26 @@ export async function pipelineCounts(
   const stageRows = await db
     .select({ stage: prospects.stage, n: count() })
     .from(prospects)
+    .where(eq(prospects.clientId, clientId))
     .groupBy(prospects.stage);
   const stages = Object.fromEntries(PROSPECT_STAGES.map((s) => [s, 0])) as Record<ProspectStage, number>;
   for (const r of stageRows) stages[r.stage] = Number(r.n);
 
-  const [candidates] = await db.select({ n: count() }).from(companies).where(eq(companies.kind, "candidate"));
-  const [filedToday] = await db.select({ n: count() }).from(prospects).where(gte(prospects.createdAt, since));
-  const sent = await sentToday(db, now);
-  const sendCap = await effectiveSendCap(db, settings.sendDailyCap, now);
+  // Outrun's candidates are the shared discovered companies; another client's are its own list.
+  const [candidates] =
+    clientId === OUTRUN_CLIENT_ID
+      ? await db.select({ n: count() }).from(companies).where(eq(companies.kind, "candidate"))
+      : [{ n: await clientCandidatesWaiting(db, clientId) }];
+  const [filedToday] = await db
+    .select({ n: count() })
+    .from(prospects)
+    .where(and(eq(prospects.clientId, clientId), gte(prospects.createdAt, since)));
+  const sent = await sentToday(db, now, clientId);
+  const sendCap = await effectiveSendCap(db, settings.sendDailyCap, now, clientId);
   const [waiting] = await db
     .select({ n: count() })
     .from(messages)
-    .where(eq(messages.status, "awaiting_approval"));
+    .where(and(eq(messages.clientId, clientId), eq(messages.status, "awaiting_approval")));
 
   return {
     stages,
@@ -62,7 +75,7 @@ export function pipelineStatus(settings: PipelineSettings, followupsDue: Followu
   return defineTool({
     name: "pipeline_status",
     handler: async (_input, ctx) => ({
-      ...(await pipelineCounts(ctx.db, settings, ctx.now())),
+      ...(await pipelineCounts(ctx.db, ctx.clientId, settings, ctx.now())),
       followupsDue: await followupsDue(ctx),
       demo: settings.demo,
     }),

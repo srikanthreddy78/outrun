@@ -8,9 +8,10 @@
  * No team: Naive lists multiagent teams as coming soon, so the orchestrator uses outrun.plan_day.
  * The webhook secret, shown once, is written to .naive/webhook-secret (0600, git-ignored).
  */
+import { crew, loadClientCrews } from "../naive/crew";
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { AGENTS, NAIVE_WEBHOOK_EVENTS } from "../packages/core/contracts";
+import { NAIVE_WEBHOOK_EVENTS } from "../packages/core/contracts";
 
 const BASE = process.env.NAIVE_API_BASE ?? "https://api.vetta.sh";
 const API_VERSION = "2026-09-30";
@@ -83,7 +84,8 @@ async function main(): Promise<void> {
   const agents = await listAll<AgentRow>("/v1/agents");
   const byName = new Map(agents.map((a) => [a.name, a]));
   console.log("agents");
-  for (const name of AGENTS) {
+  // Every member of the agency: the CEO, Outrun's crew, and each client's (pnpm clients:export).
+  for (const { name } of crew(appUrl ?? "", loadClientCrews())) {
     const a = byName.get(name);
     if (!a) {
       problems++;

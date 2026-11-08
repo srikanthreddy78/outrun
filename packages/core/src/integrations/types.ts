@@ -3,7 +3,7 @@
  * Real implementations live in src/integrations/<name>.ts (each owned by one track);
  * fakes live in src/fakes. Tests and dev without a key use the fakes.
  */
-import type { AgentName, Domain, PaidProductKey, ScanCheck, StopReason } from "../../contracts";
+import type { Domain, PaidProductKey, ScanCheck, StopReason } from "../../contracts";
 
 /* ---------- LLM providers (Srikanth) ---------- */
 export interface LlmRequest {
@@ -73,9 +73,64 @@ export interface NaiveClient {
   /** Session events after `afterSeq`, oldest first; `includeAccepted` adds tool.confirm.resolved rows. */
   getEvents(sessionId: string, opts: { afterSeq: number; includeAccepted?: boolean }): Promise<NaiveEvent[]>;
   agentSpendUsd(agentId: string): Promise<number>;
-  resolveAgentId(agent: AgentName): Promise<string>;
+  /** By Naive agent name: the role for Outrun's crew, `<slug>-<role>` for another client's. */
+  resolveAgentId(name: string): Promise<string>;
   /** The organization's webhooks, for the "Naive webhook disabled" alert. */
   listWebhooks(): Promise<{ id: string; url: string; enabled: boolean; events: string[] }[]>;
+
+  /* Runtime provisioning of a client's crew (provision_client_crew); needs agents:write and admin. */
+  /** Every agent in the org, by name (GET /v1/agents). */
+  listAgents(): Promise<{ id: string; name: string }[]>;
+  /** POST /v1/agents; the body is what `naive up` sends for the same agent (naive/crew.ts). */
+  createAgent(body: NaiveAgentBody, idempotencyKey: string): Promise<{ id: string }>;
+  listVaults(): Promise<{ id: string; name: string }[]>;
+  /** Metadata only; values are never returned. */
+  listCredentials(vaultId: string): Promise<NaiveCredentialRow[]>;
+  createCredential(
+    vaultId: string,
+    body: {
+      kind: "static_bearer";
+      key: string;
+      value: string;
+      mcp_server_url: string;
+      agent_id?: string;
+    },
+    idempotencyKey: string,
+  ): Promise<{ id: string }>;
+  listDeployments(): Promise<{ id: string; agent_id: string; cron: string }[]>;
+  createDeployment(
+    body: {
+      agent_id: string;
+      cron: string;
+      timezone: string;
+      input_template: string;
+      budget_micro_usd: number;
+    },
+    idempotencyKey: string,
+  ): Promise<{ id: string }>;
+}
+
+/** POST /v1/agents: name, model and budget are required; the rest mirror the config SDK. */
+export interface NaiveAgentBody {
+  name: string;
+  model: string;
+  budget: { cap_micro_usd: number; max_task_micro_usd: number; period: "day" | "week" | "month" };
+  description?: string;
+  system?: string;
+  skills?: string[];
+  mcp_servers?: { name: string; url: string }[];
+  tools?: {
+    default_config: { permission: "allow" | "ask" | "deny" };
+    configs: Record<string, { enabled: boolean; permission: "allow" | "ask" | "deny" }>;
+  };
+  handoffs?: boolean;
+}
+
+export interface NaiveCredentialRow {
+  id: string;
+  kind: string;
+  key: string;
+  mcp_server_url: string | null;
 }
 
 /* ---------- Stripe (Srikanth, SR-8) ---------- */
@@ -154,6 +209,15 @@ export interface TransactionalEmail {
   idempotencyKey: string;
 }
 export type SendTransactionalFn = (msg: TransactionalEmail) => Promise<{ providerId: string }>;
+/** A client's sending domain on AgentMail and the DNS records the client must add. */
+export interface AgentMailDomain {
+  domainId: string;
+  domain: string;
+  /** NOT_STARTED, PENDING, INVALID, FAILED, VERIFYING or VERIFIED. */
+  status: string;
+  records: { type: string; name: string; value: string; status: string; priority?: number }[];
+}
+
 export interface AgentMailClient {
   send(msg: {
     to: string;
@@ -163,8 +227,19 @@ export interface AgentMailClient {
     inReplyTo?: string;
     listUnsubscribe: string;
     idempotencyKey: string;
+    /** Send from this inbox instead of Outrun's: a client's own, on its own domain. */
+    inboxId?: string;
   }): Promise<{ providerId: string; threadId: string }>;
   sendTransactional: SendTransactionalFn;
+  /** Registers a client's domain; `clientId` makes a retry return the same domain. */
+  createDomain(domain: string, clientId: string): Promise<AgentMailDomain>;
+  getDomain(domainId: string): Promise<AgentMailDomain>;
+  /** Asks AgentMail to re-check the DNS records now. */
+  verifyDomain(domainId: string): Promise<void>;
+  /** Creates `username@domain` once the domain is verified; `clientId` makes a retry return the same inbox. */
+  createInbox(req: { username: string; domain: string; displayName: string; clientId: string }): Promise<{
+    inboxId: string;
+  }>;
 }
 
 /* ---------- HubSpot (Shane, SH-4) ---------- */

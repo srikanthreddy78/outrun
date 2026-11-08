@@ -27,7 +27,7 @@ export function createCheckoutLink(deps: CheckoutDeps) {
         .from(prospects)
         .innerJoin(companies, eq(companies.id, prospects.companyId))
         .leftJoin(contacts, eq(contacts.id, prospects.contactId))
-        .where(eq(prospects.id, input.prospectId));
+        .where(and(eq(prospects.id, input.prospectId), eq(prospects.clientId, ctx.clientId)));
       if (!row) throw new AppError("not_found", `prospect ${input.prospectId} not found`);
       if (!row.email) throw new AppError("bad_request", "the prospect has no contact to bill");
       if (row.suppressed) throw new AppError("suppressed", "the prospect's contact is suppressed");

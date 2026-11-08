@@ -1,16 +1,25 @@
 /**
- * Outrun's crew on Naive. `pnpm naive:up --dry-run` previews it; only Srikanth applies it, from
- * main, after reviewing the dry run. Everything here is generated from naive/crew.ts.
+ * The agency on Naive: the CEO, Outrun's own crew, and one six-agent crew per client listed in
+ * .naive/clients.json (written by `pnpm clients:export`). `pnpm naive:up --dry-run` previews it;
+ * only Srikanth applies it, from main, after reviewing the dry run. Everything here is generated
+ * from naive/crew.ts.
  *
- * APP_URL must be the deployed https origin: each agent's MCP server is <APP_URL>/api/crew/mcp/<agent>,
- * and its bearer token (CREW_TOKEN_<AGENT>, derived from CREW_TOKEN_SECRET by scripts/naive-up.ts)
+ * APP_URL must be the deployed https origin: each agent's MCP server is
+ * <APP_URL>/api/crew/mcp/<role> (Outrun's crew and the CEO) or <APP_URL>/api/crew/mcp/<slug>/<role>,
+ * and its bearer token (CREW_TOKEN_<..>, derived from CREW_TOKEN_SECRET by scripts/naive-up.ts)
  * sits in the vault, keyed by that URL. Agents never see the token.
  */
 import { defineProject } from "@usenaive-sdk/blueprints";
-import { AGENTS } from "./packages/core/contracts";
-import { crewTokenEnv } from "./packages/core/src/crew/tokens";
-import { IDENTITY, PROJECT_NAME, VAULT, crew, crewMcpUrl } from "./naive/crew";
-import { MCP_SERVER_NAME } from "./packages/core/contracts";
+import {
+  IDENTITY,
+  PROJECT_NAME,
+  VAULT,
+  agentConfig,
+  credentialKey,
+  crew,
+  loadClientCrews,
+  skillFiles,
+} from "./naive/crew";
 
 const appUrl = process.env.APP_URL ?? "";
 if (!/^https:\/\//.test(appUrl) && process.env.NAIVE_CONFIG_ALLOW_LOCAL !== "1") {
@@ -19,36 +28,30 @@ if (!/^https:\/\//.test(appUrl) && process.env.NAIVE_CONFIG_ALLOW_LOCAL !== "1")
   );
 }
 
+const members = crew(appUrl, loadClientCrews());
+
 export default defineProject({
   name: PROJECT_NAME,
-  description: "Outrun: an autonomous growth crew for agent-native businesses.",
-  skills: AGENTS.map((a) => ({ slug: a, file: `naive/skills/${a}.md` })),
+  description: "Outrun: an agency of AI crews, one per client, run by a CEO agent.",
+  skills: skillFiles(),
   identities: [{ name: IDENTITY, description: "Outrun's crew persona" }],
   vaults: [
     {
       // Org-wide, not bound to the persona: sessions name no identity, and a persona-bound vault
       // is only used by sessions that carry that identity.
       name: VAULT,
-      credentials: AGENTS.map((a) => ({
+      credentials: members.map((a) => ({
         kind: "static_bearer" as const,
-        key: `crew-${a}`,
-        mcp_server_url: crewMcpUrl(appUrl, a),
-        value: { from_env: crewTokenEnv(a) },
+        key: credentialKey(a),
+        mcp_server_url: a.mcpUrl,
+        value: { from_env: a.tokenEnv },
       })),
     },
   ],
-  agents: crew(appUrl).map((a) => ({
-    name: a.name,
-    description: a.description,
-    model: a.model,
-    budget: a.budget,
-    system: a.system,
-    skills: a.skills,
+  // agentConfig is also what provision_client_crew POSTs for a self-serve client's crew.
+  agents: members.map((a) => ({
+    ...agentConfig(a),
     identity: IDENTITY,
-    tools: a.tools,
-    mcp_servers: [{ name: MCP_SERVER_NAME, url: a.mcpUrl }],
-    // No multiagent team (coming soon on Naive) and no handoffs; outrun.plan_day starts sessions.
-    handoffs: false as const,
     ...(a.schedule
       ? {
           schedules: [

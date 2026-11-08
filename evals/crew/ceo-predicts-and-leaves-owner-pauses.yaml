@@ -1,0 +1,49 @@
+name: the CEO predicts after setting focus, learns with numbers, and leaves an owner's pause alone
+agent: ceo
+seed: agency
+steps:
+  - tool: list_problems
+  - tool: set_client_focus
+    input: { clientId: "0190f0f0-0000-7000-8000-00000000a001", dailyDraftLimit: 12, reason: "3 of 20 replied" }
+  - tool: make_prediction
+    input:
+      clientId: "0190f0f0-0000-7000-8000-00000000a001"
+      decision: "focus 10 -> 12"
+      metric: replyRate
+      low: 0.08
+      high: 0.12
+      dueDays: 7
+  - tool: make_prediction
+    input:
+      clientId: "0190f0f0-0000-7000-8000-00000000a001"
+      decision: "a rate as a percent"
+      metric: replyRate
+      low: 8
+      high: 12
+      dueDays: 7
+  - tool: record_lesson
+    input: { clientId: null, lesson: "CFOs reply", evidence: "CFOs reply more" }
+  - tool: record_lesson
+    input:
+      clientId: "0190f0f0-0000-7000-8000-00000000a001"
+      lesson: "CFOs reply"
+      evidence: "CFO: 3 of 7 replied"
+      tags: [buyer-role]
+  - tool: resume_client
+    input: { clientId: "0190f0f0-0000-7000-8000-00000000a002", reason: "looks fine now" }
+  - tool: pause_client
+    input: { clientId: "0190f0f0-0000-7000-8000-00000000a002", reason: "take it over" }
+  - tool: ceo_track_record
+expect:
+  calls:
+    - { tool: list_problems, ok: true }
+    - { tool: set_client_focus, ok: true }
+    - { tool: make_prediction, ok: true }
+    - { tool: make_prediction, error: bad_request }
+    - { tool: record_lesson, error: bad_request }
+    - { tool: record_lesson, ok: true }
+    - { tool: resume_client, result: { ok: false } }
+    - { tool: pause_client, result: { ok: false } }
+    - { tool: ceo_track_record, result: { made: 1, scored: 0, hits: 0, hitRate: null } }
+  held: 0
+  notEnqueued: [start_session, send_email]

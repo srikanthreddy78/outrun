@@ -11,8 +11,9 @@ import {
   type CrewToolName,
   type ToolInput,
   type ToolOutput,
-  toolsForAgent,
+  toolsForMember,
 } from "../../contracts";
+import { OUTRUN_CLIENT_ID } from "../constants";
 import { AppError } from "../errors";
 import { scrubDeep } from "./scrub";
 import type { ToolContext } from "./types";
@@ -74,15 +75,15 @@ export class ToolRegistry {
     return this.tools.has(name);
   }
 
-  /** The tools this agent may call that have an implementation. */
-  forAgent(agent: AgentName): ToolDef[] {
-    return toolsForAgent(agent)
+  /** The tools this crew member may call that have an implementation. */
+  forAgent(agent: AgentName, clientId: string = OUTRUN_CLIENT_ID): ToolDef[] {
+    return toolsForMember(agent, clientId === OUTRUN_CLIENT_ID)
       .map((n) => this.tools.get(n))
       .filter((d): d is ToolDef => d !== undefined);
   }
 
   async call(agent: AgentName, name: string, rawInput: unknown, ctx: ToolContext): Promise<unknown> {
-    const allowed = toolsForAgent(agent) as string[];
+    const allowed = toolsForMember(agent, ctx.clientId === OUTRUN_CLIENT_ID) as string[];
     if (!allowed.includes(name)) throw new AppError("forbidden", `tool ${name} is not available to ${agent}`);
     const def = this.tools.get(name as CrewToolName);
     if (!def) throw new AppError("not_configured", `tool ${name} is not implemented yet`);

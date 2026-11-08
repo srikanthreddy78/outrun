@@ -30,6 +30,57 @@ describe("Naive client", () => {
     });
   });
 
+  it("provisions over REST: paged lists, keyed POSTs, and the new agent resolvable by name", async () => {
+    const f = vi.fn(async (u: string | URL | Request, i?: RequestInit) => {
+      const url = String(u);
+      if (url.includes("/v1/agents?") && !url.includes("after="))
+        return reply(200, { data: [{ id: "agt_a", name: "acme-sdr" }], has_more: true, next_cursor: "c1" });
+      if (url.includes("/v1/agents?")) return reply(200, { data: [], has_more: false });
+      if (i?.method === "POST" && url.endsWith("/v1/agents")) return reply(201, { id: "agt_new" });
+      if (url.includes("/v1/vaults?")) return reply(200, { data: [{ id: "vlt_1", name: "outrun-crew" }] });
+      if (url.includes("/credentials?"))
+        return reply(200, { data: [{ id: "cr1", kind: "static_bearer", key: "k" }] });
+      if (url.endsWith("/credentials")) return reply(201, { id: "cr2" });
+      if (url.endsWith("/v1/deployments")) return reply(201, { id: "dep_1" });
+      return reply(404, { error: { code: "not_found" } });
+    });
+    const c = createNaiveClient("sk_test", { fetch: f as unknown as typeof fetch });
+    expect(await c.listAgents()).toEqual([{ id: "agt_a", name: "acme-sdr" }]);
+    expect(String(f.mock.calls[1]![0])).toBe("https://api.vetta.sh/v1/agents?limit=100&after=c1");
+    const body = {
+      name: "acme-closer",
+      model: "vetta/auto",
+      budget: { cap_micro_usd: 1, max_task_micro_usd: 1, period: "day" as const },
+    };
+    expect(await c.createAgent(body, "provision:c:acme-closer")).toEqual({ id: "agt_new" });
+    const post = f.mock.calls.at(-1)!;
+    expect((post[1]!.headers as Record<string, string>)["idempotency-key"]).toBe("provision:c:acme-closer");
+    expect(JSON.parse(String(post[1]!.body))).toEqual(body);
+    expect(await c.resolveAgentId("acme-closer")).toBe("agt_new");
+    expect(await c.listVaults()).toEqual([{ id: "vlt_1", name: "outrun-crew" }]);
+    expect(await c.listCredentials("vlt_1")).toEqual([
+      { id: "cr1", kind: "static_bearer", key: "k", mcp_server_url: null },
+    ]);
+    await c.createCredential(
+      "vlt_1",
+      { kind: "static_bearer", key: "crew-acme-closer", value: "v", mcp_server_url: "https://x.dev/m" },
+      "k2",
+    );
+    expect(String(f.mock.calls.at(-1)![0])).toBe("https://api.vetta.sh/v1/vaults/vlt_1/credentials");
+    expect(
+      await c.createDeployment(
+        {
+          agent_id: "agt_new",
+          cron: "0 9 * * 1-5",
+          timezone: "UTC",
+          input_template: "go",
+          budget_micro_usd: 1,
+        },
+        "k3",
+      ),
+    ).toEqual({ id: "dep_1" });
+  });
+
   it("confirms a tool call; the key carries parked seq and decision, a reason only on deny", async () => {
     const f = vi.fn(async () => reply(202, { id: "ses_1", status: "running", pending_actions: [] }));
     const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
@@ -97,6 +148,24 @@ describe("Naive client", () => {
     expect(await c.resolveAgentId("sdr")).toBe("agt_s");
     expect(await c.resolveAgentId("orchestrator")).toBe("agt_o");
     expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps each client's crew apart by agent name and ignores agents that aren't ours", async () => {
+    const f = vi.fn().mockImplementation(async () =>
+      reply(200, {
+        data: [
+          { id: "agt_o_sdr", name: "sdr" },
+          { id: "agt_acme_sdr", name: "acme-sdr" },
+          { id: "agt_x", name: "someone-elses-bot" },
+        ],
+        has_more: false,
+      }),
+    );
+    const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
+    expect(await c.resolveAgentId("sdr")).toBe("agt_o_sdr");
+    expect(await c.resolveAgentId("acme-sdr")).toBe("agt_acme_sdr");
+    await expect(c.resolveAgentId("beta-sdr")).rejects.toMatchObject({ code: "not_configured" });
+    await expect(c.resolveAgentId("someone-elses-bot")).rejects.toMatchObject({ code: "not_configured" });
   });
 
   it("branches on error.code, never the message", async () => {

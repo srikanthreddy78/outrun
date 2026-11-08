@@ -1,8 +1,9 @@
-/** The four tools on the public MCP server (/api/mcp) that customers' agents call. */
+/** The five tools on the public MCP server (/api/mcp) that customers' agents call. */
 import { z } from "zod";
 import { Domain, Email, Id, IsoDateTime } from "./common";
 import { OrderState, PaidProductKey } from "./domain";
 import { ScoreResponse } from "./api";
+import { ClientSlug, ClientStatus } from "./clients";
 
 export const PUBLIC_TOOLS = {
   get_readiness_score: {
@@ -45,6 +46,23 @@ export const PUBLIC_TOOLS = {
       state: OrderState,
       reportUrl: z.url().nullable(),
       updatedAt: IsoDateTime,
+    }),
+  },
+  hire_agency: {
+    description:
+      "Hire Outrun's agency to run outbound marketing for a company: a free trial, no payment. The company gets its own crew of six agents, which drafts its profile from its site; Outrun's owner confirms the profile before anything is sent, and the approver gets a portal link to approve every email. Idempotent on the domain; the approver's email must be at that domain.",
+    input: z.object({
+      companyName: z.string().trim().min(1).max(80),
+      domain: Domain,
+      approverEmail: Email,
+    }),
+    output: z.object({
+      clientId: Id,
+      slug: ClientSlug,
+      status: ClientStatus,
+      /** false when the domain was already a client: nothing new was created. */
+      created: z.boolean(),
+      portalUrl: z.url(),
     }),
   },
 } as const;

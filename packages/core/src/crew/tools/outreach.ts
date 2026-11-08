@@ -16,13 +16,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
-import { FOLLOWUP_OFFSETS_DAYS, PRODUCTS } from "../../constants";
+import { confirmedClient } from "../../clients";
+import { FOLLOWUP_OFFSETS_DAYS, OUTRUN_CLIENT_ID, PRODUCTS } from "../../constants";
 import type { Db } from "../../db/client";
 import { companies, contacts, messages, orders, prospects, scans } from "../../db/schema";
 import { assertDemoRecipient } from "../../demo";
 import type { MxLookup } from "../../email/mx";
 import { effectiveSendCap, isSuppressed, sentToday } from "../../email/rules";
 import { AppError } from "../../errors";
+import { activeExperiment, freshestSignal, variantFor } from "../../experiments";
+import { lessonsFor } from "../../insights";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
 
@@ -69,7 +72,8 @@ export async function latestChecks(db: Db, domain: string) {
   return { scanId: s.id, score: s.score, checks };
 }
 
-async function prospectRow(db: Db, prospectId: string) {
+/** A prospect of this client's; another client's prospect is not found. */
+async function prospectRow(db: Db, prospectId: string, clientId: string) {
   const [r] = await db
     .select({
       prospect: prospects,
@@ -80,7 +84,7 @@ async function prospectRow(db: Db, prospectId: string) {
     .from(prospects)
     .innerJoin(companies, eq(prospects.companyId, companies.id))
     .leftJoin(contacts, eq(prospects.contactId, contacts.id))
-    .where(eq(prospects.id, prospectId));
+    .where(and(eq(prospects.id, prospectId), eq(prospects.clientId, clientId)));
   if (!r) throw new AppError("not_found", `prospect ${prospectId}`);
   return r;
 }
@@ -106,6 +110,44 @@ const PRICE_WORDS = new Set(
     .flatMap((n) => [String(n), n.toLocaleString("en-US")]),
 );
 
+/** The numbers in a client's listed prices ("$49/month" → 49), as the price check compares them. */
+export function priceWords(amounts: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const a of amounts)
+    for (const m of a.matchAll(/([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)) {
+      const v = m[1]!.replace(/\.00$/, "");
+      out.add(v);
+      out.add(v.replace(/,/g, ""));
+      const n = Number(v.replace(/,/g, ""));
+      if (Number.isFinite(n) && Number.isInteger(n)) out.add(n.toLocaleString("en-US"));
+    }
+  return out;
+}
+
+/** Fact keys as citations: lowercase, spaces and dots to underscores (what CheckId allows). */
+export const factCitation = (key: string): string =>
+  key
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 41);
+
+/** The hosts a client's email may link to: its own, its call to action, its listed hosts, the prospect's. */
+export function clientLinkHosts(
+  client: {
+    domain: string;
+    profile: { offer: { callToActionUrl: string }; allowedLinkHosts: readonly string[] };
+  },
+  prospectDomain: string,
+): string[] {
+  return [
+    client.domain,
+    new URL(client.profile.offer.callToActionUrl).hostname.replace(/^www\./, ""),
+    ...client.profile.allowedLinkHosts,
+    prospectDomain,
+  ];
+}
+
 /** The reasons a draft fails grounding; empty when it passes. Exported for the evals. */
 export function groundingProblems(opts: {
   subject: string;
@@ -116,30 +158,46 @@ export function groundingProblems(opts: {
   allowedHosts: readonly string[];
   /** Checkout session ids from this prospect's own orders: their Stripe links are allowed. */
   checkoutIds?: readonly string[];
+  /**
+   * A client's draft: citations are the prospect's saved fact keys (scanCheckIds holds them),
+   * and the only prices are the ones in the client's profile.
+   */
+  client?: { prices: ReadonlySet<string> };
 }): string[] {
   const out: string[] = [];
   const text = `${opts.subject}\n${opts.body}`;
-  if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
-    out.push("cite at least one check id from the latest scan (outrun.get_brief lists them)");
-  if (opts.citedCheckIds.length && !opts.scanCheckIds)
-    out.push("there is no scan for this domain yet; cite nothing");
-  for (const id of opts.citedCheckIds)
-    if (opts.scanCheckIds && !opts.scanCheckIds.has(id)) out.push(`${id} is not a check in the latest scan`);
+  const prices = opts.client?.prices ?? PRICE_WORDS;
+  if (opts.client) {
+    if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
+      out.push("cite at least one saved fact key about the prospect (outrun.get_brief lists them)");
+    for (const id of opts.citedCheckIds)
+      if (!opts.scanCheckIds?.has(id)) out.push(`${id} is not a fact saved for this prospect`);
+  } else {
+    if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
+      out.push("cite at least one check id from the latest scan (outrun.get_brief lists them)");
+    if (opts.citedCheckIds.length && !opts.scanCheckIds)
+      out.push("there is no scan for this domain yet; cite nothing");
+    for (const id of opts.citedCheckIds)
+      if (opts.scanCheckIds && !opts.scanCheckIds.has(id))
+        out.push(`${id} is not a check in the latest scan`);
+  }
   for (const m of text.matchAll(/\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)) {
     const v = m[1]!.replace(/\.00$/, "");
-    if (!PRICE_WORDS.has(v))
+    if (!prices.has(v))
       out.push(
-        `$${m[1]} is not a listed price; use only ${[...PRICE_WORDS]
-          .filter((p) => !p.includes(","))
-          .map((p) => `$${p}`)
-          .join(" or ")}`,
+        prices.size
+          ? `$${m[1]} is not a listed price; use only ${[...prices]
+              .filter((p) => !p.includes(","))
+              .map((p) => `$${p}`)
+              .join(" or ")}`
+          : `$${m[1]}: your client lists no prices; leave prices out`,
       );
   }
   if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(text))
     out.push("no email addresses in the email; recipients are fixed");
   for (const m of text.matchAll(/https?:\/\/([^\s/)>\]"']+)[^\s)>\]"']*/gi)) {
     const host = m[1]!.toLowerCase().replace(/^www\./, "");
-    if (host === "checkout.stripe.com") {
+    if (host === "checkout.stripe.com" && !opts.client) {
       if (!(opts.checkoutIds ?? []).some((id) => m[0].includes(id)))
         out.push("a Stripe link must be one outrun.create_checkout_link made for this prospect");
       continue;
@@ -152,12 +210,25 @@ export function groundingProblems(opts: {
   return [...new Set(out)];
 }
 
+/** The variant this prospect's emails are written for while the client runs an experiment. */
+async function assignedVariant(ctx: ToolContext, prospectId: string) {
+  if (ctx.clientId === OUTRUN_CLIENT_ID) return null;
+  const e = await activeExperiment(ctx.db, ctx.clientId);
+  if (!e) return null;
+  const key = await variantFor(ctx.db, ctx.clientId, prospectId);
+  const v = e.variants.find((x) => x.key === key);
+  return v ? { key: v.key, angle: v.angle, hypothesis: e.hypothesis } : null;
+}
+
 export function getBrief(deps: OutreachDeps) {
   return defineTool({
     name: "get_brief",
     handler: async ({ prospectId }, ctx) => {
-      const r = await prospectRow(ctx.db, prospectId);
-      const scan = await latestChecks(ctx.db, r.domain);
+      const r = await prospectRow(ctx.db, prospectId, ctx.clientId);
+      const client = await confirmedClient(ctx.db, ctx.clientId);
+      if (ctx.clientId !== OUTRUN_CLIENT_ID && !client)
+        throw new AppError("conflict", "your client's profile isn't confirmed yet; draft nothing");
+      const scan = client ? null : await latestChecks(ctx.db, r.domain);
       const prior = await ctx.db
         .select({
           direction: messages.direction,
@@ -169,8 +240,9 @@ export function getBrief(deps: OutreachDeps) {
         .where(and(eq(messages.prospectId, prospectId), inArray(messages.status, ["sent", "received"])))
         .orderBy(asc(messages.createdAt))
         .limit(20);
+      const signal = client ? freshestSignal(r.prospect.facts, ctx.now()) : null;
       const contact =
-        r.contact && !r.contact.suppressed
+        r.contact && (client || !r.contact.suppressed)
           ? { contactId: r.contact.id, name: r.contact.name, role: r.contact.role, email: r.contact.email }
           : null;
       return {
@@ -179,15 +251,36 @@ export function getBrief(deps: OutreachDeps) {
         contact,
         scanId: scan?.scanId ?? null,
         checks: scan?.checks ?? [],
-        facts: r.prospect.facts,
+        facts: client ? r.prospect.facts.map((f) => ({ ...f, key: factCitation(f.key) })) : r.prospect.facts,
         priorMessages: prior.map((m) => ({
           direction: m.direction,
           subject: m.subject,
           body: untrusted(m.body),
           at: m.at.toISOString(),
         })),
-        scoreUrl: `${deps.appUrl}/score/${r.domain}`,
-        offer: { product: OFFER, priceUsd: PRODUCTS[OFFER].priceUsd },
+        scoreUrl: client ? null : `${deps.appUrl}/score/${r.domain}`,
+        offer: client ? null : { product: OFFER, priceUsd: PRODUCTS[OFFER].priceUsd },
+        client: client
+          ? {
+              name: client.name,
+              pitch: client.profile.offer.pitch,
+              callToActionUrl: client.profile.offer.callToActionUrl,
+              prices: client.profile.offer.prices,
+              sender: client.profile.sender.name,
+              tone: client.profile.tone,
+            }
+          : null,
+        lessons: client ? await lessonsFor(ctx.db, ctx.clientId) : null,
+        signal: signal
+          ? {
+              factKey: factCitation(signal.fact.key),
+              kind: signal.kind,
+              summary: untrusted(signal.fact.value),
+              sourceUrl: signal.fact.sourceUrl,
+              date: signal.date,
+            }
+          : null,
+        variant: await assignedVariant(ctx, prospectId),
       };
     },
   });
@@ -197,10 +290,17 @@ export function checkDraft(deps: OutreachDeps) {
   return defineTool({
     name: "check_draft",
     handler: async (input, ctx) => {
-      const r = await prospectRow(ctx.db, input.prospectId);
+      const r = await prospectRow(ctx.db, input.prospectId, ctx.clientId);
+      const client = await confirmedClient(ctx.db, ctx.clientId);
       const reasons: string[] = [];
+      if (ctx.clientId !== OUTRUN_CLIENT_ID && !client)
+        reasons.push("your client's profile isn't confirmed yet; draft nothing");
+      // The contact flag is Outrun's own unsubscribe; a client checks its suppressions instead.
       if (!r.contact) reasons.push("this prospect has no contact yet");
-      else if (r.contact.suppressed || (await isSuppressed(ctx.db, r.contact.email)))
+      else if (
+        (!client && r.contact.suppressed) ||
+        (await isSuppressed(ctx.db, r.contact.email, ctx.clientId))
+      )
         reasons.push("the contact is suppressed; don't email them");
       if (["unsubscribed", "lost", "won"].includes(r.prospect.stage))
         reasons.push(`the prospect is ${r.prospect.stage}`);
@@ -235,24 +335,37 @@ export function checkDraft(deps: OutreachDeps) {
           .limit(1);
         if (already) reasons.push("a first email already went to this prospect; draft a follow-up instead");
       }
-      const scan = await latestChecks(ctx.db, r.domain);
+      const scan = client ? null : await latestChecks(ctx.db, r.domain);
       reasons.push(
-        ...groundingProblems({
-          subject: input.subject,
-          body: input.body,
-          kind: input.kind,
-          citedCheckIds: input.citedCheckIds,
-          scanCheckIds: scan ? new Set(scan.checks.map((c) => c.id)) : null,
-          allowedHosts: [new URL(deps.appUrl).hostname.replace(/^www\./, ""), r.domain],
-          checkoutIds: (
-            await ctx.db
-              .select({ id: orders.stripeCheckoutId })
-              .from(orders)
-              .where(eq(orders.prospectId, input.prospectId))
-          )
-            .map((o) => o.id)
-            .filter((id): id is string => !!id),
-        }),
+        ...(client
+          ? groundingProblems({
+              subject: input.subject,
+              body: input.body,
+              kind: input.kind,
+              citedCheckIds: input.citedCheckIds,
+              scanCheckIds: new Set(r.prospect.facts.map((f) => factCitation(f.key))),
+              allowedHosts: clientLinkHosts(client, r.domain),
+              client: { prices: priceWords(client.profile.offer.prices.map((p) => p.amount)) },
+            })
+          : []),
+        ...(client
+          ? []
+          : groundingProblems({
+              subject: input.subject,
+              body: input.body,
+              kind: input.kind,
+              citedCheckIds: input.citedCheckIds,
+              scanCheckIds: scan ? new Set(scan.checks.map((c) => c.id)) : null,
+              allowedHosts: [new URL(deps.appUrl).hostname.replace(/^www\./, ""), r.domain],
+              checkoutIds: (
+                await ctx.db
+                  .select({ id: orders.stripeCheckoutId })
+                  .from(orders)
+                  .where(eq(orders.prospectId, input.prospectId))
+              )
+                .map((o) => o.id)
+                .filter((id): id is string => !!id),
+            })),
       );
       if (r.contact && deps.settings.demo) {
         try {
@@ -275,6 +388,7 @@ export function checkDraft(deps: OutreachDeps) {
       const [m] = await ctx.db
         .insert(messages)
         .values({
+          clientId: ctx.clientId,
           prospectId: input.prospectId,
           contactId: r.contact!.id,
           threadId,
@@ -286,6 +400,8 @@ export function checkDraft(deps: OutreachDeps) {
           body: input.body,
           citedCheckIds: [...input.citedCheckIds],
           draftHash: hash,
+          variant:
+            input.kind === "reply" ? null : ((await assignedVariant(ctx, input.prospectId))?.key ?? null),
         })
         .returning({ id: messages.id });
       if (input.kind === "first" && ["filed", "researched"].includes(r.prospect.stage)) {
@@ -310,11 +426,24 @@ async function queueApprovedDraft(
   input: { draftId: string; hash: string },
   kinds: readonly ("first" | "followup" | "reply")[],
 ) {
-  const [m] = await ctx.db.select().from(messages).where(eq(messages.id, input.draftId));
+  const [m] = await ctx.db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.id, input.draftId), eq(messages.clientId, ctx.clientId)));
   if (!m || m.direction !== "outbound" || !kinds.includes(m.kind as never))
     throw new AppError("not_found", "no such draft for this tool");
-  if (m.status === "approved" || m.status === "sending" || m.status === "sent")
+  if (m.status === "sending" || m.status === "sent") return { messageId: m.id, status: "queued" as const };
+  if (m.status === "approved") {
+    // Naive's confirm event can be reconciled (marking it approved) before this call runs; the
+    // send still has to be queued. The job key makes a second enqueue a no-op.
+    await ctx.enqueue({
+      type: "send_email",
+      payload: { messageId: m.id },
+      idempotencyKey: `send:${m.id}`,
+      traceId: randomUUID(),
+    });
     return { messageId: m.id, status: "queued" as const };
+  }
   if (m.status !== "checked" && m.status !== "awaiting_approval")
     throw new AppError("conflict", `the draft is ${m.status}; check a new one`);
   const again = draftHash({
@@ -327,11 +456,11 @@ async function queueApprovedDraft(
   });
   if (input.hash !== m.draftHash || again !== m.draftHash)
     throw new AppError("conflict", "the draft changed after it was checked; run outrun.check_draft again");
-  if (!m.toEmail || (await isSuppressed(ctx.db, m.toEmail)))
+  if (!m.toEmail || (await isSuppressed(ctx.db, m.toEmail, ctx.clientId)))
     throw new AppError("forbidden", "the recipient is suppressed");
   const now = ctx.now();
-  const cap = await effectiveSendCap(ctx.db, deps.settings.sendDailyCap, now);
-  if ((await sentToday(ctx.db, now)) >= cap)
+  const cap = await effectiveSendCap(ctx.db, deps.settings.sendDailyCap, now, ctx.clientId);
+  if ((await sentToday(ctx.db, now, ctx.clientId)) >= cap)
     throw new AppError("rate_limited", "today's send cap is used; it resets tomorrow", {
       retryAfterSeconds: 3600,
     });
@@ -368,7 +497,7 @@ export const replyEmailTool = (deps: OutreachDeps) =>
   });
 
 /** Prospects due a follow-up: +3 then +7 days after the first email, no reply, not suppressed. */
-export async function dueFollowups(db: Db, now: Date, limit = 50) {
+export async function dueFollowups(db: Db, clientId: string, now: Date, limit = 50) {
   const rows = await db
     .select({
       prospectId: prospects.id,
@@ -379,12 +508,13 @@ export async function dueFollowups(db: Db, now: Date, limit = 50) {
     .innerJoin(contacts, eq(prospects.contactId, contacts.id))
     .where(
       and(
+        eq(prospects.clientId, clientId),
         eq(prospects.stage, "contacted"),
         eq(contacts.suppressed, false),
         sql`${prospects.followupStep} < ${FOLLOWUP_OFFSETS_DAYS.length}`,
         sql`not exists (select 1 from messages m where m.prospect_id = ${prospects.id} and m.direction = 'inbound')`,
         sql`not exists (select 1 from messages m where m.prospect_id = ${prospects.id} and m.kind = 'followup' and m.status in ('checked','awaiting_approval','approved','sending'))`,
-        sql`not exists (select 1 from suppressions s where s.value = lower(${contacts.email}) or s.value = split_part(lower(${contacts.email}), '@', 2))`,
+        sql`not exists (select 1 from suppressions s where (s.value = lower(${contacts.email}) or s.value = split_part(lower(${contacts.email}), '@', 2)) and (s.client_id is null or s.client_id = ${clientId}))`,
       ),
     )
     .orderBy(asc(prospects.lastContactedAt));
@@ -401,11 +531,11 @@ export async function dueFollowups(db: Db, now: Date, limit = 50) {
 
 export const listDueFollowups = defineTool({
   name: "list_due_followups",
-  handler: async ({ limit }, ctx) => ({ due: await dueFollowups(ctx.db, ctx.now(), limit) }),
+  handler: async ({ limit }, ctx) => ({ due: await dueFollowups(ctx.db, ctx.clientId, ctx.now(), limit) }),
 });
 
 export const followupsDueCount = async (ctx: ToolContext): Promise<number> =>
-  (await dueFollowups(ctx.db, ctx.now(), 1000)).length;
+  (await dueFollowups(ctx.db, ctx.clientId, ctx.now(), 1000)).length;
 
 export const getThread = defineTool({
   name: "get_thread",
@@ -413,7 +543,13 @@ export const getThread = defineTool({
     const rows = await ctx.db
       .select()
       .from(messages)
-      .where(and(eq(messages.threadId, threadId), inArray(messages.status, ["sent", "received"])))
+      .where(
+        and(
+          eq(messages.threadId, threadId),
+          eq(messages.clientId, ctx.clientId),
+          inArray(messages.status, ["sent", "received"]),
+        ),
+      )
       .orderBy(asc(messages.createdAt))
       .limit(50);
     const prospectId = rows.find((m) => m.prospectId)?.prospectId;
@@ -435,7 +571,7 @@ export const getThread = defineTool({
 export const markOutcome = defineTool({
   name: "mark_outcome",
   handler: async ({ prospectId, outcome, note }, ctx) => {
-    const r = await prospectRow(ctx.db, prospectId);
+    const r = await prospectRow(ctx.db, prospectId, ctx.clientId);
     // A paid or unsubscribed prospect keeps its stage; the closer can't undo either.
     const locked = ["won", "unsubscribed", "checkout_sent"].includes(r.prospect.stage) && outcome !== "lost";
     const stage = locked ? r.prospect.stage : outcome;
