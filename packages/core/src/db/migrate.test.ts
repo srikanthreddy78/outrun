@@ -12,13 +12,13 @@ describe("migrations", () => {
     await t?.drop();
   });
 
-  it("creates the ten tables on a fresh database", async () => {
+  it("creates the application tables on a fresh database", async () => {
     const r = await t.db.execute<{ table_name: string }>(
       sql`select table_name from information_schema.tables where table_schema = 'public' order by 1`,
     );
     const names = r.rows.map((x) => x.table_name);
     for (const name of TABLES) expect(names).toContain(name);
-    expect(TABLES).toHaveLength(10);
+    expect(TABLES).toHaveLength(11);
   });
 
   it("mints UUIDv7 ids and enforces one prospect per company", async () => {

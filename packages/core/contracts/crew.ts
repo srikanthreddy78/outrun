@@ -116,6 +116,16 @@ export const CREW_TOOLS = {
       scanId: Id.nullable(),
       status: z.enum(["queued", "cached"]),
       score: z.number().nullable(),
+      checks: z
+        .array(
+          z.object({
+            id: CheckId,
+            title: z.string(),
+            status: z.enum(["pass", "fail", "unknown", "gated"]),
+            evidence: z.string(),
+          }),
+        )
+        .nullable(),
     }),
   },
   get_brief: {
@@ -225,7 +235,7 @@ export const CREW_TOOLS = {
     description: "Crawled pages, wrapped as untrusted.",
     input: z.object({ orderId: Id, cursor: z.string().optional(), limit: Limit(20, 10) }),
     output: z.object({
-      pages: z.array(z.object({ url: z.url(), title: z.string(), content: Untrusted })),
+      pages: z.array(z.object({ url: z.url(), title: Untrusted, content: Untrusted })),
       nextCursor: z.string().nullable(),
     }),
   },

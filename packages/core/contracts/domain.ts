@@ -57,8 +57,8 @@ export type OrderState = z.infer<typeof OrderState>;
 export const OUTCOMES = ["interested", "not_now", "lost"] as const;
 export const Outcome = z.enum(OUTCOMES);
 
-/** A readiness check id from MT-2, e.g. `llms_txt`, `robots_ai_rules`. */
-export const CheckId = z.string().regex(/^[a-z][a-z0-9_]{1,40}$/);
+/** Readiness check ids from the public scanner and seeded fixtures. */
+export const CheckId = z.string().regex(/^[a-z][a-z0-9_-]{1,40}$/);
 export const CheckTier = z.enum(["critical", "important", "nice"]);
 
 export const ScanCheck = z.object({

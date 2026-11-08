@@ -104,6 +104,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       "invalid configuration:\n  STRIPE_SECRET_KEY: OUTRUN_DEMO needs a Stripe test-mode key",
     );
   }
+  if (Boolean(e.APIFY_TOKEN) !== Boolean(e.APIFY_WEBHOOK_SECRET)) {
+    throw new ConfigError(
+      "invalid configuration:\n  APIFY_TOKEN and APIFY_WEBHOOK_SECRET must be set together",
+    );
+  }
   return {
     env: e.NODE_ENV,
     isProd: e.NODE_ENV === "production",

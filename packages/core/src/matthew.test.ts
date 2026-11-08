@@ -10,6 +10,7 @@ import { ACCESS_TERMS_VERSION, PaidAccessManager } from "./audit/access";
 import { AuditPipeline, downloadAsset, renderReportPage } from "./audit/pipeline";
 import { ApifyClient, verifyApifyWebhookHeader } from "./integrations/apify";
 import { isAllowedTeamAccount, renderDashboard, summarizeLedger } from "./dashboard/views";
+import { CheckId } from "../contracts";
 
 const homepage =
   '<html><body><h1>Automate your customer support with agents</h1><p>Our platform helps teams answer questions and launch reliable workflows every day.</p><a href="/signup">Get started</a><a href="/contact">Contact</a><p>Trusted by customers</p><script type="application/ld+json">{"price":499}</script><script>gtag()</script></body></html>';
@@ -124,6 +125,7 @@ test("staged scan reports evidence, unknown checks, safe signup wall and supplie
   });
   assert.equal(full.state, "complete");
   assert.equal(full.checks.length, 19);
+  assert.equal(CheckId.parse("llms-txt"), "llms-txt");
   assert.equal(full.checks.find((check) => check.id === "rate-limit")?.status, "unknown");
   assert.equal(full.journey?.outcome, "signup-wall");
   assert.equal(full.scores.marketingEffectiveness?.visitToLead, 0.1);
@@ -304,14 +306,55 @@ test("Apify adapter caps public crawl and authenticates webhook header", async (
   const fakeFetch = async (input: string | URL | Request, init?: RequestInit) => {
     requests.push({ url: String(input), body: init?.body?.toString() });
     return new Response(
-      JSON.stringify(requests.length === 1 ? { data: { id: "run123" } } : [{ url: "https://example.com/" }]),
-      { status: 200 },
+      JSON.stringify(
+        requests.length === 1
+          ? { data: { id: "run123", defaultDatasetId: "dataset123" } }
+          : [{ url: "https://example.com/" }],
+      ),
+      { status: 200, headers: { "x-apify-pagination-total": "1" } },
     );
   };
-  const client = new ApifyClient("token", fakeFetch as typeof fetch);
-  assert.equal((await client.runActor("example.com")).runId, "run123");
+  const client = new ApifyClient("token", "secret", fakeFetch as typeof fetch);
+  assert.equal(
+    (
+      await client.runActor({
+        actorId: "apify~website-content-crawler",
+        input: {
+          startUrls: [{ url: "https://example.com/" }],
+          maxCrawlPages: 50,
+          maxResults: 50,
+          maxCrawlDepth: 3,
+          useSitemaps: false,
+        },
+        webhookUrl: "https://outrun.test/api/webhooks/apify",
+        idempotencyKey: "audit:order1",
+      })
+    ).runId,
+    "run123",
+  );
   assert.equal(JSON.parse(requests[0]?.body ?? "{}").maxCrawlPages, 50);
-  assert.equal((await client.getDataset("run123")).length, 1);
+  await assert.rejects(
+    client.runActor({
+      actorId: "apify~website-content-crawler",
+      input: {
+        startUrls: [{ url: "https://example.com/" }],
+        maxCrawlPages: 50,
+        maxResults: 50,
+        maxCrawlDepth: 3,
+        useSitemaps: false,
+        cookies: "private",
+      },
+      webhookUrl: "https://outrun.test/api/webhooks/apify",
+      idempotencyKey: "rejected",
+    }),
+  );
+  assert.equal(requests.length, 1);
+  const runUrl = new URL(requests[0]!.url);
+  assert.equal(runUrl.searchParams.get("maxItems"), "50");
+  const webhook = JSON.parse(Buffer.from(runUrl.searchParams.get("webhooks")!, "base64").toString())[0];
+  assert.equal(webhook.requestUrl, "https://outrun.test/api/webhooks/apify");
+  assert.equal(JSON.parse(webhook.headersTemplate)["x-outrun-apify-secret"], "secret");
+  assert.equal((await client.getDataset("dataset123", { offset: 0, limit: 10 })).items.length, 1);
   assert.equal(verifyApifyWebhookHeader("secret", "secret"), true);
   assert.equal(verifyApifyWebhookHeader("wrong", "secret"), false);
 });

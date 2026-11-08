@@ -4,6 +4,7 @@ import { logger } from "@outrun/core/log";
 import type { Handlers } from "@outrun/core/queue";
 import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { naiveHandlers } from "./jobs/naive";
+import { auditHandlers } from "./jobs/audit";
 import { stubHandlers } from "./stubs";
 
 export interface Worker {
@@ -29,7 +30,7 @@ export interface StartOptions {
 
 /** The real handlers merged so far. Each card adds its jobs here. */
 export function realHandlers(rt: Runtime): Handlers {
-  return { ...naiveHandlers(rt) };
+  return { ...naiveHandlers(rt), ...auditHandlers(rt) };
 }
 
 export async function startWorker(opts: StartOptions): Promise<Worker> {

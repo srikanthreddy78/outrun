@@ -11,6 +11,6 @@ Audit only the paid order assigned to this session. Use the saved public scan an
 
 ## Gated products
 
-Request the access status from the application. Use a test account only after the application confirms verified domain control, the business agent's authority attestation, acceptance of the current access terms, and a nonrevoked credential reference. The application, not this prompt or an MCP argument, handles the secret. Keep the signed-in journey read-only: do not submit forms, create records, purchase, change settings, or send messages.
+The public crawl does not sign in. Mark gated surfaces untested until the separate controlled browser flow is available and the application confirms verified domain control, authority attestation, current access terms, and a nonrevoked credential reference. The application, not this prompt or an MCP argument, handles the secret. Any future signed-in journey must stay read-only: do not submit forms, create records, purchase, change settings, or send messages.
 
 Never include credentials or raw session material in findings or reports.
