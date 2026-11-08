@@ -10,13 +10,13 @@
  * before the owner confirms its profile, and every email still waits for the approver.
  */
 import { randomUUID } from "node:crypto";
-import { and, count, eq, gte, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { Domain, Email, slugify, type ClientStatus, type JobType } from "../contracts";
 import { addClient } from "./clients";
 import { OUTRUN_CLIENT_ID, SELF_SERVE_CALLER_LIMIT_PER_HOUR, SELF_SERVE_DAILY_CAP } from "./constants";
 import type { Db } from "./db/client";
-import { clients, events } from "./db/schema";
+import { clientUsers, clients, events } from "./db/schema";
 import { AppError } from "./errors";
 import type { Emit } from "./events";
 import type { SendTransactionalFn } from "./integrations/types";
@@ -38,8 +38,58 @@ export interface SelfServeDeps {
   now?: () => Date;
 }
 
+/** Mail and hosting domains many people share: an inbox there proves nothing about a company. */
+const SHARED_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "pm.me",
+  "gmx.com",
+  "gmx.net",
+  "mail.com",
+  "yandex.com",
+  "zoho.com",
+  "fastmail.com",
+  "hey.com",
+  "tutanota.com",
+  "qq.com",
+  "163.com",
+]);
+const SHARED_HOSTS = [
+  "vercel.app",
+  "netlify.app",
+  "github.io",
+  "herokuapp.com",
+  "pages.dev",
+  "web.app",
+  "firebaseapp.com",
+  "onrender.com",
+  "fly.dev",
+  "workers.dev",
+  "glitch.me",
+  "replit.app",
+];
+export const isSharedDomain = (domain: string) =>
+  SHARED_DOMAINS.has(domain) || SHARED_HOSTS.some((h) => domain === h || domain.endsWith(`.${h}`));
+
 export const HireInput = z.object({
-  companyName: z.string().trim().min(1).max(80),
+  // Plain names only: this text reaches the crew's system prompts and the owner's dashboard.
+  companyName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(/^[\p{L}\p{N} .,&'()+-]+$/u, "letters, numbers and simple punctuation only"),
   domain: Domain,
   approverEmail: Email,
 });
@@ -81,16 +131,53 @@ export async function hireAgency(deps: SelfServeDeps, raw: unknown, via: HireVia
     throw new AppError("bad_request", "that's Outrun's own domain");
   if (!ownDomain(input.approverEmail, input.domain))
     throw new AppError("bad_request", `the approver's email must be at ${input.domain}`);
-
-  // A known domain returns the client as it is: no new approver, no new crew, no email.
-  const existing = await byDomain(deps.db, input.domain);
-  if (existing) return { ...existing, created: false, portalUrl };
+  if (isSharedDomain(input.domain))
+    throw new AppError("bad_request", "use your company's own domain, not a shared mail or hosting one");
 
   const since = (ms: number) => new Date(now.getTime() - ms);
+  const existing = await byDomain(deps.db, input.domain);
+  if (existing) {
+    // A self-serve signup nobody has verified yet doesn't own the domain: another approver at
+    // that domain may claim it, and whoever signs in first starts the crew.
+    if (await unverifiedSignup(deps.db, existing.clientId)) {
+      const [known] = await deps.db
+        .select({ id: clientUsers.id })
+        .from(clientUsers)
+        .where(and(eq(clientUsers.clientId, existing.clientId), eq(clientUsers.email, input.approverEmail)));
+      if (!known) await callerLimit(deps.db, via.caller, since(3_600_000));
+      const added = known
+        ? []
+        : await deps.db
+            .insert(clientUsers)
+            .values({ clientId: existing.clientId, email: input.approverEmail })
+            .onConflictDoNothing()
+            .returning({ id: clientUsers.id });
+      if (added[0]) {
+        await deps.emit({
+          actor: "web",
+          type: "client.claimed",
+          entityType: "client",
+          entityId: existing.clientId,
+          payload: { via: via.channel, caller: via.caller },
+        });
+        await sendLink(deps, input.approverEmail);
+      }
+    }
+    return { ...existing, created: false, portalUrl };
+  }
+
+  // Signups that were never verified stop counting after an hour, so junk can't fill the day.
   const [today] = await deps.db
     .select({ n: count() })
     .from(events)
-    .where(and(eq(events.type, "client.signed_up"), gte(events.ts, since(86_400_000))));
+    .where(
+      and(
+        eq(events.type, "client.signed_up"),
+        gte(events.ts, since(86_400_000)),
+        sql`(${events.ts} >= ${since(3_600_000).toISOString()} or exists (select 1 from events v
+          where v.type = 'client.approver_verified' and v.entity_type = 'client' and v.entity_id = ${events.entityId}))`,
+      ),
+    );
   if (Number(today?.n ?? 0) >= SELF_SERVE_DAILY_CAP)
     throw new AppError(
       "rate_limited",
@@ -99,20 +186,7 @@ export async function hireAgency(deps: SelfServeDeps, raw: unknown, via: HireVia
         retryAfterSeconds: 86_400,
       },
     );
-  const [mine] = await deps.db
-    .select({ n: count() })
-    .from(events)
-    .where(
-      and(
-        eq(events.type, "client.signed_up"),
-        gte(events.ts, since(3_600_000)),
-        sql`${events.payload}->>'caller' = ${via.caller}`,
-      ),
-    );
-  if (Number(mine?.n ?? 0) >= SELF_SERVE_CALLER_LIMIT_PER_HOUR)
-    throw new AppError("rate_limited", "one new client per caller per hour; try again later", {
-      retryAfterSeconds: 3600,
-    });
+  await callerLimit(deps.db, via.caller, since(3_600_000));
 
   const c = await add(deps, input);
   if (!c) {
@@ -130,6 +204,12 @@ export async function hireAgency(deps: SelfServeDeps, raw: unknown, via: HireVia
   });
   // The crew starts only once the approver signs in from that email (startVerifiedCrews), so
   // a signup for a domain the caller doesn't control costs nothing and reaches no one else.
+  await sendLink(deps, input.approverEmail);
+  return { clientId: c.id, slug: c.slug, status: c.status, created: true, portalUrl };
+}
+
+/** The approver's sign-in link; they can ask again at /portal if it fails. */
+async function sendLink(deps: SelfServeDeps, email: string) {
   await requestPortalLink(
     {
       db: deps.db,
@@ -138,9 +218,42 @@ export async function hireAgency(deps: SelfServeDeps, raw: unknown, via: HireVia
       secret: deps.secret,
       ...(deps.now ? { now: deps.now } : {}),
     },
-    input.approverEmail,
-  ).catch(() => ({ sent: false })); // The approver can ask again at /portal.
-  return { clientId: c.id, slug: c.slug, status: c.status, created: true, portalUrl };
+    email,
+  ).catch(() => ({ sent: false }));
+}
+
+/** One new signup or claim per caller per hour. */
+async function callerLimit(db: Db, caller: string, since: Date) {
+  const [mine] = await db
+    .select({ n: count() })
+    .from(events)
+    .where(
+      and(
+        inArray(events.type, ["client.signed_up", "client.claimed"]),
+        gte(events.ts, since),
+        sql`${events.payload}->>'caller' = ${caller}`,
+      ),
+    );
+  if (Number(mine?.n ?? 0) >= SELF_SERVE_CALLER_LIMIT_PER_HOUR)
+    throw new AppError("rate_limited", "one new client per caller per hour; try again later", {
+      retryAfterSeconds: 3600,
+    });
+}
+
+/** A self-serve client whose approver hasn't signed in yet. */
+async function unverifiedSignup(db: Db, clientId: string): Promise<boolean> {
+  const marks = await db
+    .select({ type: events.type })
+    .from(events)
+    .where(
+      and(
+        eq(events.entityType, "client"),
+        eq(events.entityId, clientId),
+        inArray(events.type, ["client.signed_up", "client.approver_verified"]),
+      ),
+    );
+  const types = new Set(marks.map((m) => m.type));
+  return types.has("client.signed_up") && !types.has("client.approver_verified");
 }
 
 async function byDomain(db: Db, domain: string) {
@@ -197,6 +310,14 @@ export async function startVerifiedCrews(
       );
     const types = new Set(marks.map((m) => m.type));
     if (!types.has("client.signed_up") || types.has("client.approver_verified")) continue;
+    // No more than the day's cap of new crews, however many signups verify.
+    const [started24h] = await deps.db
+      .select({ n: count() })
+      .from(events)
+      .where(
+        and(eq(events.type, "client.approver_verified"), gte(events.ts, new Date(Date.now() - 86_400_000))),
+      );
+    if (Number(started24h?.n ?? 0) >= SELF_SERVE_DAILY_CAP) continue;
     await deps.emit({
       actor: `client:${email.trim().toLowerCase()}`,
       type: "client.approver_verified",
