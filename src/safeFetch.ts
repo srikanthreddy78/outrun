@@ -20,7 +20,9 @@ export class UnsafeUrlError extends Error {}
 export class ResponseLimitError extends Error {}
 export type Resolver = (hostname: string) => Promise<Array<{ address: string; family: 4 | 6 }>>;
 export type SafeResponse = { url: string; status: number; headers: Record<string, string>; body: string };
-export type SafeFetchOptions = { resolver?: Resolver; maxBytes?: number; timeoutMs?: number; maxRedirects?: number; transport?: (url: URL, pinnedAddress: string) => Promise<SafeResponse>; signal?: AbortSignal };
+export type SafeFetchOptions = { resolver?: Resolver; maxBytes?: number; timeoutMs?: number; maxRedirects?: number; transport?: (url: URL, pinnedAddress: string) => Promise<SafeResponse>; signal?: AbortSignal;
+  /** Test only: treat this loopback address as public and connect to it on this port, so tests can drive the real request path. */
+  allowLoopbackForTests?: { address: '127.0.0.1' | '::1'; port: number } };
 
 export function isPublicIp(address: string): boolean {
   const family = isIP(address);
@@ -53,10 +55,11 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
       if (options.signal?.aborted) reject(options.signal.reason);
       else options.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true });
     })]);
-  if (!entries.length || entries.some(entry => !isPublicIp(entry.address) || entry.family !== isIP(entry.address))) {
+  const allowed = (address: string) => isPublicIp(address) || address === options.allowLoopbackForTests?.address;
+  const pinned = entries[0];
+  if (!pinned || entries.some(entry => !allowed(entry.address) || entry.family !== isIP(entry.address))) {
     throw new UnsafeUrlError('DNS returned a non-public address');
   }
-  const pinned = entries[0];
   const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
   if (options.transport) return options.transport(url, pinned.address);
   const transport = url.protocol === 'https:' ? httpsRequest : httpRequest;
@@ -64,7 +67,9 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
     const req = transport(url, {
       method: 'GET', timeout: options.timeoutMs ?? 10_000, signal: options.signal,
       headers: { 'User-Agent': 'AGA-Readiness-Scanner/1.0', Accept: 'text/html,text/plain,application/json,application/xml,*/*;q=0.1' },
-      lookup: (_host, _opts, cb) => cb(null, pinned.address, pinned.family),
+      ...(options.allowLoopbackForTests ? { port: options.allowLoopbackForTests.port } : {}),
+      // Node >= 20 calls lookup with { all: true } and expects an array of addresses.
+      lookup: (_host, opts, cb) => opts && opts.all ? cb(null, [{ address: pinned.address, family: pinned.family }]) : cb(null, pinned.address, pinned.family),
     }, response => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -87,7 +92,9 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
 
 export async function safeFetch(input: string, options: SafeFetchOptions = {}): Promise<SafeResponse> {
   let url = validatePublicUrl(input);
-  const signal = options.signal ?? AbortSignal.timeout(options.timeoutMs ?? 10_000);
+  if (options.allowLoopbackForTests && !['127.0.0.1', '::1'].includes(options.allowLoopbackForTests.address)) throw new UnsafeUrlError('Test override is loopback only');
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? 10_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
   const bounded = { ...options, signal };
   for (let redirects = 0; ; redirects++) {
     if (signal.aborted) throw signal.reason;
