@@ -37,7 +37,11 @@ describe("Naive client", () => {
         return reply(200, { data: [{ id: "agt_a", name: "acme-sdr" }], has_more: true, next_cursor: "c1" });
       if (url.includes("/v1/agents?")) return reply(200, { data: [], has_more: false });
       if (i?.method === "POST" && url.endsWith("/v1/agents")) return reply(201, { id: "agt_new" });
-      if (url.includes("/v1/vaults?")) return reply(200, { data: [{ id: "vlt_1", name: "outrun-crew" }] });
+      if (url.includes("/v1/vaults?"))
+        return reply(200, {
+          // The live API's shape: the vault's name is display_name.
+          data: [{ id: "vlt_1", object: "vault", identity_id: null, display_name: "outrun-crew" }],
+        });
       if (url.includes("/credentials?"))
         return reply(200, { data: [{ id: "cr1", kind: "static_bearer", key: "k" }] });
       if (url.endsWith("/credentials")) return reply(201, { id: "cr2" });

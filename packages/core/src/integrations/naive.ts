@@ -276,8 +276,9 @@ export function createNaiveClient(
     },
 
     async listVaults() {
-      const rows = await listAll<{ id: string; name: string }>("/v1/vaults");
-      return rows.map((v) => ({ id: v.id, name: v.name }));
+      // Naive names a vault `display_name` (seen on the live API); older responses used `name`.
+      const rows = await listAll<{ id: string; name?: string; display_name?: string }>("/v1/vaults");
+      return rows.map((v) => ({ id: v.id, name: v.display_name ?? v.name ?? "" }));
     },
 
     async listCredentials(vaultId) {
