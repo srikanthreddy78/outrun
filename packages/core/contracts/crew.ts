@@ -4,7 +4,7 @@
  * `naive.config.test.ts` fails if they drift. Changes need all three approvals.
  */
 import { z } from "zod";
-import { ClientProfile, ClientStatus, ProfileChanges } from "./clients";
+import { ClientProfile, ClientStatus, GOAL_METRICS, ProfileChanges } from "./clients";
 import { Domain, Email, Id, IsoDateTime, Untrusted } from "./common";
 import {
   CheckId,
@@ -89,7 +89,28 @@ const VariantResult = z.object({
   interested: z.number().int().nonnegative(),
   replyRate: z.number().min(0).max(1),
 });
+/** A client's goal and how far along it is; counted by code (goalProgress). */
+const GoalProgress = z.object({
+  metric: z.enum(GOAL_METRICS),
+  target: z.number().int().positive(),
+  by: z.string(),
+  current: z.number().int().nonnegative(),
+  met: z.boolean(),
+  onTrack: z.boolean(),
+});
 const Limit = (max: number, def: number) => z.number().int().min(1).max(max).default(def);
+/** A lesson in the CEO's playbook (ceo.lesson events). */
+const PlaybookLesson = z.object({
+  lessonId: Id,
+  clientId: Id.nullable(),
+  lesson: z.string(),
+  evidence: z.string(),
+  tags: z.array(z.string()),
+  at: IsoDateTime,
+});
+/** What a CEO prediction is about: client_insights' numbers. */
+export const PREDICTION_METRICS = ["replyRate", "interestRate", "sent", "wins"] as const;
+const PredictionMetric = z.enum(PREDICTION_METRICS);
 
 export const CREW_TOOLS = {
   pipeline_status: {
@@ -617,6 +638,257 @@ export const CREW_TOOLS = {
       winner: z.enum(["A", "B", "none"]),
       variants: z.array(VariantResult),
     }),
+  },
+  record_lesson: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Writes a lesson to the agency's playbook, for one client (clientId) or agency-wide (clientId null), with the numbers behind it. Later runs read it back with outrun.read_playbook.",
+    input: z.object({
+      clientId: Id.nullable().default(null),
+      lesson: z.string().min(1).max(300),
+      evidence: z
+        .string()
+        .min(1)
+        .max(300)
+        .refine((s) => /\d/.test(s), "evidence needs numbers from a tool result"),
+      tags: z.array(z.string().min(1).max(40)).max(8).default([]),
+    }),
+    output: z.object({ lessonId: Id }),
+  },
+  read_playbook: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "The playbook for one client: its own lessons (newest 20), agency-wide lessons, lessons from the most similar clients (by ICP keywords and buyer roles, with a 0-1 similarity) and experiment results. A new client starts from the agency and similar clients' lessons. Read-only.",
+    input: z.object({ clientId: Id }),
+    output: z.object({
+      clientId: Id,
+      own: z.array(PlaybookLesson),
+      agency: z.array(PlaybookLesson),
+      similar: z.array(
+        z.object({
+          clientId: Id,
+          slug: z.string(),
+          similarity: z.number().min(0).max(1),
+          lessons: z.array(PlaybookLesson),
+        }),
+      ),
+      experiments: z.array(
+        z.object({
+          clientId: Id.nullable(),
+          lesson: z.string(),
+          winner: z.string().nullable(),
+          at: IsoDateTime,
+        }),
+      ),
+    }),
+  },
+  make_prediction: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Records what you expect a decision to do for one client: a metric (replyRate and interestRate as fractions 0-1, sent and wins as counts) between low and high within dueDays. Our code scores it when due; outrun.ceo_track_record shows how you did.",
+    input: z
+      .object({
+        clientId: Id,
+        decision: z.string().min(1).max(200),
+        metric: PredictionMetric,
+        low: z.number().min(0),
+        high: z.number().min(0),
+        dueDays: z.number().int().min(1).max(30),
+      })
+      .refine((p) => p.low <= p.high, "low must not exceed high")
+      .refine(
+        (p) => (p.metric !== "replyRate" && p.metric !== "interestRate") || p.high <= 1,
+        "replyRate and interestRate are fractions from 0 to 1",
+      ),
+    output: z.object({ predictionId: Id, dueAt: IsoDateTime }),
+  },
+  ceo_track_record: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "How your predictions did: how many you made, how many are scored, the hits and hit rate, and the last 10 with the predicted range against the actual value.",
+    input: z.object({}),
+    output: z.object({
+      made: z.number().int().nonnegative(),
+      scored: z.number().int().nonnegative(),
+      hits: z.number().int().nonnegative(),
+      hitRate: z.number().min(0).max(1).nullable(),
+      recent: z.array(
+        z.object({
+          predictionId: Id,
+          clientId: Id,
+          decision: z.string(),
+          metric: PredictionMetric,
+          low: z.number(),
+          high: z.number(),
+          dueAt: IsoDateTime,
+          actual: z.number().nullable(),
+          hit: z.boolean().nullable(),
+        }),
+      ),
+    }),
+  },
+  list_problems: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "What is broken across the agency: dead jobs (with ids, type and how often replayed), alerts raised in the last 24 hours, paused clients and who paused them, clients whose sending is paused by bounces or complaints, emails stuck in sending, and the clients that need attention. Read-only.",
+    input: z.object({}),
+    output: z.object({
+      health: z.object({ db: z.boolean(), migrations: z.boolean(), queue: z.boolean() }),
+      deadJobs: z.array(
+        z.object({
+          jobId: Id,
+          type: z.string(),
+          at: IsoDateTime,
+          replays: z.number().int().nonnegative(),
+          replayable: z.boolean(),
+        }),
+      ),
+      alerts: z.array(
+        z.object({ kind: z.string(), entity: z.string(), summary: z.string(), at: IsoDateTime }),
+      ),
+      pausedClients: z.array(
+        z.object({ clientId: Id, slug: z.string(), pausedBy: z.enum(["ceo", "owner", "system"]) }),
+      ),
+      sendingPaused: z.array(
+        z.object({
+          clientId: Id,
+          slug: z.string(),
+          reason: z.string().nullable(),
+          bounceRate: z.number(),
+        }),
+      ),
+      stuckSending: z.array(z.object({ messageId: Id, clientId: Id, since: IsoDateTime })),
+      attention: z.array(z.object({ clientId: Id, slug: z.string(), reason: z.string() })),
+    }),
+  },
+  replay_job: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Replays a dead job from outrun.list_problems through the same path as the dashboard's Replay button. Dead jobs of the replayable types only, at most 3 times per job.",
+    input: z.object({ jobId: Id }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), type: z.string(), replays: z.number().int() }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  pause_client: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Pauses a client's crew (its tools stop and you stop kicking it), with a reason. Never Outrun's own. Deletes nothing; outrun.resume_client undoes it.",
+    input: z.object({ clientId: Id, reason: z.string().min(1).max(300) }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), status: ClientStatus }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  resume_client: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Resumes a client you paused yourself, with a reason. Refuses a pause the owner made or an automatic one (bounces, complaints): only the owner lifts those.",
+    input: z.object({ clientId: Id, reason: z.string().min(1).max(300) }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), status: ClientStatus }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  save_board_memo: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Saves the weekly board memo for the owner (KPIs, decisions, asks); our code emails it to the owner in a fixed template. One per ISO week.",
+    input: z.object({
+      kpis: z.string().min(1).max(1500),
+      decisions: z.string().min(1).max(1500),
+      asks: z.string().min(1).max(800),
+    }),
+    output: z.object({ saved: z.boolean(), week: z.string(), reason: z.string().nullable() }),
+  },
+  staff_client: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Adds optional roles (account_manager, signal_scout, experimenter) to a client's crew and provisions their agents. Never removes a role. Not for Outrun's own crew.",
+    input: z.object({
+      clientId: Id,
+      add: z.array(OptionalClientRoleName).min(1).max(3),
+      reason: z.string().min(1).max(300),
+    }),
+    output: z.object({
+      roles: z.array(ClientRoleName),
+      added: z.array(OptionalClientRoleName),
+      provisioning: z.boolean(),
+    }),
+  },
+  client_goal: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "A client's confirmed goal (interested replies, meetings or customers by a date), counted by code: current, met and on track. Null when it has none.",
+    input: z.object({ clientId: Id }),
+    output: z.object({ clientId: Id, goal: GoalProgress.nullable() }),
+  },
+  mark_goal_met: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Records that a client met its goal and moves its crew to maintenance (the lowest daily first emails). Refuses unless outrun.client_goal says met.",
+    input: z.object({ clientId: Id }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), dailyDraftLimit: z.number().int() }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  client_weekly_report: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description:
+      "Builds your client's weekly report in code (its numbers and goal) with your short note, saves it to the client's portal, and tells the client's approvers by a fixed notice. No links in the note.",
+    input: z.object({ note: z.string().trim().min(1).max(600).optional() }),
+    output: z.object({
+      reportId: Id,
+      report: z.object({
+        day: z.string(),
+        since: IsoDateTime,
+        sent: z.number().int().nonnegative(),
+        replies: z.number().int().nonnegative(),
+        won: z.number().int().nonnegative(),
+        approvalsWaiting: z.number().int().nonnegative(),
+        stages: z.record(ProspectStage, z.number().int().nonnegative()),
+        goal: GoalProgress.nullable(),
+        note: z.string().nullable(),
+      }),
+      notified: z.number().int().nonnegative(),
+    }),
+  },
+  client_questions: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description: "Questions your client asked in its portal, newest first, the text wrapped as untrusted.",
+    input: z.object({ limit: Limit(20, 10), unansweredOnly: z.boolean().default(true) }),
+    output: z.object({
+      questions: z.array(
+        z.object({ questionId: Id, question: Untrusted, at: IsoDateTime, answered: z.boolean() }),
+      ),
+    }),
+  },
+  answer_client: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description:
+      "Answers one portal question; the client sees it in its portal. Rejects prices not in the profile, links off the client's own hosts and email addresses.",
+    input: z.object({ questionId: Id, answer: z.string().trim().min(1).max(2000) }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true) }),
+      z.object({ ok: z.literal(false), reasons: z.array(z.string()).min(1) }),
+    ]),
   },
 } as const satisfies Record<
   string,

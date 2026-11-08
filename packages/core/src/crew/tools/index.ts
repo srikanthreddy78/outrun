@@ -8,6 +8,7 @@ import { auditTools } from "./audit";
 import { scanDomainTool } from "./scan_domain";
 import { ping } from "./ping";
 import { agencyTools } from "./agency";
+import { accountManagerTools } from "./account_manager";
 import { pipelineStatus, type FollowupsDue, type PipelineSettings } from "./pipeline_status";
 import { planDay } from "./plan_day";
 import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
@@ -48,6 +49,7 @@ export function allTools(opts: {
   return [
     ping,
     ...agencyTools,
+    ...accountManagerTools,
     pipelineStatus(opts.settings, followupsDue),
     planDay(opts.settings, followupsDue),
     scanDomainTool,

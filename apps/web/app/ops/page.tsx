@@ -1,4 +1,5 @@
 import { autonomyReport } from "@outrun/core/autonomy";
+import { trackRecord } from "@outrun/core/brain";
 import { agencyOverview } from "@outrun/core/crew/tools/agency";
 import { getRuntime } from "../../lib/runtime";
 import { AutoRefresh } from "../dashboard/_components/AutoRefresh";
@@ -23,16 +24,25 @@ type OpsData = {
   now: Date;
   r: Awaited<ReturnType<typeof autonomyReport>>;
   overview: Awaited<ReturnType<typeof agencyOverview>>;
+  record: { made: number; scored: number; hits: number; hitRate: number | null };
 };
 async function load(): Promise<OpsData> {
   const rt = await getRuntime();
   const now = new Date();
-  const [r, overview] = await Promise.all([
+  const [r, overview, t] = await Promise.all([
     autonomyReport(rt.db.db, { since: new Date(now.getTime() - WEEK), until: now, redact: true }),
     agencyOverview(rt.db.db, now),
+    trackRecord(rt.db.db),
   ]);
+  // Numbers only: the predictions' decisions are the CEO's free text.
+  const record = { made: t.made, scored: t.scored, hits: t.hits, hitRate: t.hitRate };
   // Publicly, only clients the owner confirmed: a fresh signup's name and domain are its own text.
-  return { now, r, overview: { ...overview, clients: overview.clients.filter((c) => c.profileConfirmed) } };
+  return {
+    now,
+    r,
+    record,
+    overview: { ...overview, clients: overview.clients.filter((c) => c.profileConfirmed) },
+  };
 }
 function opsData(): Promise<OpsData> {
   const t = Date.now();
@@ -48,7 +58,7 @@ function opsData(): Promise<OpsData> {
 
 /** Public scoreboard, no login: the redacted autonomy report for the last 7 days. */
 export default async function OpsPage() {
-  const { now, r, overview } = await opsData();
+  const { now, r, overview, record } = await opsData();
   const { counts, deliveries: d, spend } = r;
   const pct = (n: number) => (counts.total ? (n / counts.total) * 100 : 0);
   const tiles: [string, number][] = [
@@ -134,6 +144,12 @@ export default async function OpsPage() {
               <span>{label}</span>
             </div>
           ))}
+          <div className="ops-tile" key="ceo-track-record">
+            <strong>{record.hitRate === null ? "—" : `${Math.round(record.hitRate * 100)}%`}</strong>
+            <span>
+              CEO track record: {record.hits} of {record.scored} predictions hit
+            </span>
+          </div>
         </div>
       </section>
 
