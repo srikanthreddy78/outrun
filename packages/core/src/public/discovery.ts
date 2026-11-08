@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { PUBLIC_TOOLS, ScoreQuery, ScoreResponse, ErrorBody, type PublicToolName } from "../../contracts";
-import { PRODUCTS } from "../constants";
+import { AGENT_PAYMENTS_ENABLED, PRODUCTS } from "../constants";
 
 const TOOLS = Object.keys(PUBLIC_TOOLS) as PublicToolName[];
 const paid = [PRODUCTS.auditKit, PRODUCTS.growth];
@@ -33,7 +33,11 @@ ${paid.map((p) => `- ${p.name} (\`${p.key}\`): ${price(p)}. ${p.deliverables.joi
 ## How to buy
 1. \`get_quote\` with your domain and a package.
 2. \`buy_audit\` with your domain, the package, a contact email for the report, and your own idempotencyKey. Repeat calls with the same key return the same order.
-3. Pay at the returned checkoutUrl (Stripe Checkout).
+3. Pay at the returned checkoutUrl (Stripe Checkout).${
+    AGENT_PAYMENTS_ENABLED
+      ? " An agent with a Stripe Shared Payment Token can pass it as sharedPaymentToken on buy_audit for the Audit + Kit instead; checkoutUrl is then the status page."
+      : ""
+  }
 4. Poll \`get_order_status\` until the state is \`delivered\`; it then carries the report link.
 
 ## Limits

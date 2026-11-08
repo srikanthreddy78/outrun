@@ -22,12 +22,18 @@ export const PUBLIC_TOOLS = {
     }),
   },
   buy_audit: {
-    description: "Creates an order and returns a Stripe Checkout URL. Idempotent on idempotencyKey.",
+    description:
+      "Creates an order and returns a Stripe Checkout URL. Idempotent on idempotencyKey. An agent holding a Stripe Shared Payment Token for this seller may pass it to pay an Audit + Kit without a browser; checkoutUrl is then the order's status page.",
     input: z.object({
       domain: Domain,
       package: PaidProductKey,
       contactEmail: Email,
       idempotencyKey: z.string().min(8).max(200),
+      /** SR-12: a Stripe Shared Payment Token (spt_…) granted to us. Ignored, with Checkout returned, while agent payments are off or for Growth. */
+      sharedPaymentToken: z
+        .string()
+        .regex(/^spt_[A-Za-z0-9_]{4,200}$/)
+        .optional(),
     }),
     output: z.object({ orderId: Id, checkoutUrl: z.url() }),
   },

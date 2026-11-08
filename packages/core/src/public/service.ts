@@ -7,13 +7,13 @@
 import { createHash } from "node:crypto";
 import { and, count, eq, gte, sql } from "drizzle-orm";
 import { PUBLIC_TOOLS, type PaidProductKey, type PublicToolName } from "../../contracts";
-import { PRODUCTS, PUBLIC_BUY_LIMIT_PER_HOUR } from "../constants";
+import { AGENT_PAYMENTS_ENABLED, PRODUCTS, PUBLIC_BUY_LIMIT_PER_HOUR } from "../constants";
 import type { Db } from "../db/client";
 import { events, orders, reports } from "../db/schema";
 import { AppError, toAppError } from "../errors";
 import type { Emit } from "../events";
 import type { StripeGateway } from "../integrations/types";
-import { checkoutFor, createOrder, getOrder } from "../orders";
+import { checkoutFor, createOrder, getOrder, payWithSharedToken } from "../orders";
 import type { ScanResult as SiteScan } from "../scan/contracts";
 
 export type PublicProtocol = "mcp" | "a2a";
@@ -25,6 +25,8 @@ export interface PublicDeps {
   appUrl: string;
   /** Matthew's scan service: score a domain for a caller (it rate-limits per caller). */
   scan: (domain: string, callerIp: string) => Promise<SiteScan>;
+  /** Overrides AGENT_PAYMENTS_ENABLED; tests only. */
+  agentPayments?: boolean;
 }
 
 export interface CallMeta {
@@ -155,6 +157,7 @@ interface BuyInput {
   package: PaidProductKey;
   contactEmail: string;
   idempotencyKey: string;
+  sharedPaymentToken?: string;
 }
 
 async function buy(deps: PublicDeps, input: BuyInput, meta: CallMeta & { caller: string }) {
@@ -198,6 +201,12 @@ async function buy(deps: PublicDeps, input: BuyInput, meta: CallMeta & { caller:
   // A repeat after payment gets the status page instead of a second checkout.
   if (order.state !== "pending")
     return { orderId: order.id, checkoutUrl: `${deps.appUrl}/orders/${order.id}` };
+  // SR-12: pay with the agent's token when that's on and the product is one-time; otherwise Checkout.
+  const enabled = deps.agentPayments ?? AGENT_PAYMENTS_ENABLED;
+  if (input.sharedPaymentToken && enabled && PRODUCTS[input.package].interval === "one_time") {
+    await payWithSharedToken({ ...deps, agentPayments: enabled }, order, input.sharedPaymentToken);
+    return { orderId: order.id, checkoutUrl: `${deps.appUrl}/orders/${order.id}` };
+  }
   const { url } = await checkoutFor(deps, order);
   return { orderId: order.id, checkoutUrl: url };
 }

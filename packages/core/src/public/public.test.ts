@@ -105,6 +105,51 @@ describe("public tools for other agents", () => {
     await expect(buy(3)).resolves.toBeTruthy();
   });
 
+  it("pays with a Shared Payment Token when agent payments are on, and falls back to Checkout when off", async () => {
+    const stripe = new FakeStripe();
+    const input = (k: string, pkg = "auditKit") => ({
+      domain: "spt.dev",
+      package: pkg,
+      contactEmail: "ops@spt.dev",
+      idempotencyKey: k,
+      sharedPaymentToken: "spt_test_0001",
+    });
+    const on = { ...deps, stripe, agentPayments: true };
+    const paid = await callPublicTool(on, "buy_audit", input("spt-on-0001"), meta("192.0.2.80"));
+    expect(paid.checkoutUrl).toBe(`${APP}/orders/${paid.orderId}`);
+    expect(stripe.tokenPayments).toHaveLength(1);
+    expect(stripe.checkouts).toHaveLength(0);
+    // Repeating the call doesn't charge twice.
+    await callPublicTool(on, "buy_audit", input("spt-on-0001"), meta("192.0.2.80"));
+    expect(stripe.tokenPayments).toHaveLength(1);
+    // Growth, or agent payments off: Checkout as before.
+    const growth = await callPublicTool(
+      on,
+      "buy_audit",
+      input("spt-growth-01", "growth"),
+      meta("192.0.2.80"),
+    );
+    expect(growth.checkoutUrl).toMatch(/checkout\.stripe\.test/);
+    const off = await callPublicTool(
+      { ...deps, stripe },
+      "buy_audit",
+      input("spt-off-0001"),
+      meta("192.0.2.80"),
+    );
+    expect(off.checkoutUrl).toMatch(/checkout\.stripe\.test/);
+    expect(stripe.tokenPayments).toHaveLength(1);
+    await expect(
+      callPublicTool(
+        on,
+        "buy_audit",
+        { ...input("spt-bad-0001"), sharedPaymentToken: "pm_card_visa" },
+        meta(),
+      ),
+    ).rejects.toMatchObject({ code: "bad_request" });
+    const logged = await t.db.select().from(events);
+    expect(JSON.stringify(logged.map((e) => e.payload))).not.toContain("spt_test_0001");
+  });
+
   it("answers not_found for an unknown order", async () => {
     await expect(
       callPublicTool(deps, "get_order_status", { orderId: "0192f4a8-0000-7000-8000-000000000000" }, meta()),
