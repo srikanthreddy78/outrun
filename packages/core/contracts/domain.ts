@@ -38,8 +38,10 @@ export const MESSAGE_STATUSES = [
 ] as const;
 export const MessageStatus = z.enum(MESSAGE_STATUSES);
 export type MessageStatus = z.infer<typeof MessageStatus>;
-export const MessageDirection = z.enum(["outbound", "inbound"]);
-export const MessageKind = z.enum(["first", "followup", "reply", "transactional", "inbound"]);
+export const MESSAGE_DIRECTIONS = ["outbound", "inbound"] as const;
+export const MessageDirection = z.enum(MESSAGE_DIRECTIONS);
+export const MESSAGE_KINDS = ["first", "followup", "reply", "transactional", "inbound"] as const;
+export const MessageKind = z.enum(MESSAGE_KINDS);
 export type MessageKind = z.infer<typeof MessageKind>;
 
 export const ORDER_STATES = [

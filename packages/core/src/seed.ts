@@ -3,7 +3,7 @@
  * `pnpm db:seed` as flags; the defaults are a placeholder that can't receive mail. It lives in
  * the database (filed_reason "demo"), so demo mode reads the allowed inbox from there.
  */
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "./db/client";
 import { companies, contacts, prospects } from "./db/schema";
 
@@ -23,6 +23,10 @@ export const DEMO_PLACEHOLDER: DemoProspect = {
 
 export const DEMO_FILED_REASON = "demo";
 
+/**
+ * Upserts the demo company, contact and prospect, and flags the prospect `is_demo`, the only
+ * flag demo mode trusts (agents can't set it). Refuses an inbox that belongs to another company.
+ */
 export async function seedDemo(
   db: Db,
   demo: DemoProspect = DEMO_PLACEHOLDER,
@@ -30,7 +34,7 @@ export async function seedDemo(
   const domain = demo.domain.toLowerCase();
   const inbox = demo.inbox.toLowerCase();
   return db.transaction(async (tx) => {
-    await tx
+    const [company] = await tx
       .insert(companies)
       .values({
         domain,
@@ -39,9 +43,13 @@ export async function seedDemo(
         kind: "prospect",
         summary: "Seeded demo prospect",
       })
-      .onConflictDoNothing();
-    const [company] = await tx.select().from(companies).where(eq(companies.domain, domain));
-    await tx
+      .onConflictDoUpdate({ target: companies.domain, set: { name: demo.name, kind: "prospect" } })
+      .returning();
+    const [existing] = await tx.select().from(contacts).where(eq(contacts.email, inbox));
+    if (existing && existing.companyId !== company!.id) {
+      throw new Error(`${inbox} already belongs to another company; pick a different demo inbox`);
+    }
+    const [contact] = await tx
       .insert(contacts)
       .values({
         companyId: company!.id,
@@ -50,13 +58,21 @@ export async function seedDemo(
         email: inbox,
         sourceUrl: `https://${domain}/about`,
       })
-      .onConflictDoNothing();
-    const [contact] = await tx.select().from(contacts).where(eq(contacts.email, inbox));
-    await tx
+      .onConflictDoUpdate({ target: contacts.email, set: { name: demo.contactName } })
+      .returning();
+    const [prospect] = await tx
       .insert(prospects)
-      .values({ companyId: company!.id, contactId: contact!.id, filedReason: DEMO_FILED_REASON })
-      .onConflictDoNothing();
-    const [prospect] = await tx.select().from(prospects).where(eq(prospects.companyId, company!.id));
+      .values({
+        companyId: company!.id,
+        contactId: contact!.id,
+        filedReason: DEMO_FILED_REASON,
+        isDemo: true,
+      })
+      .onConflictDoUpdate({
+        target: prospects.companyId,
+        set: { contactId: contact!.id, filedReason: DEMO_FILED_REASON, isDemo: true },
+      })
+      .returning();
     return { companyId: company!.id, contactId: contact!.id, prospectId: prospect!.id };
   });
 }
@@ -67,6 +83,6 @@ export async function demoInboxes(db: Db): Promise<string[]> {
     .select({ email: contacts.email })
     .from(prospects)
     .innerJoin(contacts, eq(prospects.contactId, contacts.id))
-    .where(and(eq(prospects.filedReason, DEMO_FILED_REASON)));
+    .where(eq(prospects.isDemo, true));
   return rows.map((r) => r.email.toLowerCase());
 }
