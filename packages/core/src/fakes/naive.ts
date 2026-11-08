@@ -84,6 +84,7 @@ export class FakeNaiveClient implements NaiveClient {
       stopReason: null,
       pendingActions: [],
       metadata: req.metadata,
+      consumedUsd: 0,
       steps,
       cursor: 0,
       messages: [req.message],
@@ -136,6 +137,7 @@ export class FakeNaiveClient implements NaiveClient {
       stopReason: s.stopReason,
       pendingActions: [...s.pendingActions],
       metadata: s.metadata,
+      consumedUsd: s.consumedUsd,
     };
   }
 
@@ -156,6 +158,7 @@ export class FakeNaiveClient implements NaiveClient {
       const step = s.steps[s.cursor]!;
       if (CREW_TOOLS[step.tool].policy === "ask") {
         s.pendingActions.push({
+          kind: "tool",
           toolCallId: `tc_${randomUUID().slice(0, 8)}`,
           tool: `outrun.${step.tool}`,
           input: step.input,

@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@outrun/core": "workspace:*"
+    "@outrun/core": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "tsx": "^4.20.6"

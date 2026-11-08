@@ -1,51 +1,65 @@
-import { createDb, type DbHandle } from "@outrun/core/db";
-import { createEmitter } from "@outrun/core/events";
 import type { Config } from "@outrun/core";
-import { Queue, type Handlers } from "@outrun/core/queue";
+import type { Integrations } from "@outrun/core/integrations";
 import { logger } from "@outrun/core/log";
+import type { Handlers } from "@outrun/core/queue";
+import { createRuntime, type Runtime } from "@outrun/core/runtime";
+import { naiveHandlers } from "./jobs/naive";
 import { stubHandlers } from "./stubs";
 
 export interface Worker {
-  db: DbHandle;
-  queue: Queue;
+  runtime: Runtime;
+  /** Shorthands kept for scripts. */
+  queue: Runtime["queue"];
+  db: Runtime["db"];
   stop(): Promise<void>;
 }
 
 export interface StartOptions {
   config: Config;
-  /** Real handlers override stubs, job by job. */
+  /** Extra handlers, overriding stubs and real ones job by job. */
   handlers?: Handlers;
+  /** false runs every job on its stub (pnpm e2e:loop). */
+  real?: boolean;
+  integrations?: Partial<Integrations>;
   schedules?: boolean;
   retryDelaySeconds?: number;
   retryBackoff?: boolean;
   pollingIntervalSeconds?: number;
 }
 
+/** The real handlers merged so far. Each card adds its jobs here. */
+export function realHandlers(rt: Runtime): Handlers {
+  return { ...naiveHandlers(rt) };
+}
+
 export async function startWorker(opts: StartOptions): Promise<Worker> {
-  const url = opts.config.databaseUrlUnpooled;
-  if (!url) throw new Error("DATABASE_URL is required to start the worker");
-  const db = createDb(url);
-  const emit = createEmitter(db.db);
-  const queue = new Queue({
-    connectionString: url,
-    maxAttempts: opts.config.settings.jobMaxAttempts,
-    emit,
+  const tuning = {
     ...(opts.retryDelaySeconds !== undefined ? { retryDelaySeconds: opts.retryDelaySeconds } : {}),
     ...(opts.retryBackoff !== undefined ? { retryBackoff: opts.retryBackoff } : {}),
     ...(opts.pollingIntervalSeconds !== undefined
       ? { pollingIntervalSeconds: opts.pollingIntervalSeconds }
       : {}),
+  };
+  const runtime = await createRuntime(opts.config, {
+    startQueue: false,
+    queue: tuning,
+    ...(opts.integrations ? { integrations: opts.integrations } : {}),
   });
+  const queue = runtime.queue;
   await queue.start();
-  await queue.work({ ...stubHandlers({ queue, emit }), ...opts.handlers });
+  const handlers: Handlers = {
+    ...stubHandlers({ queue, emit: runtime.emit }),
+    ...(opts.real === false ? {} : realHandlers(runtime)),
+    ...opts.handlers,
+  };
+  await queue.work(handlers);
   if (opts.schedules ?? true) await queue.schedule();
+  if (runtime.fakes.length) logger.warn({ fakes: runtime.fakes }, "running with fakes");
   logger.info({ demo: opts.config.settings.demo }, "worker ready");
   return {
-    db,
+    runtime,
     queue,
-    async stop() {
-      await queue.stop();
-      await db.close();
-    },
+    db: runtime.db,
+    stop: () => runtime.close(),
   };
 }

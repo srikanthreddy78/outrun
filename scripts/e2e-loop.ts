@@ -35,6 +35,7 @@ async function main(): Promise<void> {
     worker = await startWorker({
       config,
       schedules: false,
+      real: false,
       retryDelaySeconds: 1,
       retryBackoff: false,
       pollingIntervalSeconds: 0.5,

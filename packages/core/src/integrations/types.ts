@@ -28,13 +28,22 @@ export interface LlmProvider {
 }
 
 /* ---------- Naive (Srikanth, SR-6) ---------- */
+export interface NaivePendingAction {
+  kind: "tool" | "question";
+  toolCallId: string;
+  /** As Naive names it: `outrun.send_email`. */
+  tool: string;
+  input: unknown;
+}
 export interface NaiveSession {
   id: string;
   agentId: string;
-  status: "running" | "idle" | "terminated" | "rescheduling";
+  /** queued | running | idle | cancelled | terminated, as Naive reports it. */
+  status: string;
   stopReason: StopReason | null;
-  pendingActions: { toolCallId: string; tool: string; input: unknown }[];
+  pendingActions: NaivePendingAction[];
   metadata: Record<string, unknown>;
+  consumedUsd: number;
 }
 export interface NaiveClient {
   startSession(req: {
