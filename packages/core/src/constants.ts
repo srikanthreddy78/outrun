@@ -75,6 +75,7 @@ export const WORKER_CONCURRENCY = 4;
 export const CRON_TZ = "America/Los_Angeles";
 export const CRON = {
   refresh_sources: "0 6 * * *",
+  growth_rescan: "30 6 * * *",
   check_stuck: "*/5 * * * *",
 } as const;
 

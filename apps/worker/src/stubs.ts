@@ -7,7 +7,7 @@ import { JOB_TYPES, type JobType } from "@outrun/core/contracts";
 import type { Emit } from "@outrun/core/events";
 import type { Handlers, JobHandler, Queue } from "@outrun/core/queue";
 
-/** The order a prospect moves through the loop. Covers all 13 jobs. */
+/** The order a prospect moves through the loop. Scheduled maintenance jobs run separately. */
 export const LOOP_ORDER: readonly JobType[] = [
   "refresh_sources",
   "scan_domain",
@@ -37,7 +37,8 @@ export function stubHandlers(deps: { queue: Pick<Queue, "enqueue">; emit: Emit }
         entityId: p.prospectId ?? type,
         payload: { traceId: env.traceId },
       });
-      const next = LOOP_ORDER[LOOP_ORDER.indexOf(type) + 1];
+      const step = LOOP_ORDER.indexOf(type);
+      const next = step < 0 ? undefined : LOOP_ORDER[step + 1];
       if (p.chain && next) {
         await deps.queue.enqueue({
           type: next,

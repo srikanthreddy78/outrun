@@ -4,6 +4,7 @@ import { IsoDateTime } from "./common";
 export const JOB_TYPES = [
   "refresh_sources",
   "scan_domain",
+  "growth_rescan",
   "sync_crm",
   "send_email",
   "triage_reply",
