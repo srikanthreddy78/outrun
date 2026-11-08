@@ -19,7 +19,8 @@
     "eval": "tsx scripts/eval.ts",
     "prepare": "lefthook install || true",
     "db:migrate": "pnpm --filter @outrun/core db:migrate",
-    "db:generate": "pnpm --filter @outrun/core db:generate"
+    "db:generate": "pnpm --filter @outrun/core db:generate",
+    "e2e:loop": "tsx --env-file-if-exists=.env scripts/e2e-loop.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -33,5 +34,9 @@
     "typescript-eslint": "^8.46.0",
     "vitest": "^3.2.4",
     "yaml": "^2.8.1"
+  },
+  "dependencies": {
+    "@outrun/core": "workspace:*",
+    "@outrun/worker": "workspace:*"
   }
 }
