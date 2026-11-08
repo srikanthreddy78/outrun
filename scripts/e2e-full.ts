@@ -526,7 +526,11 @@ async function deliverAudit(
   );
   const crawl = naive.toolCalls.find((c) => c.sessionId === session.id && c.tool === "start_crawl");
   if (crawl?.error) throw new Error(`start_crawl failed: ${crawl.error.code} ${crawl.error.message}`);
-  const run = await waitFor("the Apify run", async () => apify.runs.at(-1));
+  // This order's own run: the latest run may still be the previous order's.
+  const run = await waitFor("the Apify run", async () => {
+    const [c] = await db.select().from(auditCrawls).where(eq(auditCrawls.orderId, orderId));
+    return c?.runId && apify.runs.some((r) => r.runId === c.runId) ? { runId: c.runId } : undefined;
+  });
   // What the auditor does once Naive wakes it with the crawl (queued below, after it finishes).
   const body = JSON.stringify({
     eventType: "ACTOR.RUN.SUCCEEDED",
