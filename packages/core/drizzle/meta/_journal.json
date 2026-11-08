@@ -57,6 +57,13 @@
       "when": 1794124297546,
       "tag": "0007_client_sources",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794124805708,
+      "tag": "0008_portal_links",
+      "breakpoints": true
     }
   ]
 }

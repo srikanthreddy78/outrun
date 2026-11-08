@@ -8,7 +8,7 @@ import { EntityType, Id, IsoDateTime, Usd } from "./common";
 export const Actor = z
   .string()
   .regex(
-    /^(worker|web|system|naive:(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?[a-z_]+|user:[\w.@-]+|provider:[a-z_]+)$/,
+    /^(worker|web|system|naive:(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?[a-z_]+|user:[\w.@-]+|client:[\w.+@-]+|provider:[a-z_]+)$/,
     "unknown actor form",
   );
 export type Actor = z.infer<typeof Actor>;

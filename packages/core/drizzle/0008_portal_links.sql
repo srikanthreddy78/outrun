@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "events_portal_link_uq" ON "events" USING btree ("entity_id") WHERE "events"."type" = 'portal.link_used';

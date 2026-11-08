@@ -368,6 +368,10 @@ export const events = pgTable(
     uniqueIndex("events_webhook_uq")
       .on(t.entityId)
       .where(sql`${t.type} = 'webhook.received'`),
+    /** Portal sign-in links work once: one `portal.link_used` per link nonce. */
+    uniqueIndex("events_portal_link_uq")
+      .on(t.entityId)
+      .where(sql`${t.type} = 'portal.link_used'`),
   ],
 );
 
