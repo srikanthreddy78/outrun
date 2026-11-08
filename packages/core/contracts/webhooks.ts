@@ -13,14 +13,14 @@ export const NaiveEnvelope = z.object({
 });
 export type NaiveEnvelope = z.infer<typeof NaiveEnvelope>;
 
-/** The Naive event types we subscribe to. */
-export const NAIVE_WEBHOOK_EVENTS = [
-  "session.idle",
-  "session.running",
-  "tool.confirm",
-  "tool.confirm.resolved",
-  "budget.exceeded",
-] as const;
+/**
+ * The Naive event types we subscribe to. Only session.idle, message.completed and
+ * budget.exceeded are ever delivered to a webhook; stream-only names (session.running,
+ * tool.confirm, tool.confirm.resolved) are accepted at subscribe time but never sent
+ * (https://usenaive.ai/docs/capabilities/webhooks.md#event-types). Approval decisions are read
+ * from the session's event list on the next session.idle instead.
+ */
+export const NAIVE_WEBHOOK_EVENTS = ["session.idle", "budget.exceeded"] as const;
 
 /** The provider-native ids we dedupe deliveries on. */
 export const DEDUPE_KEY = {

@@ -216,6 +216,8 @@ export const agentSessions = pgTable(
     stopReason: stopReason("stop_reason"),
     spendUsd: numeric("spend_usd", { precision: 12, scale: 6 }).notNull().default("0"),
     lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+    /** Highest Naive session event seq already applied (approvals are read from events). */
+    lastSeq: integer("last_seq").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
