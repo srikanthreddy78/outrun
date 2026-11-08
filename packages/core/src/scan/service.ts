@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { SCORE_RATE_LIMIT_PER_HOUR } from "../constants";
 import { SCAN_VERSION, type PrivateSupplement, type ScanResult, type ScanSource } from "./contracts";
 import { fullScan, normalizeDomain, quickScan, withPrivateSupplement } from "./scan";
 
@@ -6,8 +7,7 @@ export interface ScanStore {
   get(domain: string): Promise<ScanResult | undefined>;
   put(result: ScanResult): Promise<void>;
   enqueue(domain: string): Promise<void>;
-  recentRequests(ipHash: string, since: Date): Promise<number>;
-  recordRequest(ipHash: string, at: Date): Promise<void>;
+  consumeRequest(ipHash: string, since: Date, at: Date, limit: number): Promise<boolean>;
 }
 export class MemoryScanStore implements ScanStore {
   scans = new Map<string, ScanResult>();
@@ -22,11 +22,13 @@ export class MemoryScanStore implements ScanStore {
   async enqueue(domain: string) {
     this.queue.add(domain);
   }
-  async recentRequests(ipHash: string, since: Date) {
-    return this.requests.filter((entry) => entry.ipHash === ipHash && entry.at >= since.getTime()).length;
-  }
-  async recordRequest(ipHash: string, at: Date) {
+  async consumeRequest(ipHash: string, since: Date, at: Date, limit: number) {
+    if (
+      this.requests.filter((entry) => entry.ipHash === ipHash && entry.at >= since.getTime()).length >= limit
+    )
+      return false;
     this.requests.push({ ipHash, at: at.getTime() });
+    return true;
   }
 }
 export class RateLimitError extends Error {
@@ -45,9 +47,15 @@ export class ScanService {
     const domain = normalizeDomain(domainInput);
     const now = new Date();
     const hash = createHash("sha256").update(`${this.ipSalt}:${ip}`).digest("hex");
-    if ((await this.store.recentRequests(hash, new Date(now.getTime() - 3600_000))) >= 20)
+    if (
+      !(await this.store.consumeRequest(
+        hash,
+        new Date(now.getTime() - 3600_000),
+        now,
+        SCORE_RATE_LIMIT_PER_HOUR,
+      ))
+    )
       throw new RateLimitError("Scan rate limit exceeded");
-    await this.store.recordRequest(hash, now);
     const cached = await this.store.get(domain);
     if (
       cached?.version === SCAN_VERSION &&

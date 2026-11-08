@@ -1,4 +1,4 @@
-import { PRODUCTS } from "@outrun/core/scan/contracts";
+import { PRODUCTS } from "@outrun/core/constants";
 
 export default function Home() {
   return (
@@ -90,7 +90,7 @@ export default function Home() {
           <p>Primary offer</p>
           <h2>{PRODUCTS.growth.name}</h2>
           <p style={{ fontSize: 28, fontWeight: 700 }}>
-            ${PRODUCTS.growth.priceUsdMonthly.toLocaleString("en-US")}/month
+            ${PRODUCTS.growth.priceUsd.toLocaleString("en-US")}/month
           </p>
           <p>Initial Audit + Kit, then monthly outbound work, registry submissions, rescans, and reports.</p>
           <a href="/checkout?package=growth">Start Growth →</a>

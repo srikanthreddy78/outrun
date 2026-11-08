@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Check } from "../scan/contracts";
-import { PRODUCTS } from "../scan/contracts";
+import { PRODUCTS } from "../constants";
 
 export type Offer = "auditKit" | "growth";
 export type Finding = {

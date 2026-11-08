@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request): Promise<Response> {
-  const service = scanService();
+  const service = await scanService();
   if (!service)
     return Response.json(
       { error: "scan_store_unavailable" },

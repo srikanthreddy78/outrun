@@ -1,5 +1,7 @@
+import { SCAN_CACHE_DAYS } from "../constants";
+
 export const SCAN_VERSION = 1;
-export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const CACHE_TTL_MS = SCAN_CACHE_DAYS * 24 * 60 * 60 * 1000;
 export type CheckStatus = "pass" | "fail" | "unknown" | "gated";
 export type Check = {
   id: string;
@@ -49,12 +51,6 @@ export type ScanResult = {
 export type ScanSource = (
   url: string,
 ) => Promise<{ url: string; status: number; headers: Record<string, string>; body: string }>;
-
-export const PRODUCTS = {
-  freeScan: { name: "Free Scan", priceUsd: 0 },
-  auditKit: { name: "Audit + Kit", priceUsd: 499 },
-  growth: { name: "Growth Department", priceUsdMonthly: 1500 },
-} as const;
 
 export const READINESS_CHECKS = [
   ["ssr-answer", "Answer available without JavaScript", 10],

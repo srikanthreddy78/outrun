@@ -9,7 +9,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ domain: string }> },
 ): Promise<Response> {
-  const service = scanService();
+  const service = await scanService();
   if (!service)
     return new Response("Scan storage is unavailable.", { status: 503, headers: { "retry-after": "60" } });
   const { domain } = await params;

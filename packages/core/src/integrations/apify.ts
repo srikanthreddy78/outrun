@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { normalizeDomain } from "../scan/scan";
+import { AUDIT_MAX_PAGES } from "../constants";
 
-export const AUDIT_MAX_PAGES = 50;
 export type CrawlPage = { url: string; title?: string; text?: string; markdown?: string };
 export class ApifyClient {
   private token: string;

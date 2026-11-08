@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { safeFetch, isPublicIp, UnsafeUrlError, ResponseLimitError } from "./safeFetch";
 import { quickScan, fullScan, normalizeDomain } from "./scan/scan";
 import { MemoryScanStore, RateLimitError, ScanService } from "./scan/service";
+import { DbScanStore } from "./scan/db-store";
+import type { Db } from "./db/client";
 import { renderLandingPage, renderScorePage, scoreApi } from "./scan/http";
 import { ACCESS_TERMS_VERSION, PaidAccessManager } from "./audit/access";
 import { AuditPipeline, downloadAsset, renderReportPage } from "./audit/pipeline";
@@ -148,6 +150,10 @@ test("public cache excludes private metrics and rate limit returns 429", async (
     store.scans.get("example.com")?.checks.some((check) => check.id === "campaign-tracking"),
     false,
   );
+  await assert.rejects(
+    new DbScanStore({} as Db, async () => {}).put({ ...first, state: "complete" }),
+    /Private supplement/,
+  );
   assert.deepEqual([...store.queue], ["example.com"]);
   const complete = await service.complete("example.com");
   assert.equal(complete.state, "complete");
@@ -159,6 +165,15 @@ test("public cache excludes private metrics and rate limit returns 429", async (
   await assert.rejects(service.request("example.com", "203.0.113.1"), RateLimitError);
   assert.equal((await scoreApi(service, "example.com", "203.0.113.1")).status, 429);
   assert.match(renderLandingPage(), /\$1,500|\$1500/);
+});
+
+test("scan API reports storage failures as unavailable", async () => {
+  const store = new MemoryScanStore();
+  store.consumeRequest = async () => {
+    throw new Error("database unavailable");
+  };
+  const response = await scoreApi(new ScanService(store, fixture), "example.com", "203.0.113.1");
+  assert.equal(response.status, 503);
 });
 
 test("credential use requires domain proof, current terms and remains revocable", async () => {

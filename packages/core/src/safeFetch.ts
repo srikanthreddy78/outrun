@@ -2,6 +2,7 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { BlockList, isIP } from "node:net";
+import { FETCH_MAX_BYTES, FETCH_MAX_REDIRECTS, FETCH_TIMEOUT_MS } from "./constants";
 
 const blocked = new BlockList();
 for (const [address, prefix, family] of [
@@ -101,7 +102,7 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
   ) {
     throw new UnsafeUrlError("DNS returned a non-public address");
   }
-  const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
+  const maxBytes = options.maxBytes ?? FETCH_MAX_BYTES;
   if (options.transport) return options.transport(url, pinned.address);
   const transport = url.protocol === "https:" ? httpsRequest : httpRequest;
   return await new Promise((resolve, reject) => {
@@ -109,7 +110,7 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
       url,
       {
         method: "GET",
-        timeout: options.timeoutMs ?? 10_000,
+        timeout: options.timeoutMs ?? FETCH_TIMEOUT_MS,
         signal: options.signal,
         headers: {
           "User-Agent": "Outrun-Readiness-Scanner/1.0",
@@ -153,15 +154,16 @@ async function oneRequest(url: URL, options: SafeFetchOptions): Promise<SafeResp
 
 export async function safeFetch(input: string, options: SafeFetchOptions = {}): Promise<SafeResponse> {
   let url = validatePublicUrl(input);
-  const signal = options.signal ?? AbortSignal.timeout(options.timeoutMs ?? 10_000);
+  const signal = options.signal ?? AbortSignal.timeout(options.timeoutMs ?? FETCH_TIMEOUT_MS);
   const bounded = { ...options, signal };
   for (let redirects = 0; ; redirects++) {
     if (signal.aborted) throw signal.reason;
     const response = await oneRequest(url, bounded);
-    if (Buffer.byteLength(response.body) > (options.maxBytes ?? 2 * 1024 * 1024))
+    if (Buffer.byteLength(response.body) > (options.maxBytes ?? FETCH_MAX_BYTES))
       throw new ResponseLimitError("Response exceeds size limit");
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
-    if (redirects >= (options.maxRedirects ?? 5)) throw new UnsafeUrlError("Too many redirects");
+    if (redirects >= (options.maxRedirects ?? FETCH_MAX_REDIRECTS))
+      throw new UnsafeUrlError("Too many redirects");
     const location = response.headers.location;
     if (!location) return response;
     url = validatePublicUrl(new URL(location, url).toString());
