@@ -36,6 +36,7 @@ export class FakeNaiveClient implements NaiveClient {
   readonly toolCalls: ToolCallRecord[] = [];
   readonly sessions = new Map<string, FakeSession>();
   private readonly byKey = new Map<string, string>();
+  private readonly sentKeys = new Set<string>();
   private readonly scripts = new Map<AgentName, ScriptedCall[][]>();
   readonly spend = new Map<string, number>();
 
@@ -98,6 +99,8 @@ export class FakeNaiveClient implements NaiveClient {
   async send(sessionId: string, message: string, idempotencyKey: string): Promise<void> {
     this.calls.push({ method: "send", args: [sessionId, message, idempotencyKey] });
     const s = this.must(sessionId);
+    if (this.sentKeys.has(idempotencyKey)) return;
+    this.sentKeys.add(idempotencyKey);
     s.messages.push(message);
     if (s.pendingActions.length === 0) await this.run(s);
   }
