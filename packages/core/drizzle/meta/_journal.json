@@ -50,6 +50,13 @@
       "when": 1794123905588,
       "tag": "0006_client_email",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794124297546,
+      "tag": "0007_client_sources",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
-import { FOLLOWUP_OFFSETS_DAYS, PRODUCTS } from "../../constants";
+import { confirmedClient } from "../../clients";
+import { FOLLOWUP_OFFSETS_DAYS, OUTRUN_CLIENT_ID, PRODUCTS } from "../../constants";
 import type { Db } from "../../db/client";
 import { companies, contacts, messages, orders, prospects, scans } from "../../db/schema";
 import { assertDemoRecipient } from "../../demo";
@@ -107,6 +108,44 @@ const PRICE_WORDS = new Set(
     .flatMap((n) => [String(n), n.toLocaleString("en-US")]),
 );
 
+/** The numbers in a client's listed prices ("$49/month" → 49), as the price check compares them. */
+export function priceWords(amounts: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const a of amounts)
+    for (const m of a.matchAll(/([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)) {
+      const v = m[1]!.replace(/\.00$/, "");
+      out.add(v);
+      out.add(v.replace(/,/g, ""));
+      const n = Number(v.replace(/,/g, ""));
+      if (Number.isFinite(n) && Number.isInteger(n)) out.add(n.toLocaleString("en-US"));
+    }
+  return out;
+}
+
+/** Fact keys as citations: lowercase, spaces and dots to underscores (what CheckId allows). */
+export const factCitation = (key: string): string =>
+  key
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 41);
+
+/** The hosts a client's email may link to: its own, its call to action, its listed hosts, the prospect's. */
+export function clientLinkHosts(
+  client: {
+    domain: string;
+    profile: { offer: { callToActionUrl: string }; allowedLinkHosts: readonly string[] };
+  },
+  prospectDomain: string,
+): string[] {
+  return [
+    client.domain,
+    new URL(client.profile.offer.callToActionUrl).hostname.replace(/^www\./, ""),
+    ...client.profile.allowedLinkHosts,
+    prospectDomain,
+  ];
+}
+
 /** The reasons a draft fails grounding; empty when it passes. Exported for the evals. */
 export function groundingProblems(opts: {
   subject: string;
@@ -117,30 +156,46 @@ export function groundingProblems(opts: {
   allowedHosts: readonly string[];
   /** Checkout session ids from this prospect's own orders: their Stripe links are allowed. */
   checkoutIds?: readonly string[];
+  /**
+   * A client's draft: citations are the prospect's saved fact keys (scanCheckIds holds them),
+   * and the only prices are the ones in the client's profile.
+   */
+  client?: { prices: ReadonlySet<string> };
 }): string[] {
   const out: string[] = [];
   const text = `${opts.subject}\n${opts.body}`;
-  if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
-    out.push("cite at least one check id from the latest scan (outrun.get_brief lists them)");
-  if (opts.citedCheckIds.length && !opts.scanCheckIds)
-    out.push("there is no scan for this domain yet; cite nothing");
-  for (const id of opts.citedCheckIds)
-    if (opts.scanCheckIds && !opts.scanCheckIds.has(id)) out.push(`${id} is not a check in the latest scan`);
+  const prices = opts.client?.prices ?? PRICE_WORDS;
+  if (opts.client) {
+    if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
+      out.push("cite at least one saved fact key about the prospect (outrun.get_brief lists them)");
+    for (const id of opts.citedCheckIds)
+      if (!opts.scanCheckIds?.has(id)) out.push(`${id} is not a fact saved for this prospect`);
+  } else {
+    if (opts.kind !== "reply" && opts.citedCheckIds.length === 0)
+      out.push("cite at least one check id from the latest scan (outrun.get_brief lists them)");
+    if (opts.citedCheckIds.length && !opts.scanCheckIds)
+      out.push("there is no scan for this domain yet; cite nothing");
+    for (const id of opts.citedCheckIds)
+      if (opts.scanCheckIds && !opts.scanCheckIds.has(id))
+        out.push(`${id} is not a check in the latest scan`);
+  }
   for (const m of text.matchAll(/\$\s?([0-9][0-9,]*(?:\.[0-9]{1,2})?)/g)) {
     const v = m[1]!.replace(/\.00$/, "");
-    if (!PRICE_WORDS.has(v))
+    if (!prices.has(v))
       out.push(
-        `$${m[1]} is not a listed price; use only ${[...PRICE_WORDS]
-          .filter((p) => !p.includes(","))
-          .map((p) => `$${p}`)
-          .join(" or ")}`,
+        prices.size
+          ? `$${m[1]} is not a listed price; use only ${[...prices]
+              .filter((p) => !p.includes(","))
+              .map((p) => `$${p}`)
+              .join(" or ")}`
+          : `$${m[1]}: your client lists no prices; leave prices out`,
       );
   }
   if (/[\w.+-]+@[\w-]+\.[\w.-]+/.test(text))
     out.push("no email addresses in the email; recipients are fixed");
   for (const m of text.matchAll(/https?:\/\/([^\s/)>\]"']+)[^\s)>\]"']*/gi)) {
     const host = m[1]!.toLowerCase().replace(/^www\./, "");
-    if (host === "checkout.stripe.com") {
+    if (host === "checkout.stripe.com" && !opts.client) {
       if (!(opts.checkoutIds ?? []).some((id) => m[0].includes(id)))
         out.push("a Stripe link must be one outrun.create_checkout_link made for this prospect");
       continue;
@@ -158,7 +213,10 @@ export function getBrief(deps: OutreachDeps) {
     name: "get_brief",
     handler: async ({ prospectId }, ctx) => {
       const r = await prospectRow(ctx.db, prospectId, ctx.clientId);
-      const scan = await latestChecks(ctx.db, r.domain);
+      const client = await confirmedClient(ctx.db, ctx.clientId);
+      if (ctx.clientId !== OUTRUN_CLIENT_ID && !client)
+        throw new AppError("conflict", "your client's profile isn't confirmed yet; draft nothing");
+      const scan = client ? null : await latestChecks(ctx.db, r.domain);
       const prior = await ctx.db
         .select({
           direction: messages.direction,
@@ -171,7 +229,7 @@ export function getBrief(deps: OutreachDeps) {
         .orderBy(asc(messages.createdAt))
         .limit(20);
       const contact =
-        r.contact && !r.contact.suppressed
+        r.contact && (client || !r.contact.suppressed)
           ? { contactId: r.contact.id, name: r.contact.name, role: r.contact.role, email: r.contact.email }
           : null;
       return {
@@ -180,15 +238,25 @@ export function getBrief(deps: OutreachDeps) {
         contact,
         scanId: scan?.scanId ?? null,
         checks: scan?.checks ?? [],
-        facts: r.prospect.facts,
+        facts: client ? r.prospect.facts.map((f) => ({ ...f, key: factCitation(f.key) })) : r.prospect.facts,
         priorMessages: prior.map((m) => ({
           direction: m.direction,
           subject: m.subject,
           body: untrusted(m.body),
           at: m.at.toISOString(),
         })),
-        scoreUrl: `${deps.appUrl}/score/${r.domain}`,
-        offer: { product: OFFER, priceUsd: PRODUCTS[OFFER].priceUsd },
+        scoreUrl: client ? null : `${deps.appUrl}/score/${r.domain}`,
+        offer: client ? null : { product: OFFER, priceUsd: PRODUCTS[OFFER].priceUsd },
+        client: client
+          ? {
+              name: client.name,
+              pitch: client.profile.offer.pitch,
+              callToActionUrl: client.profile.offer.callToActionUrl,
+              prices: client.profile.offer.prices,
+              sender: client.profile.sender.name,
+              tone: client.profile.tone,
+            }
+          : null,
       };
     },
   });
@@ -199,9 +267,16 @@ export function checkDraft(deps: OutreachDeps) {
     name: "check_draft",
     handler: async (input, ctx) => {
       const r = await prospectRow(ctx.db, input.prospectId, ctx.clientId);
+      const client = await confirmedClient(ctx.db, ctx.clientId);
       const reasons: string[] = [];
+      if (ctx.clientId !== OUTRUN_CLIENT_ID && !client)
+        reasons.push("your client's profile isn't confirmed yet; draft nothing");
+      // The contact flag is Outrun's own unsubscribe; a client checks its suppressions instead.
       if (!r.contact) reasons.push("this prospect has no contact yet");
-      else if (r.contact.suppressed || (await isSuppressed(ctx.db, r.contact.email, ctx.clientId)))
+      else if (
+        (!client && r.contact.suppressed) ||
+        (await isSuppressed(ctx.db, r.contact.email, ctx.clientId))
+      )
         reasons.push("the contact is suppressed; don't email them");
       if (["unsubscribed", "lost", "won"].includes(r.prospect.stage))
         reasons.push(`the prospect is ${r.prospect.stage}`);
@@ -236,24 +311,37 @@ export function checkDraft(deps: OutreachDeps) {
           .limit(1);
         if (already) reasons.push("a first email already went to this prospect; draft a follow-up instead");
       }
-      const scan = await latestChecks(ctx.db, r.domain);
+      const scan = client ? null : await latestChecks(ctx.db, r.domain);
       reasons.push(
-        ...groundingProblems({
-          subject: input.subject,
-          body: input.body,
-          kind: input.kind,
-          citedCheckIds: input.citedCheckIds,
-          scanCheckIds: scan ? new Set(scan.checks.map((c) => c.id)) : null,
-          allowedHosts: [new URL(deps.appUrl).hostname.replace(/^www\./, ""), r.domain],
-          checkoutIds: (
-            await ctx.db
-              .select({ id: orders.stripeCheckoutId })
-              .from(orders)
-              .where(eq(orders.prospectId, input.prospectId))
-          )
-            .map((o) => o.id)
-            .filter((id): id is string => !!id),
-        }),
+        ...(client
+          ? groundingProblems({
+              subject: input.subject,
+              body: input.body,
+              kind: input.kind,
+              citedCheckIds: input.citedCheckIds,
+              scanCheckIds: new Set(r.prospect.facts.map((f) => factCitation(f.key))),
+              allowedHosts: clientLinkHosts(client, r.domain),
+              client: { prices: priceWords(client.profile.offer.prices.map((p) => p.amount)) },
+            })
+          : []),
+        ...(client
+          ? []
+          : groundingProblems({
+              subject: input.subject,
+              body: input.body,
+              kind: input.kind,
+              citedCheckIds: input.citedCheckIds,
+              scanCheckIds: scan ? new Set(scan.checks.map((c) => c.id)) : null,
+              allowedHosts: [new URL(deps.appUrl).hostname.replace(/^www\./, ""), r.domain],
+              checkoutIds: (
+                await ctx.db
+                  .select({ id: orders.stripeCheckoutId })
+                  .from(orders)
+                  .where(eq(orders.prospectId, input.prospectId))
+              )
+                .map((o) => o.id)
+                .filter((id): id is string => !!id),
+            })),
       );
       if (r.contact && deps.settings.demo) {
         try {

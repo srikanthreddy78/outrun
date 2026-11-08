@@ -12,12 +12,14 @@ import { randomUUID } from "node:crypto";
 import { and, asc, count, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { untrusted } from "../../../contracts";
 import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
-import { companies, contacts, prospects, suppressions } from "../../db/schema";
+import { confirmedClient } from "../../clients";
+import { clientCandidates, companies, contacts, prospects, suppressions } from "../../db/schema";
 import { assertDemoDiscovery } from "../../demo";
 import { isSuppressed } from "../../email/rules";
 import { AppError } from "../../errors";
 import type { EnrichFn } from "../../integrations/types";
-import { FREE_MAIL, scoreFit } from "../../scoring/fit";
+import { FREE_MAIL, scoreClientFit, scoreFit } from "../../scoring/fit";
+import { notProspectOf } from "../../sources/clientSources";
 import { startOfDayIn } from "../../time";
 import { defineTool } from "../registry";
 import { latestChecks } from "./outreach";
@@ -31,8 +33,37 @@ export const listCandidates = (deps: ProspectingDeps) =>
   defineTool({
     name: "list_candidates",
     handler: async ({ limit, source }, ctx) => {
-      // Discovered candidates are Outrun's; other clients get their own candidate lists.
-      if (ctx.clientId !== OUTRUN_CLIENT_ID) return { candidates: [] };
+      // Another client's candidates are the ones its own sources found for it.
+      if (ctx.clientId !== OUTRUN_CLIENT_ID) {
+        if (source && source !== "hunter") return { candidates: [] };
+        const rows = await ctx.db
+          .select({
+            companyId: companies.id,
+            domain: companies.domain,
+            name: companies.name,
+            source: clientCandidates.source,
+            summary: companies.summary,
+            reason: clientCandidates.reason,
+          })
+          .from(clientCandidates)
+          .innerJoin(companies, eq(clientCandidates.companyId, companies.id))
+          .where(
+            and(
+              eq(clientCandidates.clientId, ctx.clientId),
+              notProspectOf(ctx.clientId),
+              sql`not exists (select 1 from ${suppressions} s where s.value = ${companies.domain} and (s.client_id is null or s.client_id = ${ctx.clientId}))`,
+            ),
+          )
+          .orderBy(asc(clientCandidates.createdAt))
+          .limit(limit);
+        return {
+          candidates: rows.map(({ reason, ...r }) => ({
+            ...r,
+            name: r.name ?? r.domain,
+            summary: untrusted([r.summary, reason].filter(Boolean).join(" · ")),
+          })),
+        };
+      }
       const rows = await ctx.db
         .select({
           companyId: companies.id,
@@ -63,7 +94,16 @@ export const fileProspect = (deps: ProspectingDeps) =>
     name: "file_prospect",
     handler: async ({ companyId, reason }, ctx) => {
       const [co] = await ctx.db.select().from(companies).where(eq(companies.id, companyId));
-      if (!co || ctx.clientId !== OUTRUN_CLIENT_ID) throw new AppError("not_found", "no such candidate");
+      const outrun = ctx.clientId === OUTRUN_CLIENT_ID;
+      if (!co) throw new AppError("not_found", "no such candidate");
+      // A client files only what its own sources found for it.
+      if (!outrun) {
+        const [mine] = await ctx.db
+          .select({ id: clientCandidates.id })
+          .from(clientCandidates)
+          .where(and(eq(clientCandidates.clientId, ctx.clientId), eq(clientCandidates.companyId, co.id)));
+        if (!mine) throw new AppError("not_found", "no such candidate");
+      }
       assertDemoDiscovery(deps.settings, co.source);
       const [existing] = await ctx.db
         .select({ id: prospects.id })
@@ -107,19 +147,22 @@ export const fileProspect = (deps: ProspectingDeps) =>
           .where(and(eq(prospects.companyId, co.id), eq(prospects.clientId, ctx.clientId)));
         return { prospectId: again!.id, status: "duplicate" as const };
       }
-      await ctx.db.update(companies).set({ kind: "prospect" }).where(eq(companies.id, co.id));
-      await ctx.enqueue({
-        type: "scan_domain",
-        payload: { domain: co.domain, prospectId: p.id },
-        idempotencyKey: `scan:filed:${p.id}`,
-        traceId: randomUUID(),
-      });
-      await ctx.enqueue({
-        type: "sync_crm",
-        payload: { prospectId: p.id },
-        idempotencyKey: `crm:${p.id}:filed`,
-        traceId: randomUUID(),
-      });
+      // Outrun's prospects get the readiness scan and the HubSpot mirror; a client's don't.
+      if (outrun) {
+        await ctx.db.update(companies).set({ kind: "prospect" }).where(eq(companies.id, co.id));
+        await ctx.enqueue({
+          type: "scan_domain",
+          payload: { domain: co.domain, prospectId: p.id },
+          idempotencyKey: `scan:filed:${p.id}`,
+          traceId: randomUUID(),
+        });
+        await ctx.enqueue({
+          type: "sync_crm",
+          payload: { prospectId: p.id },
+          idempotencyKey: `crm:${p.id}:filed`,
+          traceId: randomUUID(),
+        });
+      }
       await ctx.emit({
         actor: `naive:${ctx.agent}`,
         type: "prospect.filed",
@@ -245,7 +288,9 @@ export const saveResearch = defineTool({
       const [c] = await ctx.db.select().from(contacts).where(eq(contacts.id, r.p.contactId));
       if (c) contact = { id: c.id, email: c.email, role: c.role };
     }
-    const fit = scoreFit({ source: r.source, summary: r.summary, facts: merged, contact });
+    const client = await confirmedClient(ctx.db, ctx.clientId);
+    const fitInput = { source: r.source, summary: r.summary ?? "", facts: merged, contact };
+    const fit = client ? scoreClientFit(client.profile.icp, fitInput) : scoreFit(fitInput);
     const scan = await latestChecks(ctx.db, r.domain);
     await ctx.db
       .update(prospects)
@@ -264,12 +309,13 @@ export const saveResearch = defineTool({
       entityId: prospectId,
       payload: { fitScore: fit.score, parts: fit.parts, facts: merged.length, contacts: savedContacts },
     });
-    await ctx.enqueue({
-      type: "sync_crm",
-      payload: { prospectId },
-      idempotencyKey: `crm:${prospectId}:researched:${merged.length}:${savedContacts}`,
-      traceId: randomUUID(),
-    });
+    if (ctx.clientId === OUTRUN_CLIENT_ID)
+      await ctx.enqueue({
+        type: "sync_crm",
+        payload: { prospectId },
+        idempotencyKey: `crm:${prospectId}:researched:${merged.length}:${savedContacts}`,
+        traceId: randomUUID(),
+      });
     return { fitScore: fit.score, savedFacts: merged.length, savedContacts };
   },
 });

@@ -153,7 +153,8 @@ export const CREW_TOOLS = {
   get_brief: {
     agents: ["sdr"],
     policy: "allow",
-    description: "Scan checks with their ids, facts, the contact and earlier emails for a prospect.",
+    description:
+      "Scan checks with their ids (Outrun) or the client's offer (other clients), facts, the contact and earlier emails for a prospect.",
     input: z.object({ prospectId: Id }),
     output: z.object({
       prospectId: Id,
@@ -165,14 +166,27 @@ export const CREW_TOOLS = {
       priorMessages: z.array(
         z.object({ direction: MessageDirection, subject: z.string(), body: Untrusted, at: IsoDateTime }),
       ),
-      scoreUrl: z.url(),
-      offer: z.object({ product: PaidProductKey, priceUsd: z.number() }),
+      /** Outrun's own prospects only: the public score page and the audit offer. */
+      scoreUrl: z.url().nullable(),
+      offer: z.object({ product: PaidProductKey, priceUsd: z.number() }).nullable(),
+      /** A client's prospects: what the client offers. Cite the prospect's fact keys, not scan checks. */
+      client: z
+        .object({
+          name: z.string(),
+          pitch: z.string(),
+          callToActionUrl: z.url(),
+          prices: z.array(z.object({ label: z.string(), amount: z.string() })),
+          sender: z.string(),
+          tone: z.string(),
+        })
+        .nullable(),
     }),
   },
   check_draft: {
     agents: ["sdr", "closer"],
     policy: "allow",
-    description: "Rejects any claim without a real check id; stores the draft and its hash.",
+    description:
+      "Rejects any claim without a real citation (a scan check id for Outrun, a saved fact key for other clients), unlisted prices or links; stores the draft and its hash.",
     input: z.object({
       prospectId: Id,
       kind: z.enum(["first", "followup", "reply"]),

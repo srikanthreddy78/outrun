@@ -138,6 +138,25 @@ export const companies = pgTable(
   (t) => [uniqueIndex("companies_domain_uq").on(t.domain), index("companies_kind_idx").on(t.kind)],
 );
 
+/** The companies a client's sources found for it; companies themselves stay shared facts. */
+export const clientCandidates = pgTable(
+  "client_candidates",
+  {
+    id: id(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => companies.id),
+    source: source("source").notNull(),
+    /** Why the source matched (the ICP keywords), shown to the prospector. */
+    reason: text("reason").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("client_candidates_uq").on(t.clientId, t.companyId)],
+);
+
 export const contacts = pgTable(
   "contacts",
   {
@@ -373,6 +392,7 @@ export const TABLES = [
   "clients",
   "client_users",
   "companies",
+  "client_candidates",
   "contacts",
   "prospects",
   "scans",

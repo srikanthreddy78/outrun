@@ -263,8 +263,15 @@ export class FakeHubSpot implements HubSpotClient {
 
 export class FakeMonid implements MonidClient {
   readonly runs: { endpoint: string; input: Record<string, unknown> }[] = [];
+  /** Hunter discover answers by first include keyword; tests set them. */
+  readonly hunter = new Map<string, { domain: string; organization: string }[]>();
   async run(endpoint: string, input: Record<string, unknown>) {
     this.runs.push({ endpoint, input });
+    if (endpoint === "hunterio:/discover") {
+      const kw = ((input.keywords as { include?: string[] } | undefined)?.include ?? [])[0] ?? "";
+      const data = (this.hunter.get(kw) ?? []).slice(0, Number(input.limit ?? 100));
+      return { data: { data, meta: { results: data.length } }, costUsd: 0 };
+    }
     return { data: { endpoint, results: [] }, costUsd: 0 };
   }
 }

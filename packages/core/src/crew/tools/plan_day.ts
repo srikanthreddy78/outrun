@@ -17,6 +17,7 @@ import type { AgentName, Entity, ProspectStage } from "../../../contracts";
 import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
 import { prospects } from "../../db/schema";
 import { DEMO_FILED_REASON } from "../../seed";
+import { CLIENT_CANDIDATES_ENOUGH } from "../../sources/clientSources";
 import { dayIn } from "../../time";
 import { defineTool } from "../registry";
 import { pipelineCounts, type FollowupsDue, type PipelineSettings } from "./pipeline_status";
@@ -81,6 +82,19 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
           DISCOVERY_ENTITY,
           `File up to ${discovery} prospects that fit the ICP from the candidates waiting.`,
         );
+
+      // A client's own sources: search again when its list runs low, once a day.
+      if (
+        !settings.demo &&
+        ctx.clientId !== OUTRUN_CLIENT_ID &&
+        counts.candidatesWaiting < CLIENT_CANDIDATES_ENOUGH
+      )
+        await ctx.enqueue({
+          type: "refresh_client_sources",
+          payload: { clientId: ctx.clientId },
+          idempotencyKey: `client-sources:${day}:${ctx.clientId}`,
+          traceId: ctx.requestId,
+        });
 
       return { enqueued, capsLeft: counts.capsLeft };
     },

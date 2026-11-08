@@ -207,3 +207,12 @@ export async function setPaused(
   });
   return { status };
 }
+
+/** A client's name, domain and confirmed profile; null for Outrun or before the owner confirms. */
+export async function confirmedClient(db: Db, clientId: string) {
+  if (clientId === OUTRUN_CLIENT_ID) return null;
+  const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
+  if (!c?.profileConfirmedAt) return null;
+  const profile = ClientProfile.safeParse(c.profile);
+  return profile.success ? { id: c.id, name: c.name, domain: c.domain, profile: profile.data } : null;
+}

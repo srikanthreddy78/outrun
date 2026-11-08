@@ -7,7 +7,16 @@ export const PaidProductKey = z.enum(["auditKit", "growth"]);
 export type PaidProductKey = z.infer<typeof PaidProductKey>;
 
 export const COMPANY_KINDS = ["candidate", "prospect"] as const;
-export const SOURCES = ["mcp_registry", "glama", "apify", "producthunt", "yc", "manual", "fixture"] as const;
+export const SOURCES = [
+  "mcp_registry",
+  "glama",
+  "apify",
+  "producthunt",
+  "yc",
+  "manual",
+  "fixture",
+  "hunter",
+] as const;
 export const Source = z.enum(SOURCES);
 
 export const PROSPECT_STAGES = [
