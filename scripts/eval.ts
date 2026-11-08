@@ -6,6 +6,7 @@
  *   agent: sdr
  *   steps:                       # the tool calls the agent makes, in order
  *     - { tool: send_email, input: { draftId: "...", hash: "..." } }
+ *   seed: demo                   # optional: the demo prospect and a scan (llms_txt fails, openapi passes)
  *   decisions: [deny]            # answers to held (ask) calls, in order
  *   expect:
  *     calls:                     # what actually ran, in order
@@ -14,6 +15,9 @@
  *     stopReason: end_turn
  *     enqueued: [start_session]  # job types the tools enqueued (optional)
  *
+ * In inputs, "$prospectId" is the seeded prospect, and "$draftId" / "$hash" come from the latest
+ * passing check_draft. `result: {...}` on a call matches those fields of what it returned, and
+ * `notEnqueued: [...]` lists job types that must not appear.
  * `ok: true` on a call means it returned a result; `error: <code>` means it failed with that code.
  * pnpm eval:crew runs the same files as real sessions in demo mode; it spends credits, ask first.
  */
@@ -26,13 +30,16 @@ import { ToolRegistry } from "@outrun/core/crew";
 import { allTools } from "@outrun/core/crew/tools";
 import { createEmitter } from "@outrun/core/events";
 import { FakeNaiveClient } from "@outrun/core/fakes";
-import { createTempDatabase } from "@outrun/core/testing/db";
+import { createTempDatabase, type TempDb } from "@outrun/core/testing/db";
+import { scans } from "@outrun/core/db";
+import { DEMO_PLACEHOLDER, seedDemo } from "@outrun/core/seed";
 import { loadConfig } from "@outrun/core";
 
 const ToolName = z.enum(Object.keys(CREW_TOOLS) as [CrewToolName, ...CrewToolName[]]);
 const Scenario = z.object({
   name: z.string(),
   agent: z.enum(AGENTS),
+  seed: z.enum(["demo"]).optional(),
   steps: z.array(z.object({ tool: ToolName, input: z.unknown().default({}) })).min(1),
   decisions: z.array(z.enum(["allow", "deny"])).default([]),
   expect: z.object({
@@ -43,21 +50,83 @@ const Scenario = z.object({
           ok: z.boolean().optional(),
           error: z.string().optional(),
           decision: z.enum(["allow", "deny"]).optional(),
+          result: z.record(z.string(), z.unknown()).optional(),
         }),
       )
       .default([]),
     held: z.number().int().nonnegative().optional(),
     stopReason: z.string().optional(),
     enqueued: z.array(z.string()).optional(),
+    notEnqueued: z.array(z.string()).optional(),
   }),
 });
 type Scenario = z.infer<typeof Scenario>;
+
+/** The demo prospect and one scan, so outreach scenarios have checks to cite. */
+async function seedScenario(db: TempDb["db"]) {
+  const ids = await seedDemo(db);
+  await db.insert(scans).values({
+    domain: DEMO_PLACEHOLDER.domain,
+    version: 1,
+    scannerVersion: "eval",
+    score: 40,
+    checks: [
+      {
+        id: "llms-txt",
+        label: "llms.txt",
+        status: "fail",
+        evidence: "404",
+        weight: 10,
+        category: "readiness",
+      },
+      {
+        id: "openapi",
+        label: "OpenAPI",
+        status: "pass",
+        evidence: "found",
+        weight: 6,
+        category: "readiness",
+      },
+    ],
+  });
+  return ids;
+}
+
+/** Replaces "$prospectId", "$draftId" and "$hash" when the step runs. */
+function withRefs(input: unknown, prospectId: string | undefined): unknown {
+  const text = JSON.stringify(input);
+  if (!/"\$(prospectId|draftId|hash)"/.test(text)) return input;
+  return (calls: { tool: string; result?: unknown }[]) => {
+    const draft = [...calls]
+      .reverse()
+      .map((c) =>
+        c.tool === "check_draft" ? (c.result as { ok?: boolean; draftId?: string; hash?: string }) : null,
+      )
+      .find((r) => r?.ok);
+    const refs: Record<string, string | undefined> = {
+      prospectId,
+      draftId: draft?.draftId,
+      hash: draft?.hash,
+    };
+    return JSON.parse(
+      text.replace(/"\$(prospectId|draftId|hash)"/g, (_m, k: string) =>
+        JSON.stringify(refs[k] ?? `missing-${k}`),
+      ),
+    );
+  };
+}
 
 async function runScenario(s: Scenario): Promise<string[]> {
   const t = await createTempDatabase();
   try {
     const config = loadConfig({ ...process.env, OUTRUN_DEMO: "true" });
-    const registry = new ToolRegistry(allTools({ settings: config.settings }));
+    const registry = new ToolRegistry(
+      allTools({
+        settings: config.settings,
+        outreach: { appUrl: config.appUrl, settings: config.settings, mx: async () => true },
+      }),
+    );
+    const seeded = s.seed === "demo" ? await seedScenario(t.db) : null;
     const enqueued: JobEnvelopeInput[] = [];
     const emit = createEmitter(t.db);
     const naive = new FakeNaiveClient({
@@ -73,7 +142,7 @@ async function runScenario(s: Scenario): Promise<string[]> {
     });
     naive.script(
       s.agent,
-      s.steps.map((st) => ({ tool: st.tool, input: st.input })),
+      s.steps.map((st) => ({ tool: st.tool, input: withRefs(st.input, seeded?.prospectId) })),
     );
     const { sessionId } = await naive.startSession({
       agentId: naive.agentIdOf(s.agent),
@@ -102,6 +171,14 @@ async function runScenario(s: Scenario): Promise<string[]> {
         problems.push(
           `call ${i + 1} ${got.tool}: expected error ${want.error}, got ${got.error?.code ?? "success"}`,
         );
+      if (want.result) {
+        const res = (got.result ?? {}) as Record<string, unknown>;
+        for (const [k, v] of Object.entries(want.result))
+          if (JSON.stringify(res[k]) !== JSON.stringify(v))
+            problems.push(
+              `call ${i + 1} ${got.tool}: expected ${k}=${JSON.stringify(v)}, got ${JSON.stringify(res[k])}`,
+            );
+      }
       if (want.decision && got.decision !== want.decision)
         problems.push(
           `call ${i + 1} ${got.tool}: expected decision ${want.decision}, got ${got.decision ?? "none"}`,
@@ -117,6 +194,8 @@ async function runScenario(s: Scenario): Promise<string[]> {
       for (const want of s.expect.enqueued)
         if (!types.includes(want as never)) problems.push(`expected a ${want} job`);
     }
+    for (const no of s.expect.notEnqueued ?? [])
+      if (enqueued.some((j) => j.type === no)) problems.push(`expected no ${no} job`);
     return problems;
   } finally {
     await t.drop();

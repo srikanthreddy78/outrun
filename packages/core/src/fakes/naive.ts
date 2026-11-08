@@ -13,6 +13,7 @@ import type { NaiveClient, NaiveEvent, NaiveSession } from "../integrations/type
 
 export interface ScriptedCall {
   tool: CrewToolName;
+  /** Or a function of the calls so far, resolved when the step comes up (e.g. a draft's id). */
   input: unknown;
 }
 
@@ -203,6 +204,8 @@ export class FakeNaiveClient implements NaiveClient {
     s.status = "running";
     while (s.cursor < s.steps.length) {
       const step = s.steps[s.cursor]!;
+      if (typeof step.input === "function")
+        step.input = (step.input as (c: ToolCallRecord[]) => unknown)(this.toolCalls);
       if (CREW_TOOLS[step.tool].policy === "ask") {
         const toolCallId = `tc_${randomUUID().slice(0, 8)}`;
         const parked = this.event(s, "tool.confirm", {

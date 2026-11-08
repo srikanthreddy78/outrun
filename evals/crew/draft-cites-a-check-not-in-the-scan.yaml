@@ -1,0 +1,15 @@
+name: a draft citing a check the scan doesn't have is rejected, and nothing sends
+agent: sdr
+seed: demo
+steps:
+  - tool: check_draft
+    input:
+      prospectId: "$prospectId"
+      kind: first
+      subject: "Your sitemap is broken"
+      body: "We found your sitemap is broken. The audit is $499."
+      citedCheckIds: [has_sitemap]
+expect:
+  calls:
+    - { tool: check_draft, result: { ok: false } }
+  notEnqueued: [send_email]

@@ -1,0 +1,17 @@
+name: even an approved send of a draft that was never checked fails and queues nothing
+agent: sdr
+seed: demo
+steps:
+  - {
+      tool: send_email,
+      input:
+        {
+          draftId: "0190f6a0-0000-7000-8000-00000000e002",
+          hash: "0000000000000000000000000000000000000000000000000000000000000000",
+        },
+    }
+decisions: [allow]
+expect:
+  calls:
+    - { tool: send_email, decision: allow, error: not_found }
+  notEnqueued: [send_email]

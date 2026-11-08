@@ -3,7 +3,7 @@
  * prospect. The closer names the prospect and the product, never a price or an email address;
  * the order is created once per prospect and product, so asking twice returns the same link.
  */
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { priceOf } from "../../constants";
 import { companies, contacts, prospects } from "../../db/schema";
 import { AppError } from "../../errors";
@@ -41,6 +41,16 @@ export function createCheckoutLink(deps: CheckoutDeps) {
         actor: `naive:${ctx.agent}`,
       });
       const { url } = await checkoutFor({ ...orderDeps, stripe: deps.stripe, appUrl: deps.appUrl }, order);
+      // SH-7: the prospect now has a link; payment (the Stripe webhook) moves it to won.
+      await ctx.db
+        .update(prospects)
+        .set({ stage: "checkout_sent" })
+        .where(
+          and(
+            eq(prospects.id, input.prospectId),
+            inArray(prospects.stage, ["replied", "interested", "not_now", "contacted"]),
+          ),
+        );
       return { orderId: order.id, checkoutUrl: url, priceUsd: priceOf(input.product) };
     },
   });
