@@ -264,5 +264,12 @@ describe("autonomyReport", () => {
     expect(all.some((s) => s.includes("contacted-co.com"))).toBe(false);
     expect(r.stepIns.map((s) => s.actor).sort()).toEqual(["client approver", "owner"]);
     expect(r.counts.total).toBe(10);
+    // No free text reaches the public page: agents' reasons, the brief, the owner's words.
+    expect(all.some((s) => s.includes("without a source"))).toBe(false);
+    expect(all.some((s) => s.includes("promising"))).toBe(false);
+    expect(all.some((s) => s.includes("ok from"))).toBe(false);
+    expect(r.decisions.find((d) => d.type === "draft.rejected")!.summary).toContain("1 problem found");
+    // Acme's profile isn't confirmed, so its own name stays off the public page.
+    expect(all.some((s) => s.includes("Acme"))).toBe(false);
   });
 });
