@@ -42,6 +42,7 @@ jobs:
       - run: pnpm test
       - run: pnpm eval
       - run: pnpm e2e:loop
+      - run: pnpm e2e:full
 
   secrets:
     runs-on: ubuntu-latest

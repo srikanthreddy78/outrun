@@ -157,8 +157,9 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       expect(
         groundingProblems({
           ...base,
-          body: "Growth is $1,500/month. https://www.acme.dev/x and https://outrun.example/score",
+          body: "Growth is $1,500/month. https://www.acme.dev/x, https://outrun.example/score and https://checkout.stripe.com/c/pay/cs_test_mine#fid",
           citedCheckIds: ["llms_txt"],
+          checkoutIds: ["cs_test_mine"],
         }),
       ).toEqual([]);
     });
@@ -175,6 +176,11 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
         "an outside link",
         { body: "see https://evil.example/pay", citedCheckIds: ["llms_txt"] },
         /evil\.example/,
+      ],
+      [
+        "a Stripe link that isn't this prospect's checkout",
+        { body: "pay https://checkout.stripe.com/c/pay/cs_test_other", citedCheckIds: ["llms_txt"] },
+        /create_checkout_link made for this prospect/,
       ],
     ])("rejects %s", (_name, over, re) => {
       expect(groundingProblems({ ...base, ...over }).join(" ")).toMatch(re);

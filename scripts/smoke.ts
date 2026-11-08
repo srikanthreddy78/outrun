@@ -12,7 +12,7 @@
  *
  * In production it also fails on fakes in use or a missing webhook secret.
  */
-import type { CREW_TOOLS } from "@outrun/core/contracts";
+import { CREW_TOOLS } from "@outrun/core/contracts";
 import { AGENTS } from "@outrun/core/contracts";
 import { toolsForAgent } from "@outrun/core/contracts";
 import { crewToken } from "@outrun/core/crew/tokens";
@@ -20,7 +20,8 @@ import { crewToken } from "@outrun/core/crew/tokens";
 const base = (process.argv[2] ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)/.test(base);
 const secret = process.env.CREW_TOKEN_SECRET;
-const IMPLEMENTED = new Set(["ping", "pipeline_status", "plan_day"]);
+/** Every contract tool is built, so each agent must list all of its own. */
+const IMPLEMENTED = new Set<string>(Object.keys(CREW_TOOLS));
 
 type Result = { name: string; ok: boolean; detail?: string };
 const results: Result[] = [];

@@ -146,6 +146,12 @@ async function markPaid(
   // SH-7: a closer's prospect who paid is won.
   if (order.prospectId) {
     await deps.db.update(prospects).set({ stage: "won" }).where(eq(prospects.id, order.prospectId));
+    await deps.queue.enqueue({
+      type: "sync_crm",
+      payload: { prospectId: order.prospectId },
+      idempotencyKey: `crm:${order.prospectId}:won:${order.id}`,
+      traceId,
+    });
   }
   // The receipt and the audit are keyed on the order, so a repeat report is a no-op.
   const product = PRODUCTS[order.product];
