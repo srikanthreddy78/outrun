@@ -88,6 +88,37 @@ export default async function ClientsPage() {
               <button type="submit">{c.profileConfirmedAt ? "Save changes" : "Confirm profile"}</button>
             </form>
           )}
+          {c.dnsRecords.length > 0 && (
+            <>
+              <p>
+                Sending domain {c.sendingDomain}: <strong>{c.dnsStatus}</strong>. The client adds these
+                records at its DNS host; we re-check every 15 minutes.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Name</th>
+                    <th>Value</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {c.dnsRecords.map((r) => (
+                    <tr key={`${r.type}:${r.name}:${r.value}`}>
+                      <td>{r.type}</td>
+                      <td>{r.name}</td>
+                      <td style={{ wordBreak: "break-all" }}>
+                        {r.priority !== undefined ? `${r.priority} ` : ""}
+                        {r.value}
+                      </td>
+                      <td>{r.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
           <form action={pauseAction} style={{ marginTop: "0.5rem" }}>
             <input type="hidden" name="clientId" value={c.id} />
             <input type="hidden" name="paused" value={c.status === "paused" ? "false" : "true"} />

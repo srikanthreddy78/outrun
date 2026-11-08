@@ -8,6 +8,7 @@ import { PRODUCTS } from "../constants";
 import { AppError } from "../errors";
 import type {
   AgentMailClient,
+  AgentMailDomain,
   ApifyClient,
   DiscoverFn,
   DiscoveredCompany,
@@ -184,6 +185,58 @@ export class FakeAgentMail implements AgentMailClient {
       this.transactional.push({ ...msg, providerId });
     return { providerId };
   };
+  /** Client domains by id. A domain verifies on the first verify call after `dnsAdded`. */
+  readonly domains = new Map<string, AgentMailDomain & { dnsAdded: boolean }>();
+  readonly inboxes = new Map<
+    string,
+    { inboxId: string; username: string; domain: string; displayName: string }
+  >();
+  async createDomain(domain: string, clientId: string) {
+    const domainId = `dom_fake_${h(clientId).slice(0, 10)}`;
+    if (!this.domains.has(domainId))
+      this.domains.set(domainId, {
+        domainId,
+        domain,
+        status: "PENDING",
+        dnsAdded: false,
+        records: [
+          { type: "TXT", name: domain, value: "v=spf1 include:spf.agentmail.to ~all", status: "MISSING" },
+          { type: "TXT", name: `agentmail._domainkey.${domain}`, value: "p=FAKEKEY", status: "MISSING" },
+          { type: "MX", name: domain, value: "inbound.agentmail.to", status: "MISSING", priority: 10 },
+        ],
+      });
+    return this.getDomain(domainId);
+  }
+  async getDomain(domainId: string): Promise<AgentMailDomain> {
+    const d = this.domains.get(domainId);
+    if (!d) throw new AppError("not_found", `agentmail: no domain ${domainId}`);
+    const { dnsAdded: _, ...rest } = d;
+    return { ...rest, records: rest.records.map((r) => ({ ...r })) };
+  }
+  async verifyDomain(domainId: string) {
+    const d = this.domains.get(domainId);
+    if (!d) throw new AppError("not_found", `agentmail: no domain ${domainId}`);
+    if (d.dnsAdded) {
+      d.status = "VERIFIED";
+      for (const r of d.records) r.status = "VALID";
+    } else d.status = "VERIFYING";
+  }
+  /** Test helper: the client added the DNS records. */
+  addDns(domain: string) {
+    for (const d of this.domains.values()) if (d.domain === domain) d.dnsAdded = true;
+  }
+  async createInbox(req: { username: string; domain: string; displayName: string; clientId: string }) {
+    const d = [...this.domains.values()].find((x) => x.domain === req.domain);
+    if (!d || d.status !== "VERIFIED") throw new AppError("upstream_error", "agentmail: HTTP 422");
+    const inboxId = `${req.username}@${req.domain}`;
+    this.inboxes.set(req.clientId, {
+      inboxId,
+      username: req.username,
+      domain: req.domain,
+      displayName: req.displayName,
+    });
+    return { inboxId };
+  }
 }
 
 export class FakeHubSpot implements HubSpotClient {

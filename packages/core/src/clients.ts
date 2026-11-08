@@ -18,7 +18,7 @@ export interface ClientDeps {
   db: Db;
   emit: Emit;
   enqueue: (job: {
-    type: "start_session";
+    type: "start_session" | "client_email_setup";
     payload: Record<string, unknown>;
     idempotencyKey: string;
     traceId: string;
@@ -140,12 +140,7 @@ export async function saveDraftProfile(
  * The owner confirms the profile, optionally edited. The client then needs its sending domain
  * (email_setup) before it goes active.
  */
-export async function confirmProfile(
-  deps: Pick<ClientDeps, "db" | "emit">,
-  clientId: string,
-  raw: unknown,
-  actor: string,
-) {
+export async function confirmProfile(deps: ClientDeps, clientId: string, raw: unknown, actor: string) {
   const profile = ClientProfile.parse(raw);
   const [c] = await deps.db.select().from(clients).where(eq(clients.id, clientId));
   if (!c || c.id === OUTRUN_CLIENT_ID) throw new AppError("not_found", "no such client");
@@ -167,7 +162,22 @@ export async function confirmProfile(
     entityId: c.id,
     payload: {},
   });
+  if (c.dnsStatus !== "verified") await startEmailSetup(deps, c.id);
   return { status: c.status === "active" ? ("active" as const) : status };
+}
+
+/** Starts (or restarts) the client's sending-domain setup; one job per client per minute. */
+export async function startEmailSetup(
+  deps: Pick<ClientDeps, "enqueue">,
+  clientId: string,
+  at: Date = new Date(),
+) {
+  await deps.enqueue({
+    type: "client_email_setup",
+    payload: { clientId, startedAt: at.toISOString() },
+    idempotencyKey: `client-email:${clientId}:start:${at.toISOString().slice(0, 16)}`,
+    traceId: randomUUID(),
+  });
 }
 
 /** Pause stops the crew at its MCP URL and the CEO's kick; resume puts it back where it was. */

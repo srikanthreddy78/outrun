@@ -8,9 +8,9 @@
  * the call and `sent` leaves it `sending`, which check_stuck reports rather than resending.
  */
 import { and, desc, eq, sql } from "drizzle-orm";
-import { CRON_TZ } from "../constants";
+import { CRON_TZ, OUTRUN_CLIENT_ID } from "../constants";
 import type { Db } from "../db/client";
-import { messages, prospects } from "../db/schema";
+import { clients, messages, prospects } from "../db/schema";
 import { assertDemoRecipient } from "../demo";
 import { AppError } from "../errors";
 import type { Emit } from "../events";
@@ -69,8 +69,28 @@ export async function runSendEmail(deps: SendDeps, messageId: string, traceId: s
   if (m.status !== "approved") return { status: "refused", reason: `status is ${m.status}` };
   if (!m.toEmail || !m.contactId) return refuse(deps, m.id, "no recipient");
 
-  if (await isSuppressed(deps.db, m.toEmail)) return refuse(deps, m.id, "suppressed");
-  const pause = await sendPause(deps.db);
+  // A client's email goes out only from its own verified inbox, while the client is active.
+  const outrun = m.clientId === OUTRUN_CLIENT_ID;
+  let from: {
+    inboxId: string;
+    footer: { senderName: string; company: string; postalAddress: string };
+  } | null = null;
+  if (!outrun) {
+    const [c] = await deps.db.select().from(clients).where(eq(clients.id, m.clientId));
+    if (!c || c.status !== "active") return refuse(deps, m.id, `the client is ${c?.status ?? "missing"}`);
+    if (!c.agentmailInboxId || c.dnsStatus !== "verified")
+      return refuse(deps, m.id, "the client's sending domain isn't verified");
+    const sender = (c.profile as { sender?: { name?: string; postalAddress?: string } }).sender;
+    if (!sender?.name || !sender.postalAddress)
+      return refuse(deps, m.id, "the client's profile has no sender");
+    from = {
+      inboxId: c.agentmailInboxId,
+      footer: { senderName: sender.name, company: c.name, postalAddress: sender.postalAddress },
+    };
+  }
+
+  if (await isSuppressed(deps.db, m.toEmail, m.clientId)) return refuse(deps, m.id, "suppressed");
+  const pause = await sendPause(deps.db, m.clientId);
   if (pause.paused) {
     // Paused sends wait; a person resumes with pnpm email:resume. They don't fail.
     const until = new Date(now.getTime() + 3_600_000).toISOString();
@@ -91,9 +111,9 @@ export async function runSendEmail(deps: SendDeps, messageId: string, traceId: s
   const domain = m.toEmail.split("@")[1] ?? "";
   if (!(await deps.mx(domain))) return refuse(deps, m.id, "no MX record");
 
-  const cap = await effectiveSendCap(deps.db, deps.settings.sendDailyCap, now);
+  const cap = await effectiveSendCap(deps.db, deps.settings.sendDailyCap, now, m.clientId);
   // sentToday counts this approved message too, so over the cap means strictly more.
-  if ((await sentToday(deps.db, now)) > cap) {
+  if ((await sentToday(deps.db, now, m.clientId)) > cap) {
     const tomorrow = new Date(
       startOfDayIn(CRON_TZ, now).getTime() + 86_400_000 + 9 * 3_600_000,
     ).toISOString();
@@ -131,17 +151,18 @@ export async function runSendEmail(deps: SendDeps, messageId: string, traceId: s
       .limit(1);
     inReplyTo = last?.providerId ?? undefined;
   }
-  const token = unsubscribeToken(deps.unsubscribeSecret, m.contactId);
+  const token = unsubscribeToken(deps.unsubscribeSecret, m.contactId, m.clientId);
   let sent: { providerId: string; threadId: string };
   try {
     sent = await deps.agentmail.send({
       to: m.toEmail,
       subject: m.subject,
-      text: m.body + unsubscribeLine(deps.appUrl, token),
+      text: m.body + unsubscribeLine(deps.appUrl, token, from?.footer),
       ...(m.threadId ? { threadId: m.threadId } : {}),
       ...(inReplyTo ? { inReplyTo } : {}),
-      listUnsubscribe: listUnsubscribe(deps.appUrl, token, deps.inbox),
+      listUnsubscribe: listUnsubscribe(deps.appUrl, token, from?.inboxId ?? deps.inbox),
       idempotencyKey: `send:${m.id}`,
+      ...(from ? { inboxId: from.inboxId } : {}),
     });
   } catch (err) {
     // An HTTP answer (429, 4xx, 5xx) means AgentMail didn't send: put it back for the retry.

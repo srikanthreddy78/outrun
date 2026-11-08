@@ -201,7 +201,7 @@ export function checkDraft(deps: OutreachDeps) {
       const r = await prospectRow(ctx.db, input.prospectId, ctx.clientId);
       const reasons: string[] = [];
       if (!r.contact) reasons.push("this prospect has no contact yet");
-      else if (r.contact.suppressed || (await isSuppressed(ctx.db, r.contact.email)))
+      else if (r.contact.suppressed || (await isSuppressed(ctx.db, r.contact.email, ctx.clientId)))
         reasons.push("the contact is suppressed; don't email them");
       if (["unsubscribed", "lost", "won"].includes(r.prospect.stage))
         reasons.push(`the prospect is ${r.prospect.stage}`);
@@ -332,11 +332,11 @@ async function queueApprovedDraft(
   });
   if (input.hash !== m.draftHash || again !== m.draftHash)
     throw new AppError("conflict", "the draft changed after it was checked; run outrun.check_draft again");
-  if (!m.toEmail || (await isSuppressed(ctx.db, m.toEmail)))
+  if (!m.toEmail || (await isSuppressed(ctx.db, m.toEmail, ctx.clientId)))
     throw new AppError("forbidden", "the recipient is suppressed");
   const now = ctx.now();
-  const cap = await effectiveSendCap(ctx.db, deps.settings.sendDailyCap, now);
-  if ((await sentToday(ctx.db, now)) >= cap)
+  const cap = await effectiveSendCap(ctx.db, deps.settings.sendDailyCap, now, ctx.clientId);
+  if ((await sentToday(ctx.db, now, ctx.clientId)) >= cap)
     throw new AppError("rate_limited", "today's send cap is used; it resets tomorrow", {
       retryAfterSeconds: 3600,
     });
@@ -390,7 +390,7 @@ export async function dueFollowups(db: Db, clientId: string, now: Date, limit = 
         sql`${prospects.followupStep} < ${FOLLOWUP_OFFSETS_DAYS.length}`,
         sql`not exists (select 1 from messages m where m.prospect_id = ${prospects.id} and m.direction = 'inbound')`,
         sql`not exists (select 1 from messages m where m.prospect_id = ${prospects.id} and m.kind = 'followup' and m.status in ('checked','awaiting_approval','approved','sending'))`,
-        sql`not exists (select 1 from suppressions s where s.value = lower(${contacts.email}) or s.value = split_part(lower(${contacts.email}), '@', 2))`,
+        sql`not exists (select 1 from suppressions s where (s.value = lower(${contacts.email}) or s.value = split_part(lower(${contacts.email}), '@', 2)) and (s.client_id is null or s.client_id = ${clientId}))`,
       ),
     )
     .orderBy(asc(prospects.lastContactedAt));

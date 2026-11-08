@@ -6,6 +6,7 @@ import type { Handlers } from "@outrun/core/queue";
 import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { checkStuckHandlers } from "./jobs/check_stuck";
 import { ceoHandlers } from "./jobs/ceo";
+import { clientEmailHandlers } from "./jobs/client_email";
 import { sendEmailHandlers } from "./jobs/send_email";
 import { triageHandlers } from "./jobs/triage";
 import { prospectingHandlers } from "./jobs/prospecting";
@@ -48,6 +49,7 @@ export function realHandlers(rt: Runtime): Handlers {
     ...stripeHandlers(rt),
     ...checkStuckHandlers(rt),
     ...ceoHandlers(rt),
+    ...clientEmailHandlers(rt),
     ...sendEmailHandlers(rt),
     ...triageHandlers(rt),
     ...prospectingHandlers(rt),

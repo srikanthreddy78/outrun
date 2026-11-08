@@ -52,8 +52,8 @@ export async function pipelineCounts(
     .select({ n: count() })
     .from(prospects)
     .where(and(eq(prospects.clientId, clientId), gte(prospects.createdAt, since)));
-  const sent = await sentToday(db, now);
-  const sendCap = await effectiveSendCap(db, settings.sendDailyCap, now);
+  const sent = await sentToday(db, now, clientId);
+  const sendCap = await effectiveSendCap(db, settings.sendDailyCap, now, clientId);
   const [waiting] = await db
     .select({ n: count() })
     .from(messages)

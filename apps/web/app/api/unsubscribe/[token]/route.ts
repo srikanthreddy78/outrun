@@ -9,11 +9,11 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, ctx: { params: Promise<{ token: string }> }): Promise<Response> {
   const { token } = await ctx.params;
-  const contactId = readUnsubscribeToken(config().keys.crewTokenSecret, token);
-  if (!contactId) return new Response("This unsubscribe link isn't valid.", { status: 404 });
+  const who = readUnsubscribeToken(config().keys.crewTokenSecret, token);
+  if (!who) return new Response("This unsubscribe link isn't valid.", { status: 404 });
   try {
     const rt = await getRuntime();
-    await unsubscribeContact({ db: rt.db.db, emit: rt.emit }, contactId, "link");
+    await unsubscribeContact({ db: rt.db.db, emit: rt.emit }, who.contactId, "link", who.clientId);
   } catch (err) {
     logger.error({ err }, "unsubscribe failed");
     return new Response("Something went wrong; please try again.", { status: 503 });

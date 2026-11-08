@@ -17,6 +17,7 @@ export const JOB_TYPES = [
   "deliver_report",
   "check_stuck",
   "send_ceo_brief",
+  "client_email_setup",
 ] as const;
 export const JobType = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof JobType>;
