@@ -124,3 +124,10 @@
     margin-top: 0;
   }
 }
+
+.team-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  margin: 0;
+}

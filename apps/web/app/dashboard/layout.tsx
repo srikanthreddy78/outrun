@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 const links = [
   ["Overview", "/dashboard"],
+  ["Agency", "/dashboard/agency"],
   ["Approvals", "/dashboard/approvals"],
   ["Ledger", "/dashboard/ledger"],
   ["Orders", "/dashboard/orders"],

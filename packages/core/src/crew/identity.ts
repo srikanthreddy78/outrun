@@ -3,7 +3,7 @@
  * existed (`sdr`); any other client's crew is `<slug>-<role>` (`acme-sdr`) on Naive and
  * /api/crew/mcp/<slug>/<role> on our side.
  */
-import { AGENTS, type AgentName } from "../../contracts";
+import { AGENTS, type AgentName, CLIENT_ROLES } from "../../contracts";
 import { OUTRUN_CLIENT_SLUG } from "../constants";
 
 export function naiveAgentName(agent: AgentName, clientSlug: string = OUTRUN_CLIENT_SLUG): string {
@@ -14,7 +14,8 @@ export function naiveAgentName(agent: AgentName, clientSlug: string = OUTRUN_CLI
 export function parseNaiveAgentName(name: string): { agent: AgentName; clientSlug: string } | null {
   if ((AGENTS as readonly string[]).includes(name))
     return { agent: name as AgentName, clientSlug: OUTRUN_CLIENT_SLUG };
-  for (const a of AGENTS) {
+  // The CEO serves the whole agency, so no client has one.
+  for (const a of CLIENT_ROLES) {
     if (!name.endsWith(`-${a}`)) continue;
     const slug = name.slice(0, -(a.length + 1));
     if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) && slug !== OUTRUN_CLIENT_SLUG)

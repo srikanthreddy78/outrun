@@ -94,12 +94,19 @@ describe("crew MCP server", () => {
   it("lists only the agent's own tools, unprefixed", async () => {
     const o = await rpc(await call("orchestrator", list, crewToken(SECRET, "orchestrator")));
     expect((o.result?.tools as { name: string }[]).map((x) => x.name).sort()).toEqual([
+      "get_client_profile",
       "ping",
       "pipeline_status",
       "plan_day",
     ]);
     const s = await rpc(await call("sdr", list, crewToken(SECRET, "sdr")));
-    expect((s.result?.tools as { name: string }[]).map((x) => x.name)).toEqual(["ping"]);
+    expect((s.result?.tools as { name: string }[]).map((x) => x.name).sort()).toEqual([
+      "get_client_profile",
+      "ping",
+    ]);
+    const ceo = await rpc(await call("ceo", list, crewToken(SECRET, "ceo")));
+    expect((ceo.result?.tools as { name: string }[]).map((x) => x.name)).toContain("agency_status");
+    expect((await call("acme/ceo", list, crewToken(SECRET, "ceo", "acme"))).status).toBe(404);
   });
 
   it("runs a tool and records the call with actor naive:<agent>", async () => {

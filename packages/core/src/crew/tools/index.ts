@@ -7,6 +7,7 @@ import type { ApifyClient } from "../../integrations/types";
 import { auditTools } from "./audit";
 import { scanDomainTool } from "./scan_domain";
 import { ping } from "./ping";
+import { agencyTools } from "./agency";
 import { pipelineStatus, type FollowupsDue, type PipelineSettings } from "./pipeline_status";
 import { planDay } from "./plan_day";
 import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
@@ -43,6 +44,7 @@ export function allTools(opts: {
   const followupsDue = opts.followupsDue ?? (opts.outreach ? followupsDueCount : undefined);
   return [
     ping,
+    ...agencyTools,
     pipelineStatus(opts.settings, followupsDue),
     planDay(opts.settings, followupsDue),
     scanDomainTool,

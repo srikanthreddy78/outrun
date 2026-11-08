@@ -1,10 +1,12 @@
 /**
  * pnpm naive:up [--dry-run]: runs the pinned `naive up` with each agent's crew token derived
- * from CREW_TOKEN_SECRET into CREW_TOKEN_<AGENT>, which naive.config.ts seals in the vault.
+ * from CREW_TOKEN_SECRET into CREW_TOKEN_<..>, which naive.config.ts seals in the vault: the
+ * CEO, Outrun's crew, and a crew for each client in .naive/clients.json (pnpm clients:export).
  * Tokens never touch disk or argv. Only Srikanth applies, from main, after a dry run.
  */
 import { spawnSync } from "node:child_process";
 import { crewTokenEnvAll } from "../packages/core/src/crew/tokens";
+import { loadClientCrews } from "../naive/crew";
 
 const args = process.argv.slice(2);
 const secret = process.env.CREW_TOKEN_SECRET;
@@ -24,6 +26,6 @@ if (!dryRun && process.env.OUTRUN_APPLY !== "yes") {
 
 const r = spawnSync("pnpm", ["exec", "naive", "up", ...args], {
   stdio: "inherit",
-  env: { ...process.env, ...crewTokenEnvAll(secret) },
+  env: { ...process.env, ...crewTokenEnvAll(secret, ["outrun", ...loadClientCrews().map((c) => c.slug)]) },
 });
 process.exit(r.status ?? 1);

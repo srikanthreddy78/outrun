@@ -4,16 +4,21 @@
  * default is deny. Tool authority lives in two places (ADR 0008); this keeps them in step.
  */
 import { beforeAll, describe, expect, it } from "vitest";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   AGENTS,
   BUILTIN_TOOLS,
+  CLIENT_ROLES,
   CREW_TOOLS,
   MCP_SERVER_NAME,
   qualified,
-  toolsForAgent,
+  toolsForMember,
 } from "./packages/core/contracts";
+import { parseNaiveAgentName } from "./packages/core/src/crew/identity";
 import { crewToken, crewTokenEnv, verifyCrewToken } from "./packages/core/src/crew/tokens";
-import { BUDGETS, SCHEDULE } from "./naive/crew";
+import { BUDGETS, CEO_SCHEDULE, CLIENT_BUDGETS, SCHEDULE, loadClientCrews } from "./naive/crew";
 
 const APP_URL = "https://outrun.example";
 
@@ -43,16 +48,39 @@ type Project = {
   }[];
 };
 
+/** Two clients besides Outrun, as pnpm clients:export would write them. */
+const CLIENTS = [
+  { slug: "acme", name: "Acme Analytics" },
+  { slug: "blue-sky", name: "Blue Sky Labs" },
+];
+
 let project: Project;
 beforeAll(async () => {
   process.env.APP_URL = APP_URL;
+  const dir = mkdtempSync(join(tmpdir(), "outrun-clients-"));
+  process.env.NAIVE_CLIENTS_FILE = join(dir, "clients.json");
+  writeFileSync(process.env.NAIVE_CLIENTS_FILE, JSON.stringify(CLIENTS));
   project = (await import("./naive.config")).default as unknown as Project;
 });
 const agent = (name: string) => project.agents.find((a) => a.name === name)!;
+const member = (a: Agent) => parseNaiveAgentName(a.name) ?? { agent: "ceo" as const, clientSlug: "outrun" };
+const pathOf = (a: Agent) => {
+  const m = member(a);
+  return m.clientSlug === "outrun" ? m.agent : `${m.clientSlug}/${m.agent}`;
+};
 
 describe("naive.config.ts", () => {
-  it("declares exactly the six agents", () => {
-    expect(project.agents.map((a) => a.name).sort()).toEqual([...AGENTS].sort());
+  it("declares the CEO, Outrun's six, and six per client", () => {
+    const names = project.agents.map((a) => a.name).sort();
+    expect(names).toHaveLength(AGENTS.length + 6 * CLIENTS.length);
+    const want = [...AGENTS, ...CLIENTS.flatMap((c) => CLIENT_ROLES.map((r) => `${c.slug}-${r}`))].sort();
+    expect(names).toEqual(want);
+    expect(names).not.toContain("acme-ceo");
+  });
+
+  it("tells each client's agents who they work for", () => {
+    expect((agent("acme-sdr") as unknown as { system: string }).system).toContain("Acme Analytics's crew");
+    expect((agent("ceo") as unknown as { system: string }).system).toContain("CEO of the Outrun agency");
   });
 
   it("gives every agent a budget, as planned", () => {
@@ -72,7 +100,10 @@ describe("naive.config.ts", () => {
       period: "day",
     });
     const daily = Object.values(BUDGETS).reduce((s, b) => s + b.cap_micro_usd, 0) / 1e6;
-    expect(daily).toBe(35);
+    expect(daily).toBe(38);
+    expect(agent("acme-sdr").budget).toEqual(CLIENT_BUDGETS.sdr);
+    const perClient = Object.values(CLIENT_BUDGETS).reduce((s, b) => s + b.cap_micro_usd, 0) / 1e6;
+    expect(perClient).toBe(13.5);
   });
 
   it("denies by default", () => {
@@ -91,31 +122,35 @@ describe("naive.config.ts", () => {
   });
 
   it("gives each agent exactly its contract tools and built-ins, nothing else", () => {
-    for (const name of AGENTS) {
-      const got = Object.keys(agent(name).tools.configs).sort();
-      const want = [...toolsForAgent(name).map(qualified), ...BUILTIN_TOOLS[name]].sort();
-      expect(got).toEqual(want);
-      for (const t of toolsForAgent(name)) {
-        expect(agent(name).tools.configs[qualified(t)]?.permission).toBe(CREW_TOOLS[t].policy);
-      }
+    for (const a of project.agents) {
+      const m = member(a);
+      const tools = toolsForMember(m.agent, m.clientSlug === "outrun");
+      const got = Object.keys(a.tools.configs).sort();
+      expect(got).toEqual([...tools.map(qualified), ...BUILTIN_TOOLS[m.agent]].sort());
+      for (const t of tools) expect(a.tools.configs[qualified(t)]?.permission).toBe(CREW_TOOLS[t].policy);
     }
+    // Other clients don't sell Outrun's products through Outrun's Stripe.
+    expect(agent("closer").tools.configs["outrun.create_checkout_link"]).toBeDefined();
+    expect(agent("acme-closer").tools.configs["outrun.create_checkout_link"]).toBeUndefined();
   });
 
   it("points each agent at its own crew MCP endpoint", () => {
-    for (const a of project.agents) {
-      expect(a.mcp_servers).toEqual([{ name: MCP_SERVER_NAME, url: `${APP_URL}/api/crew/mcp/${a.name}` }]);
-    }
+    for (const a of project.agents)
+      expect(a.mcp_servers).toEqual([{ name: MCP_SERVER_NAME, url: `${APP_URL}/api/crew/mcp/${pathOf(a)}` }]);
+    expect(agent("blue-sky-closer").mcp_servers[0]!.url).toBe(`${APP_URL}/api/crew/mcp/blue-sky/closer`);
   });
 
   it("seals one bearer per agent in the vault, keyed by that agent's URL", () => {
     const creds = project.vaults[0]!.credentials;
-    expect(creds).toHaveLength(AGENTS.length);
-    for (const a of AGENTS) {
+    expect(creds).toHaveLength(project.agents.length);
+    expect(new Set(creds.map((c) => c.value.from_env)).size).toBe(creds.length);
+    for (const a of project.agents) {
+      const m = member(a);
       expect(creds).toContainEqual(
         expect.objectContaining({
           kind: "static_bearer",
-          mcp_server_url: `${APP_URL}/api/crew/mcp/${a}`,
-          value: { from_env: crewTokenEnv(a) },
+          mcp_server_url: `${APP_URL}/api/crew/mcp/${pathOf(a)}`,
+          value: { from_env: crewTokenEnv(m.agent, m.clientSlug) },
         }),
       );
     }
@@ -135,18 +170,48 @@ describe("naive.config.ts", () => {
     expect(project.vaults[0]!.identity).toBeUndefined();
   });
 
-  it("schedules only the orchestrator, weekdays at 09:00 Los Angeles", () => {
+  it("schedules the CEO at 08:30 and Outrun's orchestrator at 09:00; the CEO starts the other clients", () => {
+    expect(agent("ceo").schedules).toEqual([
+      expect.objectContaining({ cron: CEO_SCHEDULE.cron, timezone: "America/Los_Angeles" }),
+    ]);
+    expect(CEO_SCHEDULE.cron).toBe("30 8 * * 1-5");
     expect(agent("orchestrator").schedules).toEqual([
       expect.objectContaining({ cron: SCHEDULE.cron, timezone: "America/Los_Angeles" }),
     ]);
     expect(SCHEDULE.cron).toBe("0 9 * * 1-5");
-    for (const a of project.agents.filter((x) => x.name !== "orchestrator"))
+    for (const a of project.agents.filter((x) => !["orchestrator", "ceo"].includes(x.name)))
       expect(a.schedules ?? []).toEqual([]);
   });
 
-  it("gives every agent its own skill file", () => {
-    for (const a of project.agents) expect(a.skills).toEqual([a.name]);
-    expect(project.skills.map((s) => s.slug).sort()).toEqual([...AGENTS].sort());
+  it("gives Outrun's crew and the CEO their own skills, and every client crew the agency set", () => {
+    for (const a of project.agents) {
+      const m = member(a);
+      expect(a.skills).toEqual([m.clientSlug === "outrun" ? m.agent : `agency-${m.agent}`]);
+    }
+    expect(project.skills.map((s) => s.slug).sort()).toEqual(
+      [...AGENTS, ...CLIENT_ROLES.map((r) => `agency-${r}`)].sort(),
+    );
+  });
+
+  it("refuses a bad clients file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "outrun-clients-bad-"));
+    const f = (body: unknown) => {
+      const p = join(dir, `${Math.random()}.json`);
+      writeFileSync(p, JSON.stringify(body));
+      return p;
+    };
+    expect(loadClientCrews(join(dir, "missing.json"))).toEqual([]);
+    expect(() => loadClientCrews(f([{ slug: "outrun", name: "x" }]))).toThrow(/bad client slug/);
+    expect(() => loadClientCrews(f([{ slug: "Has Space", name: "x" }]))).toThrow(/bad client slug/);
+    expect(() => loadClientCrews(f([{ slug: "a", name: "" }]))).toThrow(/needs a name/);
+    expect(() =>
+      loadClientCrews(
+        f([
+          { slug: "a", name: "A" },
+          { slug: "a", name: "B" },
+        ]),
+      ),
+    ).toThrow(/twice/);
   });
 });
 
