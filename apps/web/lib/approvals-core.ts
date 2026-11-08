@@ -36,7 +36,7 @@ export async function submitDecisions(
       type: "approval.submitted",
       entityType: "message",
       entityId: m.id,
-      payload: { decision: f.decision, toolCallId: m.toolCallId },
+      payload: { decision: f.decision, toolCallId: m.toolCallId, reason: f.reason || null },
     });
     n++;
   }
