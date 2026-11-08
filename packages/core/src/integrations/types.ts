@@ -77,6 +77,60 @@ export interface NaiveClient {
   resolveAgentId(name: string): Promise<string>;
   /** The organization's webhooks, for the "Naive webhook disabled" alert. */
   listWebhooks(): Promise<{ id: string; url: string; enabled: boolean; events: string[] }[]>;
+
+  /* Runtime provisioning of a client's crew (provision_client_crew); needs agents:write and admin. */
+  /** Every agent in the org, by name (GET /v1/agents). */
+  listAgents(): Promise<{ id: string; name: string }[]>;
+  /** POST /v1/agents; the body is what `naive up` sends for the same agent (naive/crew.ts). */
+  createAgent(body: NaiveAgentBody, idempotencyKey: string): Promise<{ id: string }>;
+  listVaults(): Promise<{ id: string; name: string }[]>;
+  /** Metadata only; values are never returned. */
+  listCredentials(vaultId: string): Promise<NaiveCredentialRow[]>;
+  createCredential(
+    vaultId: string,
+    body: {
+      kind: "static_bearer";
+      key: string;
+      value: string;
+      mcp_server_url: string;
+      agent_id?: string;
+    },
+    idempotencyKey: string,
+  ): Promise<{ id: string }>;
+  listDeployments(): Promise<{ id: string; agent_id: string; cron: string }[]>;
+  createDeployment(
+    body: {
+      agent_id: string;
+      cron: string;
+      timezone: string;
+      input_template: string;
+      budget_micro_usd: number;
+    },
+    idempotencyKey: string,
+  ): Promise<{ id: string }>;
+}
+
+/** POST /v1/agents: name, model and budget are required; the rest mirror the config SDK. */
+export interface NaiveAgentBody {
+  name: string;
+  model: string;
+  budget: { cap_micro_usd: number; max_task_micro_usd: number; period: "day" | "week" | "month" };
+  description?: string;
+  system?: string;
+  skills?: string[];
+  mcp_servers?: { name: string; url: string }[];
+  tools?: {
+    default_config: { permission: "allow" | "ask" | "deny" };
+    configs: Record<string, { enabled: boolean; permission: "allow" | "ask" | "deny" }>;
+  };
+  handoffs?: boolean;
+}
+
+export interface NaiveCredentialRow {
+  id: string;
+  kind: string;
+  key: string;
+  mcp_server_url: string | null;
 }
 
 /* ---------- Stripe (Srikanth, SR-8) ---------- */

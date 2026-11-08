@@ -17,6 +17,7 @@ import {
   redeemPortalLink,
   requestPortalLink,
 } from "@outrun/core/portal";
+import { startVerifiedCrews } from "@outrun/core/selfServe";
 import { submitDecisions } from "./approvals-core";
 import { portalEmail } from "./portal-session";
 import { getRuntime } from "./runtime";
@@ -44,6 +45,8 @@ export async function signInAction(form: FormData): Promise<void> {
     String(form.get("token") ?? ""),
   );
   if (!out) redirect("/portal?expired=1");
+  // A self-serve client's crew starts once its approver proves they read its mail.
+  await startVerifiedCrews({ db: rt.db.db, emit: rt.emit, enqueue: (j) => rt.queue.enqueue(j) }, out.email);
   const jar = await cookies();
   jar.set(PORTAL_COOKIE, out.session, {
     httpOnly: true,
