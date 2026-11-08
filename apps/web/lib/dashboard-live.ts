@@ -11,7 +11,7 @@ import {
 } from "@outrun/core/db/query";
 import { summarizeStoredTotals } from "@outrun/core/dashboard/views";
 import { checkHealth } from "@outrun/core/health";
-import { BUDGETS } from "../../../naive/crew";
+import { BUDGETS, CLIENT_BUDGETS } from "../../../naive/crew";
 import { getRuntime } from "./runtime";
 
 export async function loadDashboardSnapshot() {
@@ -88,7 +88,12 @@ export async function loadDashboardSnapshot() {
     sessions: sessionRows.map((row) => ({
       ...row,
       spendUsd: Number(row.spendUsd),
-      budgetUsd: BUDGETS[row.agent].cap_micro_usd / 1_000_000,
+      // Outrun's crew has no optional roles; their sessions are other clients', at the client budget.
+      budgetUsd:
+        (row.agent in BUDGETS
+          ? BUDGETS[row.agent as keyof typeof BUDGETS]
+          : CLIENT_BUDGETS[row.agent as keyof typeof CLIENT_BUDGETS]
+        ).cap_micro_usd / 1_000_000,
     })),
     orders: orderRows,
     approvalsWaiting: approvals[0]?.n ?? 0,

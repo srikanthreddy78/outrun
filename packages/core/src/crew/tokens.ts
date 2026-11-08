@@ -1,5 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { AGENTS, type AgentName, CLIENT_ROLES } from "../../contracts";
+import {
+  type AgentName,
+  CLIENT_ROLES,
+  type ClientRole,
+  CORE_CLIENT_ROLES,
+  OUTRUN_AGENTS,
+} from "../../contracts";
 import { OUTRUN_CLIENT_SLUG } from "../constants";
 
 /**
@@ -34,17 +40,26 @@ export const crewTokenEnv = (agent: AgentName, clientSlug: string = OUTRUN_CLIEN
     ? `CREW_TOKEN_${agent.toUpperCase()}`
     : `CREW_TOKEN_${clientSlug.replace(/-/g, "_").toUpperCase()}_${agent.toUpperCase()}`;
 
+/**
+ * Every member's vault token by env var name. A client is a slug (six core roles) or
+ * `{slug, roles}` for a crew the CEO staffed with optional roles.
+ */
 export function crewTokenEnvAll(
   secret: string,
-  clientSlugs: readonly string[] = [OUTRUN_CLIENT_SLUG],
+  clients: readonly (string | { slug: string; roles?: readonly ClientRole[] })[] = [OUTRUN_CLIENT_SLUG],
 ): Record<string, string> {
   return Object.fromEntries(
-    clientSlugs.flatMap((slug) =>
+    clients.flatMap((c) => {
+      const slug = typeof c === "string" ? c : c.slug;
+      const roles = typeof c === "string" ? undefined : c.roles;
       // The CEO is the agency's, not a client's: only Outrun's slug carries it.
-      (slug === OUTRUN_CLIENT_SLUG ? AGENTS : CLIENT_ROLES).map((a) => [
-        crewTokenEnv(a, slug),
-        crewToken(secret, a, slug),
-      ]),
-    ),
+      return (
+        slug === OUTRUN_CLIENT_SLUG
+          ? OUTRUN_AGENTS
+          : CLIENT_ROLES.filter(
+              (r) => (CORE_CLIENT_ROLES as readonly string[]).includes(r) || roles?.includes(r),
+            )
+      ).map((a) => [crewTokenEnv(a, slug), crewToken(secret, a, slug)]);
+    }),
   );
 }

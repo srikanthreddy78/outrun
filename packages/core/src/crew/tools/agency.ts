@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gte, max, min, sql, sum } from "drizzle-orm";
-import { CLIENT_ROLES, PROSPECT_STAGES, type ProspectStage } from "../../../contracts";
+import { PROSPECT_STAGES, staffedRoles, type ProspectStage } from "../../../contracts";
 import { CRON_TZ, OUTRUN_CLIENT_ID, STUCK_APPROVAL_HOURS } from "../../constants";
 import type { Db } from "../../db/client";
 import { agentSessions, clients, events, messages, prospects } from "../../db/schema";
@@ -19,8 +19,9 @@ import { defineTool } from "../registry";
 const HOUR = 3_600_000;
 const STATUSES = ["draft", "profiling", "awaiting_confirmation", "email_setup", "active", "paused"] as const;
 
-const crewOf = (slug: string) =>
-  CLIENT_ROLES.map((role) => ({ role, naiveAgent: naiveAgentName(role, slug) }));
+/** A client's crew: the six core roles plus any the CEO staffed. */
+const crewOf = (slug: string, roles?: readonly string[] | null) =>
+  staffedRoles(roles).map((role) => ({ role, naiveAgent: naiveAgentName(role, slug) }));
 
 async function clientById(db: Db, clientId: string) {
   const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
@@ -63,7 +64,7 @@ export const listClients = defineTool({
         status: c.status,
         profileConfirmed: c.profileConfirmedAt !== null,
         dnsStatus: c.dnsStatus,
-        crew: crewOf(c.slug),
+        crew: crewOf(c.slug, c.crewRoles),
       })),
     };
   },
@@ -140,7 +141,7 @@ export const clientReport = defineTool({
       won: n.won,
       approvalsWaiting: n.approvalsWaiting,
       oldestApprovalHours: n.oldestApprovalHours,
-      agents: crewOf(c.slug).map((m) => {
+      agents: crewOf(c.slug, c.crewRoles).map((m) => {
         const r = byRole.get(m.role);
         return {
           ...m,
@@ -325,7 +326,7 @@ export async function agencyOverview(db: Db, now: Date) {
       won: n.won,
       approvalsWaiting: n.approvalsWaiting,
       attention: attentionReasons(c, n),
-      crew: crewOf(c.slug).map((m) => {
+      crew: crewOf(c.slug, c.crewRoles).map((m) => {
         const r = byRole.get(m.role);
         return {
           ...m,

@@ -165,10 +165,10 @@ describe("crew contract", () => {
     expect(qualified("send_email")).toBe("outrun.send_email");
   });
 
-  it("only the researcher and auditor get web tools", () => {
+  it("only the researcher, auditor and signal scout get web tools", () => {
     for (const a of AGENTS) {
       const web = BUILTIN_TOOLS[a].includes("web_fetch");
-      expect(web).toBe(a === "researcher" || a === "auditor");
+      expect(web).toBe(a === "researcher" || a === "auditor" || a === "signal_scout");
     }
   });
 

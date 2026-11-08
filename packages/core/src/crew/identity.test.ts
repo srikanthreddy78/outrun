@@ -33,4 +33,25 @@ describe("crew identity: a client's role", () => {
     expect(all.CREW_TOKEN_ACME_CEO).toBeUndefined();
     expect(parseNaiveAgentName("acme-ceo")).toBeNull();
   });
+
+  it("names optional roles with dashes on Naive, and gives tokens only to the roles staffed", () => {
+    expect(naiveAgentName("account_manager", "acme")).toBe("acme-account-manager");
+    expect(crewMcpPath("account_manager", "acme")).toBe("acme/account_manager");
+    expect(crewTokenEnv("signal_scout", "acme")).toBe("CREW_TOKEN_ACME_SIGNAL_SCOUT");
+    expect(parseNaiveAgentName("acme-account-manager")).toEqual({
+      agent: "account_manager",
+      clientSlug: "acme",
+    });
+    expect(parseNaiveAgentName("big-co-signal-scout")).toEqual({
+      agent: "signal_scout",
+      clientSlug: "big-co",
+    });
+    // Outrun's crew never has the optional roles.
+    expect(parseNaiveAgentName("account_manager")).toBeNull();
+    const all = crewTokenEnvAll("s", ["outrun", "beta", { slug: "acme", roles: ["experimenter"] }]);
+    expect(Object.keys(all)).toHaveLength(7 + 6 + 7);
+    expect(all.CREW_TOKEN_ACME_EXPERIMENTER).toBe(crewToken("s", "experimenter", "acme"));
+    expect(all.CREW_TOKEN_BETA_EXPERIMENTER).toBeUndefined();
+    expect(all.CREW_TOKEN_EXPERIMENTER).toBeUndefined();
+  });
 });

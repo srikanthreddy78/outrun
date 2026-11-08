@@ -16,6 +16,7 @@
  */
 import { eq } from "drizzle-orm";
 import { agentConfig, clientCrew, credentialKey, VAULT } from "../../../naive/crew";
+import { staffedRoles } from "../contracts";
 import { startProfiling, type ClientDeps } from "./clients";
 import { OUTRUN_CLIENT_ID } from "./constants";
 import { crewToken } from "./crew/tokens";
@@ -68,7 +69,11 @@ export async function provisionClientCrew(deps: ProvisionDeps, clientId: string)
   if (!deps.secret) return pending("CREW_TOKEN_SECRET is not set");
   if (!/^https:\/\//.test(deps.appUrl)) return pending("APP_URL must be the deployed https origin");
   const naive = deps.naive;
-  const members = (deps.crew ?? clientCrew)(deps.appUrl, { slug: c.slug, name: c.name });
+  const members = (deps.crew ?? clientCrew)(deps.appUrl, {
+    slug: c.slug,
+    name: c.name,
+    roles: staffedRoles(c.crewRoles),
+  });
   const key = (what: string) => `provision:${c.id}:${what}`;
 
   const created: string[] = [];
