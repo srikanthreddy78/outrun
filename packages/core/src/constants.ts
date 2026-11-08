@@ -133,3 +133,13 @@ export const LOG_LEVEL = "info";
 /** Enrichment (SH-3): akta company enrichment through Monid, priced per section (~$0.20 a company). */
 export const ENRICH_ENDPOINT = "akta:/v1/company/enrichment";
 export const ENRICH_SECTIONS = ["firmographic", "customer_profile", "management_profile"] as const;
+
+/** The CEO that learns: client_insights' window, its focus bounds and its proposal pace. */
+export const INSIGHT_DAYS = 30;
+/** set_client_focus: first emails a client's crew drafts per day; the send cap still applies. */
+export const CLIENT_FOCUS_MIN = 2;
+export const CLIENT_FOCUS_MAX = 25;
+/** propose_profile_change: one per client in this many days, and none while one is open. */
+export const PROPOSAL_COOLDOWN_DAYS = 7;
+/** Rejection reasons and replied-to subject lines kept in client_insights and get_brief's lessons. */
+export const LESSONS_KEPT = 5;

@@ -87,7 +87,7 @@ export const CEO_SCHEDULE = {
   cron: "30 8 * * 1-5",
   timezone: "America/Los_Angeles",
   input:
-    "Weekday run. Call outrun.agency_status and outrun.list_clients, outrun.kick_client for each active client other than Outrun, then outrun.save_brief once, and stop.",
+    "Weekday run. Call outrun.agency_status and outrun.list_clients; for each active client other than Outrun, outrun.client_insights, outrun.set_client_focus, at most one outrun.propose_profile_change if the numbers support it, and outrun.kick_client; then outrun.save_brief once listing every decision, and stop.",
   budget_micro_usd: 1 * USD,
 };
 
@@ -98,7 +98,7 @@ const DESCRIPTIONS: Record<AgentName, string> = {
   sdr: "Writes first emails and follow-ups in which every claim cites a scan check.",
   closer: "Answers replies and sends checkout links.",
   auditor: "Audits a paying customer's site and saves the findings.",
-  ceo: "Runs the agency: tracks every client and its six agents, starts each client's day, and briefs the owner.",
+  ceo: "Runs the agency: tracks every client and its six agents, learns what gets replies, sets each client's focus, starts each client's day, and briefs the owner.",
 };
 
 const SYSTEM = (agent: AgentName, skill: string, clientName?: string) =>

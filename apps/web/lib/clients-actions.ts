@@ -1,12 +1,14 @@
 "use server";
 /**
  * The owner's client actions on /dashboard/clients: add a client, start its researcher on the
- * profile (after naive up gave it a crew), confirm the profile as edited, pause or resume.
+ * profile (after naive up gave it a crew), confirm the profile as edited, pause or resume, and
+ * accept or reject the CEO's proposed profile changes.
  * Allowlisted team only; every action is a ledger event with actor user:<email>.
  */
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { addClient, confirmProfile, setPaused, startProfiling } from "@outrun/core/clients";
+import { applyProfileProposal, rejectProfileProposal } from "@outrun/core/insights";
 import { auth } from "../auth";
 import { getRuntime } from "./runtime";
 import { dashboardAccess } from "./team-access";
@@ -68,5 +70,32 @@ export async function confirmProfileAction(form: FormData): Promise<void> {
 export async function pauseAction(form: FormData): Promise<void> {
   const actor = await owner();
   await setPaused(await deps(), Id.parse(form.get("clientId")), form.get("paused") === "true", actor);
+  revalidatePath("/dashboard/clients");
+}
+
+/** Accept the CEO's proposal: the changes go into the confirmed profile, which stays confirmed. */
+export async function acceptProposalAction(form: FormData): Promise<void> {
+  const actor = await owner();
+  await applyProfileProposal(
+    await deps(),
+    Id.parse(form.get("clientId")),
+    Id.parse(form.get("proposalId")),
+    actor,
+  );
+  revalidatePath("/dashboard/clients");
+}
+
+export async function rejectProposalAction(form: FormData): Promise<void> {
+  const actor = await owner();
+  await rejectProfileProposal(
+    await deps(),
+    Id.parse(form.get("clientId")),
+    Id.parse(form.get("proposalId")),
+    z
+      .string()
+      .max(500)
+      .parse(String(form.get("reason") ?? "")),
+    actor,
+  );
   revalidatePath("/dashboard/clients");
 }

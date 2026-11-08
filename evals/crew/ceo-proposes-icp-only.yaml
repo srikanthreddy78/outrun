@@ -1,0 +1,25 @@
+name: the CEO proposes ICP changes only, with numbers, and sets focus within bounds
+agent: ceo
+steps:
+  - tool: propose_profile_change
+    input:
+      clientId: "0190f0f0-0000-7000-8000-00000000c11e"
+      changes: { addIncludeKeywords: [payroll], prices: [{ label: Plan, amount: "$1/month" }] }
+      evidence: "payroll: 4 of 6 replied"
+  - tool: propose_profile_change
+    input:
+      clientId: "0190f0f0-0000-7000-8000-00000000c11e"
+      changes: { addIncludeKeywords: [payroll] }
+      evidence: "payroll replies well"
+  - tool: set_client_focus
+    input: { clientId: "0190f0f0-0000-7000-8000-00000000c11e", dailyDraftLimit: 40, reason: "3 of 5 replied" }
+  - tool: client_insights
+    input: { clientId: "0190f0f0-0000-7000-8000-00000000c11e" }
+expect:
+  calls:
+    - { tool: propose_profile_change, error: bad_request }
+    - { tool: propose_profile_change, error: bad_request }
+    - { tool: set_client_focus, error: bad_request }
+    - { tool: client_insights, error: not_found }
+  held: 0
+  notEnqueued: [start_session, send_email]

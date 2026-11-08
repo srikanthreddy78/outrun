@@ -100,8 +100,8 @@ describe("contracts round-trip", () => {
 });
 
 describe("crew contract", () => {
-  it("has the 20 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(27);
+  it("has the 30 tools, each with at least one agent", () => {
+    expect(CREW_TOOL_NAMES).toHaveLength(30);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 
@@ -120,14 +120,41 @@ describe("crew contract", () => {
     ]);
     expect(toolsForAgent("ceo").sort()).toEqual([
       "agency_status",
+      "client_insights",
       "client_report",
       "kick_client",
       "list_clients",
       "ping",
+      "propose_profile_change",
       "save_brief",
+      "set_client_focus",
     ]);
     expect(toolsForAgent("sdr")).not.toContain("reply_email");
     expect(toolsForAgent("closer")).not.toContain("send_email");
+    expect(toolsForAgent("closer")).toContain("get_brief");
+  });
+
+  it("the CEO's profile proposals take ICP changes only, never prices, the offer or the sender", () => {
+    const changes = CREW_TOOLS.propose_profile_change.input.shape.changes;
+    expect(changes.safeParse({ addIncludeKeywords: ["payroll"] }).success).toBe(true);
+    expect(changes.safeParse({}).success).toBe(false);
+    for (const bad of [
+      { prices: [{ label: "Plan", amount: "$1" }] },
+      { offer: { pitch: "x" } },
+      { callToActionUrl: "https://x.example" },
+      { sender: { name: "x" } },
+      { allowedLinkHosts: ["x.example"] },
+      { addIncludeKeywords: ["payroll"], prices: [] },
+    ])
+      expect(changes.safeParse(bad).success).toBe(false);
+    const input = CREW_TOOLS.propose_profile_change.input;
+    const id = "0190f0f0-0000-7000-8000-000000000001";
+    expect(
+      input.safeParse({ clientId: id, changes: { companySizes: [] }, evidence: "no numbers" }).success,
+    ).toBe(false);
+    expect(
+      input.safeParse({ clientId: id, changes: { companySizes: [] }, evidence: "3 of 4 replied" }).success,
+    ).toBe(true);
   });
 
   it("no tool name suggests moving money, setting a price or deleting", () => {

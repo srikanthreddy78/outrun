@@ -14,7 +14,8 @@ export default function Home() {
       <nav style={{ display: "flex", justifyContent: "space-between", marginBottom: 72 }}>
         <strong>Outrun</strong>
         <span>
-          <a href="/landing.md">For agents</a> · <a href="/dashboard">Team sign in</a>
+          <a href="/ops">Live ops</a> · <a href="/landing.md">For agents</a> ·{" "}
+          <a href="/dashboard">Team sign in</a>
         </span>
       </nav>
       <section>
@@ -105,7 +106,8 @@ export default function Home() {
       </section>
       <footer style={{ marginTop: 80, paddingTop: 24, borderTop: "1px solid #d4ded7" }}>
         <strong>For agents:</strong> <a href="/landing.md">Markdown overview</a> ·{" "}
-        <a href="/llms.txt">llms.txt</a> · <a href="/openapi.json">OpenAPI</a> · <a href="/api/mcp">MCP</a>
+        <a href="/llms.txt">llms.txt</a> · <a href="/openapi.json">OpenAPI</a> · <a href="/api/mcp">MCP</a> ·{" "}
+        <a href="/ops">See the company run live</a>
       </footer>
     </main>
   );
