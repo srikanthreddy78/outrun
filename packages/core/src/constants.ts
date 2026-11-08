@@ -65,6 +65,11 @@ export const SCORE_RATE_LIMIT_PER_HOUR = 20;
 export const PUBLIC_BUY_LIMIT_PER_HOUR = 10;
 /** The A2A protocol version our agent card and endpoint speak. */
 export const A2A_PROTOCOL_VERSION = "0.3.0";
+/**
+ * SR-12: accept Stripe Shared Payment Tokens from buyer agents, so an agent can pay for an Audit + Kit
+ * without a browser. Off until Stripe enables agentic commerce on the account (docs/adr/0009).
+ */
+export const AGENT_PAYMENTS_ENABLED = false;
 
 /** safeFetch */
 export const FETCH_TIMEOUT_MS = 10_000;

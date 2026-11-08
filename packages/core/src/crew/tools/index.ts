@@ -20,6 +20,9 @@ const noOrders: CheckoutDeps = {
     createCheckout: async () => {
       throw new AppError("not_configured", "checkout is not wired in this process");
     },
+    payWithSharedToken: async () => {
+      throw new AppError("not_configured", "payments are not wired in this process");
+    },
   },
   emit: async () => {},
   appUrl: "http://localhost:3000",

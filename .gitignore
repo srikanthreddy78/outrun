@@ -157,3 +157,6 @@ next-env.d.ts
 .claude/
 
 .local/
+
+# written by pnpm listing for the deployed URL
+/server.json

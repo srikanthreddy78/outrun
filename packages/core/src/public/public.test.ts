@@ -8,7 +8,8 @@ import { transition } from "../orders";
 import { quickScan } from "../scan/scan";
 import { createTempDatabase, type TempDb } from "../testing/db";
 import { agentCard, handleA2a, RPC } from "./a2a";
-import { llmsTxt, mcpServerCard, openApi } from "./discovery";
+import { readFileSync } from "node:fs";
+import { llmsTxt, mcpServerCard, openApi, serverJson } from "./discovery";
 import { callPublicTool, type PublicDeps } from "./service";
 
 const APP = "https://outrun.example";
@@ -228,6 +229,33 @@ describe("public tools for other agents", () => {
       expect(txt).toContain("$499");
       expect(txt).toContain("$1,500/month");
       for (const tool of Object.keys(PUBLIC_TOOLS)) expect(txt).toContain(tool);
+    });
+
+    it("server.json meets the MCP Registry schema we vendored", () => {
+      const schema = JSON.parse(
+        readFileSync(new URL("./fixtures/mcp-server.schema.json", import.meta.url), "utf8"),
+      ) as {
+        definitions: Record<
+          string,
+          {
+            required?: string[];
+            properties: Record<string, { pattern?: string; maxLength?: number; enum?: string[] }>;
+          }
+        >;
+      };
+      const def = schema.definitions.ServerDetail!;
+      const doc = serverJson(APP) as Record<string, unknown>;
+      for (const k of def.required ?? []) expect(doc[k]).toBeTruthy();
+      for (const k of Object.keys(doc)) expect(def.properties[k], k).toBeDefined();
+      for (const [k, rule] of Object.entries(def.properties)) {
+        const v = doc[k];
+        if (typeof v !== "string") continue;
+        if (rule.pattern) expect(v).toMatch(new RegExp(rule.pattern));
+        if (rule.maxLength) expect(v.length, k).toBeLessThanOrEqual(rule.maxLength);
+      }
+      const remote = schema.definitions.StreamableHttpTransport!.properties;
+      expect(remote.type!.enum).toContain((doc.remotes as { type: string }[])[0]!.type);
+      expect(doc.remotes).toEqual([{ type: "streamable-http", url: `${APP}/api/mcp` }]);
     });
 
     it("openapi.json and the server card are generated from the contracts", () => {
