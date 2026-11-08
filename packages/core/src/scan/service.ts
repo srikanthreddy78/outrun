@@ -32,6 +32,7 @@ export class MemoryScanStore implements ScanStore {
   }
 }
 export class RateLimitError extends Error {
+  readonly code = "rate_limited";
   retryAfter = 3600;
 }
 export class ScanService {

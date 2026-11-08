@@ -28,7 +28,7 @@ export async function checkHealth(opts: { db: Db; demo: boolean; fakes: string[]
     checks.queue = !!r.rows[0]?.boss;
     if (checks.migrations) {
       const w = await opts.db.execute<{ at: Date | null }>(
-        sql`select max(created_at) as at from events where type = 'webhook.received' and actor = 'provider:naive'`,
+        sql`select max(ts) as at from events where type = 'webhook.received' and actor = 'provider:naive'`,
       );
       const at = w.rows[0]?.at;
       lastNaiveWebhookAt = at ? new Date(at).toISOString() : null;
