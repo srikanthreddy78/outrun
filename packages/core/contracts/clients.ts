@@ -103,3 +103,20 @@ export function slugify(name: string): string {
     .slice(0, 40)
     .replace(/-+$/g, "");
 }
+
+/**
+ * What the CEO may propose changing in a confirmed profile: who to look for, nothing else.
+ * Strict, so prices, the offer, the call to action, the sender and link hosts can't ride along.
+ */
+export const ProfileChanges = z
+  .strictObject({
+    addIncludeKeywords: z.array(Text(40)).min(1).max(10).optional(),
+    dropIncludeKeywords: z.array(Text(40)).min(1).max(10).optional(),
+    addExcludeKeywords: z.array(Text(40)).min(1).max(10).optional(),
+    /** Replaces the buyer roles. */
+    buyerRoles: z.array(Text(60)).min(1).max(10).optional(),
+    /** Replaces the company sizes; empty means any size. */
+    companySizes: z.array(z.enum(COMPANY_SIZES)).max(8).optional(),
+  })
+  .refine((c) => Object.values(c).some((v) => v !== undefined), "propose at least one change");
+export type ProfileChanges = z.infer<typeof ProfileChanges>;

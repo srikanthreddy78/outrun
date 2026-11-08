@@ -16,6 +16,7 @@ import { and, asc, eq, type SQL } from "drizzle-orm";
 import type { AgentName, Entity, ProspectStage } from "../../../contracts";
 import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
 import { prospects } from "../../db/schema";
+import { clientFocus } from "../../insights";
 import { DEMO_FILED_REASON } from "../../seed";
 import { CLIENT_CANDIDATES_ENOUGH } from "../../sources/clientSources";
 import { dayIn } from "../../time";
@@ -72,7 +73,10 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
         await start("sdr", FOLLOWUPS_ENTITY, `Draft up to ${n} of the follow-ups due today.`);
         send -= n;
       }
-      for (const id of await inStage("researched", Math.min(limit, send)))
+      // The CEO's focus sets a client's first emails per day; the send cap still binds.
+      const focus = ctx.clientId === OUTRUN_CLIENT_ID ? null : await clientFocus(ctx.db, ctx.clientId);
+      const firsts = Math.min(focus?.dailyDraftLimit ?? limit, send);
+      for (const id of await inStage("researched", firsts))
         await start("sdr", { type: "prospect", id }, `Draft the first email for prospect ${id}.`);
 
       const discovery = Math.min(counts.candidatesWaiting, counts.capsLeft.discovery);

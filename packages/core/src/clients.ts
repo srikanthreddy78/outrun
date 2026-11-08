@@ -93,23 +93,15 @@ export async function startProfiling(deps: ClientDeps, clientId: string, actor: 
   });
 }
 
-/** save_client_profile: the researcher's draft. It never confirms; a confirmed profile is kept. */
-export async function saveDraftProfile(
-  deps: Pick<ClientDeps, "db" | "emit">,
-  clientId: string,
-  raw: unknown,
-  actor: string,
-) {
+/** A profile for the client at `domain`: the contract, its sources and its call to action. */
+export function validProfileFor(domain: string, raw: unknown): ClientProfile {
   const profile = ClientProfile.parse(raw);
-  const [c] = await deps.db.select().from(clients).where(eq(clients.id, clientId));
-  if (!c || c.id === OUTRUN_CLIENT_ID)
-    throw new AppError("forbidden", "Outrun's profile isn't drafted by an agent");
   const ownHost = (u: string) => {
     const h = new URL(u).hostname;
-    return h === c.domain || h.endsWith(`.${c.domain}`);
+    return h === domain || h.endsWith(`.${domain}`);
   };
   if (!profile.sources.some(ownHost))
-    throw new AppError("bad_request", `cite at least one page on ${c.domain} in sources`);
+    throw new AppError("bad_request", `cite at least one page on ${domain} in sources`);
   if (
     !ownHost(profile.offer.callToActionUrl) &&
     !profile.allowedLinkHosts.includes(new URL(profile.offer.callToActionUrl).hostname)
@@ -118,6 +110,20 @@ export async function saveDraftProfile(
       "bad_request",
       "the call to action must be on the client's domain or an allowed link host",
     );
+  return profile;
+}
+
+/** save_client_profile: the researcher's draft. It never confirms; a confirmed profile is kept. */
+export async function saveDraftProfile(
+  deps: Pick<ClientDeps, "db" | "emit">,
+  clientId: string,
+  raw: unknown,
+  actor: string,
+) {
+  const [c] = await deps.db.select().from(clients).where(eq(clients.id, clientId));
+  if (!c || c.id === OUTRUN_CLIENT_ID)
+    throw new AppError("forbidden", "Outrun's profile isn't drafted by an agent");
+  const profile = validProfileFor(c.domain, raw);
   if (c.profileConfirmedAt) return { status: c.status };
   const [u] = await deps.db
     .update(clients)

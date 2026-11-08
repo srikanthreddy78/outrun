@@ -4,7 +4,7 @@
  * `naive.config.test.ts` fails if they drift. Changes need all three approvals.
  */
 import { z } from "zod";
-import { ClientProfile, ClientStatus } from "./clients";
+import { ClientProfile, ClientStatus, ProfileChanges } from "./clients";
 import { Domain, Email, Id, IsoDateTime, Untrusted } from "./common";
 import {
   CheckId,
@@ -47,6 +47,15 @@ const BusinessContact = z.object({
 });
 const ContactOut = z.object({ contactId: Id, name: z.string(), role: z.string(), email: z.string() });
 const Draft = z.object({ draftId: Id, hash: z.string().regex(/^[0-9a-f]{64}$/) });
+/** One slice of a client's first emails: how many went out, got a reply, showed interest. */
+const InsightRow = z.object({
+  key: z.string(),
+  contacted: z.number().int().nonnegative(),
+  replied: z.number().int().nonnegative(),
+  interested: z.number().int().nonnegative(),
+  replyRate: z.number().min(0).max(1),
+  interestRate: z.number().min(0).max(1),
+});
 const Limit = (max: number, def: number) => z.number().int().min(1).max(max).default(def);
 
 export const CREW_TOOLS = {
@@ -151,10 +160,10 @@ export const CREW_TOOLS = {
     }),
   },
   get_brief: {
-    agents: ["sdr"],
+    agents: ["sdr", "closer"],
     policy: "allow",
     description:
-      "Scan checks with their ids (Outrun) or the client's offer (other clients), facts, the contact and earlier emails for a prospect.",
+      "Scan checks with their ids (Outrun) or the client's offer (other clients), facts, the contact and earlier emails for a prospect, and for a client the lessons: what its approvers rejected and which subject lines got replies.",
     input: z.object({ prospectId: Id }),
     output: z.object({
       prospectId: Id,
@@ -178,6 +187,16 @@ export const CREW_TOOLS = {
           prices: z.array(z.object({ label: z.string(), amount: z.string() })),
           sender: z.string(),
           tone: z.string(),
+        })
+        .nullable(),
+      /**
+       * A client's prospects: what this client's approvers rejected and the subject lines that got
+       * replies, newest first. Avoid the first, imitate the second. Null for Outrun.
+       */
+      lessons: z
+        .object({
+          rejectionReasons: z.array(z.string()),
+          repliedSubjects: z.array(z.string()),
         })
         .nullable(),
     }),
@@ -412,6 +431,72 @@ export const CREW_TOOLS = {
     description: "Health check.",
     input: z.object({}),
     output: z.object({ ok: z.literal(true), agent: AgentName, ts: IsoDateTime }),
+  },
+  client_insights: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "What is working for one client over the last 30 days: sent, replies, interest, wins, unsubscribes and bounces; reply and interest rates by ICP keyword, fit signal and buyer role; the approval reject rate with the last rejection reasons; and the subject lines that got replies. Read-only.",
+    input: z.object({ clientId: Id }),
+    output: z.object({
+      clientId: Id,
+      slug: z.string(),
+      since: IsoDateTime,
+      sent: z.number().int().nonnegative(),
+      contacted: z.number().int().nonnegative(),
+      replies: z.number().int().nonnegative(),
+      interested: z.number().int().nonnegative(),
+      replyRate: z.number().min(0).max(1),
+      interestRate: z.number().min(0).max(1),
+      wins: z.number().int().nonnegative(),
+      unsubscribes: z.number().int().nonnegative(),
+      bounces: z.number().int().nonnegative(),
+      byKeyword: z.array(InsightRow),
+      bySignal: z.array(InsightRow),
+      byBuyerRole: z.array(InsightRow),
+      approvals: z.object({
+        decided: z.number().int().nonnegative(),
+        rejected: z.number().int().nonnegative(),
+        rejectRate: z.number().min(0).max(1),
+        lastRejectionReasons: z.array(z.string()),
+      }),
+      repliedSubjects: z.array(z.string()),
+      focus: z.object({ dailyDraftLimit: z.number().int(), reason: z.string(), at: IsoDateTime }).nullable(),
+      openProposal: z.object({ proposalId: Id, at: IsoDateTime }).nullable(),
+    }),
+  },
+  propose_profile_change: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Proposes a change to who a client's crew looks for (include and exclude keywords, buyer roles, company sizes), with the numbers behind it. The owner accepts or rejects it on the dashboard. Never prices, the offer, the sender or links. One per client per 7 days.",
+    input: z.object({
+      clientId: Id,
+      changes: ProfileChanges,
+      /** The numbers from outrun.client_insights that support it. */
+      evidence: z
+        .string()
+        .min(1)
+        .max(1000)
+        .refine((s) => /\d/.test(s), "evidence needs numbers from outrun.client_insights"),
+    }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), proposalId: Id }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  set_client_focus: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Sets how many first emails a client's crew drafts per day (2 to 25), to move effort toward clients that get replies. Still capped by the client's send cap. Moves no money and changes no price.",
+    input: z.object({
+      clientId: Id,
+      /** CLIENT_FOCUS_MIN..CLIENT_FOCUS_MAX in constants.ts. */
+      dailyDraftLimit: z.number().int().min(2).max(25),
+      reason: z.string().min(1).max(300),
+    }),
+    output: z.object({ dailyDraftLimit: z.number().int(), previous: z.number().int().nullable() }),
   },
 } as const satisfies Record<
   string,
