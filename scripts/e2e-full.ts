@@ -17,7 +17,18 @@ import type Stripe from "stripe";
 import { loadConfig } from "@outrun/core";
 import type { AgentName } from "@outrun/core/contracts";
 import type { ToolContext } from "@outrun/core/crew";
-import { and, companies, eq, events, messages, orders, prospects, reports, scans } from "@outrun/core/db";
+import {
+  and,
+  auditCrawls,
+  companies,
+  eq,
+  events,
+  messages,
+  orders,
+  prospects,
+  reports,
+  scans,
+} from "@outrun/core/db";
 import { createFakes, FakeLlmProvider, FakeNaiveClient } from "@outrun/core/fakes";
 import type { LlmRequest } from "@outrun/core/integrations";
 import { callPublicTool } from "@outrun/core/public/service";
@@ -516,7 +527,25 @@ async function deliverAudit(
   const crawl = naive.toolCalls.find((c) => c.sessionId === session.id && c.tool === "start_crawl");
   if (crawl?.error) throw new Error(`start_crawl failed: ${crawl.error.code} ${crawl.error.message}`);
   const run = await waitFor("the Apify run", async () => apify.runs.at(-1));
-  // What the auditor does once Naive wakes it with the crawl.
+  // What the auditor does once Naive wakes it with the crawl (queued below, after it finishes).
+  const body = JSON.stringify({
+    eventType: "ACTOR.RUN.SUCCEEDED",
+    resource: { id: run.runId, status: "SUCCEEDED", defaultDatasetId: `ds_${run.runId}`, usageTotalUsd: 0.2 },
+  });
+  const res = await handleApifyWebhook({
+    rawBody: body,
+    header: APIFY_SECRET,
+    secret: APIFY_SECRET,
+    db: rt.db,
+    queue: rt.queue,
+  });
+  check(res.status === 200, `Apify webhook accepted (${JSON.stringify(res.body)})`);
+  // Queue the auditor's next steps only once the crawl is recorded as finished, so nothing that
+  // wakes the session earlier can run get_crawl_pages too soon.
+  await waitFor(`crawl for ${orderId} to finish`, async () => {
+    const [c] = await db.select().from(auditCrawls).where(eq(auditCrawls.orderId, orderId));
+    return c?.status === "succeeded" ? c : undefined;
+  });
   session.steps.push(
     { tool: "get_crawl_pages", input: { orderId, limit: 10 } },
     {
@@ -546,18 +575,16 @@ async function deliverAudit(
       },
     },
   );
-  const body = JSON.stringify({
-    eventType: "ACTOR.RUN.SUCCEEDED",
-    resource: { id: run.runId, status: "SUCCEEDED", defaultDatasetId: `ds_${run.runId}`, usageTotalUsd: 0.2 },
-  });
-  const res = await handleApifyWebhook({
-    rawBody: body,
-    header: APIFY_SECRET,
-    secret: APIFY_SECRET,
-    db: rt.db,
-    queue: rt.queue,
-  });
-  check(res.status === 200, `Apify webhook accepted (${JSON.stringify(res.body)})`);
+  // If the worker's "crawl is ready" message already woke it and it went idle, wake it again.
+  const woken = naive.calls.some(
+    (c) => c.method === "send" && c.args[0] === session.id && String(c.args[2]).startsWith("crawl_ready:"),
+  );
+  if (woken && session.status !== "running" && session.cursor < session.steps.length)
+    await naive.send(
+      session.id,
+      "e2e: the crawl is ready; read it and save the audit.",
+      `e2e:resume:${orderId}`,
+    );
   await waitFor(`order ${orderId} to be delivered`, async () => {
     const bad = naive.toolCalls.find((c) => c.error);
     if (bad) throw new Error(`${bad.tool} failed: ${bad.error!.code} ${bad.error!.message}`);
