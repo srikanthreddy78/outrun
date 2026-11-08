@@ -15,13 +15,74 @@ import { safeFetch, validatePublicUrl } from "../safeFetch";
 import { isIP } from "node:net";
 
 const html = (body: string) => /<html[\s>]/i.test(body);
-const bodyText = (body: string) =>
-  body
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
+// Pages are attacker-controlled: cap what any regex sees and keep every scan linear.
+const MAX_SCAN_HTML = 256 * 1024;
+const MAX_TAG = 2048;
+const MAX_INNER = 4096;
+const cap = (body: string) => (body.length > MAX_SCAN_HTML ? body.slice(0, MAX_SCAN_HTML) : body);
+const CTA_WORDS = /(get started|sign up|start free|book demo|buy now|try free|contact sales)/i;
+
+function stripBlocks(body: string, name: string): string {
+  const open = new RegExp(`<${name}\\b`, "gi");
+  const close = new RegExp(`</${name}>`, "gi");
+  let out = "";
+  let from = 0;
+  for (let m = open.exec(body); m; m = open.exec(body)) {
+    const gt = body.indexOf(">", m.index);
+    if (gt < 0) break;
+    close.lastIndex = gt + 1;
+    const end = close.exec(body);
+    if (!end) break;
+    out += body.slice(from, m.index);
+    from = open.lastIndex = end.index + end[0].length;
+  }
+  return out + body.slice(from);
+}
+
+function stripTags(body: string): string {
+  let out = "";
+  let from = 0;
+  for (let lt = body.indexOf("<"); lt >= 0; lt = body.indexOf("<", lt + 1)) {
+    const gt = body.indexOf(">", lt + 1);
+    if (gt < 0) break;
+    out += body.slice(from, lt) + " ";
+    from = gt + 1;
+    lt = gt;
+  }
+  return out + body.slice(from);
+}
+
+export const bodyText = (body: string) =>
+  stripTags(stripBlocks(stripBlocks(cap(body), "script"), "style"))
     .replace(/\s+/g, " ")
     .trim();
+
+/** Each open tag of these names with its inner HTML, bounded by the close tag, the next open tag and MAX_INNER. */
+function elements(page: string, names: string): { tag: string; inner: string; closed: boolean }[] {
+  const open = new RegExp(`<(?:${names})\\b`, "gi");
+  const close = new RegExp(`</(?:${names})\\s*>`, "i");
+  const starts = [...page.matchAll(open)].map((m) => m.index);
+  const found: { tag: string; inner: string; closed: boolean }[] = [];
+  let gt = -1;
+  for (const [i, start] of starts.entries()) {
+    if (gt < start) gt = page.indexOf(">", start);
+    if (gt < 0) break;
+    if (gt - start > MAX_TAG) continue;
+    const segment = page.slice(gt + 1, Math.min(starts[i + 1] ?? page.length, gt + 1 + MAX_INNER));
+    const end = close.exec(segment);
+    found.push({
+      tag: page.slice(start, gt + 1),
+      inner: end ? segment.slice(0, end.index) : segment,
+      closed: !!end,
+    });
+  }
+  return found;
+}
+
+const after = (text: string, marker: RegExp) => {
+  const at = text.search(marker);
+  return at < 0 ? "" : text.slice(at);
+};
 const isOk = (status: number) => status >= 200 && status < 300;
 const record = (id: string, status: Check["status"], evidence: string, sourceUrl?: string): Check => {
   const readiness = READINESS_CHECKS.find((item) => item[0] === id);
@@ -131,7 +192,8 @@ export function normalizeDomain(input: string): string {
 }
 const probe = async (source: ScanSource, url: string) => {
   try {
-    return await source(url);
+    const response = await source(url);
+    return { ...response, body: cap(response.body) };
   } catch {
     return undefined;
   }
@@ -149,10 +211,7 @@ export async function quickScan(domainInput: string, source: ScanSource = safeFe
     probe(source, locate(base, "/sitemap.xml")),
   ]);
   const page = home && isOk(home.status) ? home.body : "";
-  const cta =
-    /<(?:a|button)\b[^>]*>(?:[^<]|<[^>]+>)*(?:get started|sign up|start free|book demo|buy now|try free|contact sales)/i.test(
-      page,
-    );
+  const cta = elements(page, "a|button").some((el) => CTA_WORDS.test(bodyText(el.inner)));
   const checks = [
     record(
       "ssr-answer",
@@ -180,7 +239,7 @@ export async function quickScan(domainInput: string, source: ScanSource = safeFe
     ),
     record(
       "value-proposition",
-      status(home ? /<h1\b[^>]*>[^<]{12,}/i.test(page) : undefined),
+      status(home ? elements(page, "h1").some((el) => /^[^<]{12,}/.test(el.inner)) : undefined),
       home ? "Visible heading inspected" : "Homepage fetch failed",
       base,
     ),
@@ -189,16 +248,9 @@ export async function quickScan(domainInput: string, source: ScanSource = safeFe
 }
 
 function extractCta(base: string, page: string): string | undefined {
-  const matches = [...page.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
-  for (const match of matches) {
-    const href = match[1];
-    if (
-      !href ||
-      !/(get started|sign up|start free|book demo|buy now|try free|contact sales)/i.test(
-        bodyText(match[2] ?? ""),
-      )
-    )
-      continue;
+  for (const el of elements(cap(page), "a")) {
+    const href = /href=["']([^"']+)["']/i.exec(el.tag)?.[1];
+    if (!href || !el.closed || !CTA_WORDS.test(bodyText(el.inner))) continue;
     try {
       return validatePublicUrl(new URL(href, base).toString()).toString();
     } catch {
@@ -230,7 +282,10 @@ export async function fullScan(
     ...partial.checks,
     check(
       "markdown",
-      home ? /<link[^>]+(?:text\/markdown|\.md["'])/i.test(page) || /\.md(?:"|')/i.test(page) : undefined,
+      home
+        ? elements(page, "link").some((el) => /(?:text\/markdown|\.md["'])/i.test(el.tag)) ||
+            /\.md(?:"|')/i.test(page)
+        : undefined,
       "Markdown alternate link inspected",
     ),
     check(
@@ -243,7 +298,9 @@ export async function fullScan(
     ),
     check(
       "json-ld",
-      home ? /<script[^>]+type=["']application\/ld\+json/i.test(page) : undefined,
+      home
+        ? elements(page, "script").some((el) => /type=["']application\/ld\+json/i.test(el.tag))
+        : undefined,
       "JSON-LD script inspected",
     ),
     check(
@@ -283,7 +340,7 @@ export async function fullScan(
     check(
       "machine-pricing",
       home
-        ? /application\/ld\+json[\s\S]*?(?:price|Offer)/i.test(page) ||
+        ? /(?:price|Offer)/i.test(after(page, /application\/ld\+json/i)) ||
             /href=["'][^"']*pricing\.(?:json|xml)/i.test(page)
         : undefined,
       "Machine-readable pricing inspected",
