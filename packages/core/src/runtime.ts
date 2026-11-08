@@ -10,6 +10,7 @@ import { createEmitter, type Emit } from "./events";
 import { createIntegrations } from "./integrations";
 import { createNaiveClient } from "./integrations/naive";
 import { ApifyClient } from "./integrations/apify";
+import { createStripeGateway } from "./integrations/stripe";
 import type { Integrations } from "./integrations/types";
 import { createLlm, type Llm } from "./llm";
 import { Queue, type QueueOptions } from "./queue";
@@ -46,6 +47,7 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
   const selected = createIntegrations(config, {
     naive: { key: "naive", make: (c) => createNaiveClient(c.keys.naive!) },
     apify: { key: "apify", make: (c) => new ApifyClient(c.keys.apify!, c.keys.apifyWebhookSecret!) },
+    stripe: { key: "stripe", make: (c) => createStripeGateway(c.keys.stripe!) },
   });
   const integrations: Integrations = { ...selected.integrations, ...opts.integrations };
   const queue = new Queue({
@@ -57,7 +59,11 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
   });
   if (opts.startQueue ?? true) await queue.start();
   const registry = new ToolRegistry(
-    allTools({ settings: config.settings, audit: { apify: integrations.apify, appUrl: config.appUrl } }),
+    allTools({
+      settings: config.settings,
+      orders: { stripe: integrations.stripe, emit, appUrl: config.appUrl },
+      audit: { apify: integrations.apify, appUrl: config.appUrl },
+    }),
   );
   const llm = createLlm({ providers: integrations.llm, db: db.db, emit, settings: config.settings });
   return {

@@ -9,12 +9,26 @@ import { scanDomainTool } from "./scan_domain";
 import { ping } from "./ping";
 import { pipelineStatus, type FollowupsDue, type PipelineSettings } from "./pipeline_status";
 import { planDay } from "./plan_day";
+import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
+import { AppError } from "../../errors";
 
-export { ping, pipelineStatus, planDay };
+export { createCheckoutLink, ping, pipelineStatus, planDay };
+
+/** Stands in when no runtime is wired (scripts that only list tools); calling it says so. */
+const noOrders: CheckoutDeps = {
+  stripe: {
+    createCheckout: async () => {
+      throw new AppError("not_configured", "checkout is not wired in this process");
+    },
+  },
+  emit: async () => {},
+  appUrl: "http://localhost:3000",
+};
 
 export function allTools(opts: {
   settings: PipelineSettings;
   followupsDue?: FollowupsDue;
+  orders?: CheckoutDeps;
   audit?: { apify: ApifyClient; appUrl: string };
 }): ToolDef[] {
   return [
@@ -23,5 +37,6 @@ export function allTools(opts: {
     planDay(opts.settings, opts.followupsDue),
     scanDomainTool,
     ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl) : []),
+    createCheckoutLink(opts.orders ?? noOrders),
   ] as unknown as ToolDef[];
 }

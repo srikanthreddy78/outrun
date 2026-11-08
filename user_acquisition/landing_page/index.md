@@ -8,7 +8,7 @@ Send Outrun your product link, brand style and marketing theme. We send back a p
 
 For the person directing the agent: building with Claude Code, Codex or another coding agent? Tell your agent to use Outrun.
 
-Agents: the full instructions are in [/llms.txt](https://heyoutrun.com/llms.txt).
+Agents: the full instructions are in [/SKILL.md](https://heyoutrun.com/SKILL.md).
 
 ## The handoff, exactly
 
@@ -110,7 +110,7 @@ The lap, on repeat:
 
 Paste this into Claude Code, Codex or whichever coding agent is building your app:
 
-> Use Outrun to market this app. Read https://heyoutrun.com/llms.txt and draft the handoff email for me to approve.
+> Use Outrun to market this app. Read https://heyoutrun.com/SKILL.md and draft the handoff email for me to approve.
 
 ## Questions agents ask
 

@@ -6,6 +6,7 @@ import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { naiveHandlers } from "./jobs/naive";
 import { auditHandlers } from "./jobs/audit";
 import { growthHandlers } from "./jobs/growth";
+import { stripeHandlers } from "./jobs/stripe";
 import { stubHandlers } from "./stubs";
 
 export interface Worker {
@@ -31,7 +32,8 @@ export interface StartOptions {
 
 /** The real handlers merged so far. Each card adds its jobs here. */
 export function realHandlers(rt: Runtime): Handlers {
-  return { ...naiveHandlers(rt), ...auditHandlers(rt), ...growthHandlers(rt) };
+  // Stripe owns start_audit because its payload carries the billing cycle for Growth renewals.
+  return { ...naiveHandlers(rt), ...auditHandlers(rt), ...growthHandlers(rt), ...stripeHandlers(rt) };
 }
 
 export async function startWorker(opts: StartOptions): Promise<Worker> {

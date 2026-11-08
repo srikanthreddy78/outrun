@@ -48,6 +48,7 @@ const Env = Settings.extend({
   OPENROUTER_API_KEY: optionalKey,
   STRIPE_SECRET_KEY: optionalKey,
   STRIPE_WEBHOOK_SECRET: optionalKey,
+  STRIPE_WEBHOOK_SECRET_PREVIOUS: optionalKey,
   MONID_API_KEY: optionalKey,
   AGENTMAIL_API_KEY: optionalKey,
   AGENTMAIL_WEBHOOK_SECRET: optionalKey,
@@ -79,6 +80,7 @@ export interface Config {
     openrouter?: string;
     stripe?: string;
     stripeWebhookSecret?: string;
+    stripeWebhookSecretPrevious?: string;
     monid?: string;
     agentmail?: string;
     agentmailWebhookSecret?: string;
@@ -132,6 +134,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       openrouter: e.OPENROUTER_API_KEY,
       stripe: e.STRIPE_SECRET_KEY,
       stripeWebhookSecret: e.STRIPE_WEBHOOK_SECRET,
+      stripeWebhookSecretPrevious: e.STRIPE_WEBHOOK_SECRET_PREVIOUS,
       monid: e.MONID_API_KEY,
       agentmail: e.AGENTMAIL_API_KEY,
       agentmailWebhookSecret: e.AGENTMAIL_WEBHOOK_SECRET,
