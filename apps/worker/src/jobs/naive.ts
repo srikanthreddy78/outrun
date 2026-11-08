@@ -93,14 +93,25 @@ export async function onIdle(deps: Deps, sessionId: string, at: Date = new Date(
   await recordSessionState(deps, sessionId, s, at);
 
   if (s.stopReason === "awaiting_approval") {
+    // A session parks only its own client's drafts: whose approval it is follows the draft.
+    const [owner] = await deps.db
+      .select({ clientId: agentSessions.clientId })
+      .from(agentSessions)
+      .where(eq(agentSessions.sessionId, sessionId));
     for (const a of s.pendingActions) {
       if (a.kind !== "tool" || !SEND_TOOLS.has(a.tool)) continue;
       const args = DraftArgs.safeParse(a.input);
-      if (!args.success) continue;
+      if (!args.success || !owner) continue;
       const updated = await deps.db
         .update(messages)
         .set({ status: "awaiting_approval", naiveSessionId: sessionId, naiveToolCallId: a.toolCallId })
-        .where(and(eq(messages.id, args.data.draftId), eq(messages.status, "checked")))
+        .where(
+          and(
+            eq(messages.id, args.data.draftId),
+            eq(messages.status, "checked"),
+            eq(messages.clientId, owner.clientId),
+          ),
+        )
         .returning({ id: messages.id });
       if (updated[0]) {
         await deps.emit({

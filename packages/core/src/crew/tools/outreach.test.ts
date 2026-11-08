@@ -216,9 +216,23 @@ describe("outreach tools (SH-5, SH-7, SH-8)", () => {
       status: "queued",
     });
     await call(sendEmailTool(deps), { draftId: d.draftId, hash: d.hash });
-    expect(jobs.map((j) => j.idempotencyKey)).toEqual([`send:${d.draftId}`]);
+    // A repeat enqueues under the same key, which the queue keeps to one job.
+    expect([...new Set(jobs.map((j) => j.idempotencyKey))]).toEqual([`send:${d.draftId}`]);
     // A first email is drafted once.
     expect(await call(checkDraft(deps), good(p.prospectId))).toMatchObject({ ok: false });
+  });
+
+  it("send_email still queues the send when Naive's approval was reconciled first", async () => {
+    const p = await prospect();
+    const d = await checked(p.prospectId);
+    // The worker read tool.confirm.resolved and marked it approved before the call ran.
+    await t.db.update(messages).set({ status: "approved" }).where(eq(messages.id, d.draftId));
+    jobs.length = 0;
+    expect(await call(sendEmailTool(deps), { draftId: d.draftId, hash: d.hash })).toEqual({
+      messageId: d.draftId,
+      status: "queued",
+    });
+    expect(jobs.map((j) => [j.type, j.idempotencyKey])).toEqual([["send_email", `send:${d.draftId}`]]);
   });
 
   it("send_email refuses a draft edited after checking, a suppressed recipient, and past the cap", async () => {
