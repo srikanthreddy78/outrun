@@ -8,7 +8,7 @@
  *   Naive webhook: unsigned delivery refused (401; 503 means NAIVE_WEBHOOK_SECRET is unset)
  *   Stripe webhook: unsigned delivery refused
  *   agent discovery: llms.txt, openapi.json, the A2A agent card and the MCP server card point at
- *     this host; the public MCP lists four tools; A2A answers get_quote (read-only, no order)
+ *     this host; the public MCP lists its five tools; A2A answers get_quote (read-only, no order)
  *
  * In production it also fails on fakes in use or a missing webhook secret.
  */
@@ -152,7 +152,7 @@ async function main(): Promise<void> {
     });
   }
 
-  await check("public MCP lists four tools", async () => {
+  await check("public MCP lists its five tools", async () => {
     const res = await get("/api/mcp", {
       method: "POST",
       headers: {
@@ -164,7 +164,7 @@ async function main(): Promise<void> {
     });
     expectStatus(res, 200);
     const tools = ((await rpcResult(res)).tools ?? []) as { name: string }[];
-    if (tools.length !== 4) throw new Error(`expected 4 tools, got ${tools.map((x) => x.name).join(",")}`);
+    if (tools.length !== 5) throw new Error(`expected 5 tools, got ${tools.map((x) => x.name).join(",")}`);
   });
 
   await check("A2A answers a quote", async () => {

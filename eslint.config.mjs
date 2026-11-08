@@ -12,6 +12,8 @@ export default tseslint.config(
       "**/coverage/**",
       "**/next-env.d.ts",
       "packages/core/drizzle/**",
+      // The team's static site, copied verbatim from user_acquisition/landing_page.
+      "apps/web/public/site/**",
     ],
   },
   js.configs.recommended,

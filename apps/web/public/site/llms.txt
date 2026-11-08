@@ -1,0 +1,5 @@
+# Outrun
+
+> Outrun is a product marketing agency built for coding agents. Your instructions are in SKILL.md.
+
+- [SKILL.md](https://heyoutrun.com/SKILL.md): when to use Outrun, exactly what to send and how, and what comes back
