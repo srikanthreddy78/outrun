@@ -117,6 +117,37 @@ describe("crew MCP server", () => {
     expect(evs.at(-1)).toMatchObject({ actor: "naive:orchestrator", entityId: "pipeline_status" });
   });
 
+  it("a failed ledger write after a successful tool still reports success", async () => {
+    const broken = {
+      ...rt,
+      emit: async () => {
+        throw new Error("pool timeout");
+      },
+    };
+    const res = await crewMcpResponse(
+      broken,
+      "orchestrator",
+      new Request("https://outrun.example/api/crew/mcp/orchestrator", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-06-18",
+          authorization: `Bearer ${crewToken(SECRET, "orchestrator")}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 9,
+          method: "tools/call",
+          params: { name: "ping", arguments: {} },
+        }),
+      }),
+    );
+    const r = await rpc(res);
+    expect(r.result?.isError).toBeFalsy();
+    expect(JSON.parse((r.result?.content as { text: string }[])[0]!.text)).toMatchObject({ ok: true });
+  });
+
   it("an agent cannot call a tool it wasn't given", async () => {
     const r = await rpc(
       await call(

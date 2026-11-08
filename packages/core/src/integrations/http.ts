@@ -21,11 +21,12 @@ export async function postJson<T>(
     throw new AppError("upstream_error", `${opts.provider}: request failed`, { retryable: true, cause: err });
   }
   if (!res.ok) {
-    const text = (await res.text().catch(() => "")).slice(0, 300);
+    // The body can echo prompt or customer text; keep it out of errors and the ledger.
+    await res.body?.cancel().catch(() => {});
     if (res.status === 429)
       throw new AppError("rate_limited", `${opts.provider}: rate limited`, { retryable: true });
     const retryable = res.status >= 500;
-    throw new AppError("upstream_error", `${opts.provider}: HTTP ${res.status} ${text}`, { retryable });
+    throw new AppError("upstream_error", `${opts.provider}: HTTP ${res.status}`, { retryable });
   }
   return (await res.json()) as T;
 }

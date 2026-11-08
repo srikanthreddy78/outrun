@@ -3,7 +3,7 @@
  * body, compares in constant time, and accepts a rotated secret.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { WEBHOOK_TOLERANCE_SECONDS } from "../constants";
+import { WEBHOOK_TOLERANCE_SECONDS } from "../../contracts";
 
 export type VerifyResult =
   { ok: true } | { ok: false; reason: "missing" | "stale" | "bad_signature" | "no_secret" };

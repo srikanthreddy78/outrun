@@ -23,6 +23,9 @@ import {
   COMPANY_KINDS,
   MESSAGE_STATUSES,
   ORDER_STATES,
+  MESSAGE_DIRECTIONS,
+  MESSAGE_KINDS,
+  PRODUCT_KEYS,
   PROSPECT_STAGES,
   SESSION_STATUSES,
   SOURCES,
@@ -44,13 +47,13 @@ export const companyKind = pgEnum("company_kind", COMPANY_KINDS);
 export const source = pgEnum("source", SOURCES);
 export const prospectStage = pgEnum("prospect_stage", PROSPECT_STAGES);
 export const messageStatus = pgEnum("message_status", MESSAGE_STATUSES);
-export const messageDirection = pgEnum("message_direction", ["outbound", "inbound"]);
-export const messageKind = pgEnum("message_kind", ["first", "followup", "reply", "transactional", "inbound"]);
+export const messageDirection = pgEnum("message_direction", MESSAGE_DIRECTIONS);
+export const messageKind = pgEnum("message_kind", MESSAGE_KINDS);
 export const orderState = pgEnum("order_state", ORDER_STATES);
 export const agentName = pgEnum("agent_name", AGENTS);
 export const sessionStatus = pgEnum("session_status", SESSION_STATUSES);
 export const stopReason = pgEnum("stop_reason", STOP_REASONS);
-export const product = pgEnum("product", ["freeScan", "auditKit", "growth"]);
+export const product = pgEnum("product", PRODUCT_KEYS);
 
 export const companies = pgTable(
   "companies",
@@ -102,6 +105,8 @@ export const prospects = pgTable(
     fitScore: real("fit_score"),
     gapScore: real("gap_score"),
     filedReason: text("filed_reason").notNull().default(""),
+    /** Set only by seedDemo. Demo mode emails only these prospects' contacts. */
+    isDemo: boolean("is_demo").notNull().default(false),
     lastContactedAt: timestamp("last_contacted_at", { withTimezone: true }),
     followupStep: integer("followup_step").notNull().default(0),
     createdAt: createdAt(),

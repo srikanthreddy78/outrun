@@ -1,0 +1,10 @@
+name: sdr's send waits for a person, and a deny never runs it
+agent: sdr
+steps:
+  - { tool: send_email, input: { draftId: "0190f6a0-0000-7000-8000-00000000e001", hash: "h" } }
+decisions: [deny]
+expect:
+  calls:
+    - { tool: send_email, decision: deny }
+  held: 0
+  stopReason: end_turn

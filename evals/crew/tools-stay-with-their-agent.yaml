@@ -1,0 +1,7 @@
+name: an agent can't call another agent's tool
+agent: sdr
+steps:
+  - { tool: pipeline_status }
+expect:
+  calls:
+    - { tool: pipeline_status, error: forbidden }
