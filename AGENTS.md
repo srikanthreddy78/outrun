@@ -41,3 +41,9 @@ Refer to https://usenaive.ai/skill.md for how to use Naive.
 Agent Mail Skill (don't use unless requested): https://agent.email/skill.md
 
 Here's how to use monid.ai if requested: https://monid.ai/SKILL.md
+
+## Accounts:
+
+- https://x.com/heyoutrun
+
+- https://www.reddit.com/user/OutrunGTM/
