@@ -23,7 +23,9 @@
     "e2e:loop": "tsx --env-file-if-exists=.env scripts/e2e-loop.ts",
     "naive:up": "tsx --env-file-if-exists=.env scripts/naive-up.ts",
     "naive:dry-run": "tsx --env-file-if-exists=.env scripts/naive-up.ts --dry-run",
-    "naive:sync": "tsx --env-file-if-exists=.env scripts/naive-sync.ts"
+    "naive:sync": "tsx --env-file-if-exists=.env scripts/naive-sync.ts",
+    "db:seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
+    "smoke": "tsx --env-file-if-exists=.env scripts/smoke.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -41,6 +43,7 @@
   },
   "dependencies": {
     "@outrun/core": "workspace:*",
-    "@outrun/worker": "workspace:*"
+    "@outrun/worker": "workspace:*",
+    "zod": "^4.6.7"
   }
 }
