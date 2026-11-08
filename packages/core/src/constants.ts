@@ -155,3 +155,8 @@ export const PLAYBOOK_SIMILAR_KEPT = 5;
 export const REPLAY_MAX = 3;
 /** list_problems: a message left `sending` this long is stuck. */
 export const STUCK_SENDING_MINUTES = 15;
+/** The account manager: client questions per client per day from the portal, and their length. */
+export const CLIENT_QUESTIONS_PER_DAY = 5;
+export const CLIENT_QUESTION_MAX_CHARS = 1000;
+/** plan_day starts a staffed account manager's weekly report when the last is this old. */
+export const CLIENT_REPORT_EVERY_DAYS = 7;

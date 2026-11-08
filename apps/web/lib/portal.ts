@@ -2,13 +2,16 @@
 /**
  * The client portal's actions: ask for a sign-in link, use it, sign out, and approve or reject
  * the client's own held emails. Decisions go to Naive exactly as from /dashboard/approvals, but
- * only for messages of a client the signed-in approver belongs to.
+ * only for messages of a client the signed-in approver belongs to. Approvers can also ask their
+ * account manager a question.
  */
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { config } from "@outrun/core";
+import { AppError, config } from "@outrun/core";
+import { askClientQuestion } from "@outrun/core/accountManager";
+import { CLIENT_QUESTION_MAX_CHARS } from "@outrun/core/constants";
 import { clients, eq } from "@outrun/core/db/query";
 import {
   assertPortalAccess,
@@ -85,4 +88,40 @@ export async function portalDecideAction(form: FormData): Promise<void> {
   await assertPortalAccess(rt.db.db, email, c.id);
   await submitDecisions(rt, email, f, { clientId: c.id });
   revalidatePath(`/portal/${f.slug}`);
+}
+
+const Question = z.object({
+  slug: z.string().min(2).max(40),
+  question: z.string().trim().min(1).max(CLIENT_QUESTION_MAX_CHARS),
+});
+
+/**
+ * "Ask your account manager": stored as client.question. A staffed account manager's session
+ * starts; otherwise the CEO sees it in agency_status. Rate-limited per client per day.
+ */
+export async function portalAskAction(form: FormData): Promise<void> {
+  const email = await portalEmail();
+  if (!email) throw new Error("Unauthorized");
+  const parsed = Question.safeParse({ slug: form.get("slug"), question: form.get("question") ?? "" });
+  if (!parsed.success) redirect(`/portal/${String(form.get("slug") ?? "")}?asked=invalid`);
+  const f = parsed.data;
+  const rt = await getRuntime();
+  const [c] = await rt.db.db.select({ id: clients.id }).from(clients).where(eq(clients.slug, f.slug));
+  if (!c) throw new Error("Unauthorized");
+  await assertPortalAccess(rt.db.db, email, c.id);
+  let to: string;
+  try {
+    const out = await askClientQuestion(
+      { db: rt.db.db, emit: rt.emit, enqueue: (j) => rt.queue.enqueue(j) },
+      c.id,
+      email,
+      f.question,
+    );
+    to = `/portal/${f.slug}?asked=${out.routed}`;
+  } catch (err) {
+    if (err instanceof AppError && err.code === "rate_limited") to = `/portal/${f.slug}?asked=limit`;
+    else throw err;
+  }
+  revalidatePath(`/portal/${f.slug}`);
+  redirect(to);
 }

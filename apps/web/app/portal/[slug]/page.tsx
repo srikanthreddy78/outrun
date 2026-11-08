@@ -1,9 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import { config } from "@outrun/core";
+import { clientQuestions, latestClientReport } from "@outrun/core/accountManager";
+import { CLIENT_QUESTION_MAX_CHARS } from "@outrun/core/constants";
+import { staffedRoles } from "@outrun/core/contracts";
 import { pipelineCounts } from "@outrun/core/crew/tools/pipeline_status";
 import { and, clients, desc, eq, messages } from "@outrun/core/db/query";
 import { portalClients } from "@outrun/core/portal";
-import { portalDecideAction, signOutAction } from "../../../lib/portal";
+import { portalAskAction, portalDecideAction, signOutAction } from "../../../lib/portal";
 import { portalEmail } from "../../../lib/portal-session";
 import { getRuntime } from "../../../lib/runtime";
 
@@ -17,9 +20,26 @@ type Profile = {
   tone?: string;
 };
 
-/** One client's portal: its held emails to approve, its pipeline, profile and email setup. */
-export default async function ClientPortal({ params }: { params: Promise<{ slug: string }> }) {
+const ASKED: Record<string, string> = {
+  account_manager: "Thanks. Your account manager will answer here.",
+  ceo: "Thanks. Your agency will see it and answer here.",
+  limit: "That's the most questions for today; ask again tomorrow.",
+  invalid: `Write a question of up to ${CLIENT_QUESTION_MAX_CHARS} characters.`,
+};
+
+/**
+ * One client's portal: its held emails to approve, its weekly report and questions to its
+ * account manager, its pipeline, profile and email setup.
+ */
+export default async function ClientPortal({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ asked?: string }>;
+}) {
   const { slug } = await params;
+  const { asked } = await searchParams;
   const email = await portalEmail();
   if (!email) redirect("/portal");
   const rt = await getRuntime();
@@ -55,6 +75,9 @@ export default async function ClientPortal({ params }: { params: Promise<{ slug:
     .orderBy(desc(messages.createdAt))
     .limit(10);
   const counts = await pipelineCounts(rt.db.db, c.id, config().settings, new Date());
+  const latest = await latestClientReport(rt.db.db, c.id);
+  const questions = await clientQuestions(rt.db.db, c.id, 10);
+  const hasAm = staffedRoles(c.crewRoles).includes("account_manager");
   const p = c.profile as Profile;
 
   return (
@@ -114,6 +137,62 @@ export default async function ClientPortal({ params }: { params: Promise<{ slug:
             </button>
           </p>
         </form>
+      )}
+
+      <h2>Your weekly report</h2>
+      {latest ? (
+        <section>
+          <p>
+            Week to {latest.report.day}: {latest.report.sent} emails sent · {latest.report.replies} replies ·{" "}
+            {latest.report.won} won · {latest.report.approvalsWaiting} waiting for you
+          </p>
+          {latest.report.goal && (
+            <p>
+              Goal: {latest.report.goal.current} of {latest.report.goal.target} {latest.report.goal.metric} by{" "}
+              {latest.report.goal.by} ·{" "}
+              {latest.report.goal.met ? "met" : latest.report.goal.onTrack ? "on track" : "behind"}
+            </p>
+          )}
+          {latest.report.note && <p style={{ whiteSpace: "pre-wrap" }}>{latest.report.note}</p>}
+        </section>
+      ) : (
+        <p>No report yet.</p>
+      )}
+
+      <h2>Ask your account manager</h2>
+      {asked && ASKED[asked] && <p>{ASKED[asked]}</p>}
+      <form action={portalAskAction}>
+        <input type="hidden" name="slug" value={c.slug} />
+        <textarea
+          name="question"
+          required
+          maxLength={CLIENT_QUESTION_MAX_CHARS}
+          rows={3}
+          style={{ width: "100%" }}
+          aria-label="Your question"
+        />
+        <button type="submit">Ask</button>
+      </form>
+      {!hasAm && <p>Your agency reads these and answers here.</p>}
+      {questions.length > 0 && (
+        <ul>
+          {questions.map((q) => (
+            <li key={q.questionId}>
+              <p style={{ whiteSpace: "pre-wrap" }}>
+                <strong>You asked:</strong> {q.question}
+              </p>
+              <p style={{ whiteSpace: "pre-wrap" }}>
+                {q.answer ? (
+                  <>
+                    <strong>Answer:</strong> {q.answer.text}
+                  </>
+                ) : (
+                  "Waiting for an answer."
+                )}
+              </p>
+            </li>
+          ))}
+        </ul>
       )}
 
       <h2>Pipeline</h2>

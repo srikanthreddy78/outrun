@@ -4,7 +4,7 @@
  * `naive.config.test.ts` fails if they drift. Changes need all three approvals.
  */
 import { z } from "zod";
-import { ClientProfile, ClientStatus, ProfileChanges } from "./clients";
+import { ClientProfile, ClientStatus, GOAL_METRICS, ProfileChanges } from "./clients";
 import { Domain, Email, Id, IsoDateTime, Untrusted } from "./common";
 import {
   CheckId,
@@ -76,6 +76,15 @@ const InsightRow = z.object({
   interested: z.number().int().nonnegative(),
   replyRate: z.number().min(0).max(1),
   interestRate: z.number().min(0).max(1),
+});
+/** A client's goal and how far along it is; counted by code (goalProgress). */
+const GoalProgress = z.object({
+  metric: z.enum(GOAL_METRICS),
+  target: z.number().int().positive(),
+  by: z.string(),
+  current: z.number().int().nonnegative(),
+  met: z.boolean(),
+  onTrack: z.boolean(),
 });
 const Limit = (max: number, def: number) => z.number().int().min(1).max(max).default(def);
 /** A lesson in the CEO's playbook (ceo.lesson events). */
@@ -702,6 +711,85 @@ export const CREW_TOOLS = {
       asks: z.string().min(1).max(800),
     }),
     output: z.object({ saved: z.boolean(), week: z.string(), reason: z.string().nullable() }),
+  },
+  staff_client: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Adds optional roles (account_manager, signal_scout, experimenter) to a client's crew and provisions their agents. Never removes a role. Not for Outrun's own crew.",
+    input: z.object({
+      clientId: Id,
+      add: z.array(OptionalClientRoleName).min(1).max(3),
+      reason: z.string().min(1).max(300),
+    }),
+    output: z.object({
+      roles: z.array(ClientRoleName),
+      added: z.array(OptionalClientRoleName),
+      provisioning: z.boolean(),
+    }),
+  },
+  client_goal: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "A client's confirmed goal (interested replies, meetings or customers by a date), counted by code: current, met and on track. Null when it has none.",
+    input: z.object({ clientId: Id }),
+    output: z.object({ clientId: Id, goal: GoalProgress.nullable() }),
+  },
+  mark_goal_met: {
+    agents: ["ceo"],
+    policy: "allow",
+    description:
+      "Records that a client met its goal and moves its crew to maintenance (the lowest daily first emails). Refuses unless outrun.client_goal says met.",
+    input: z.object({ clientId: Id }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), dailyDraftLimit: z.number().int() }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  client_weekly_report: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description:
+      "Builds your client's weekly report in code (its numbers and goal) with your short note, saves it to the client's portal, and tells the client's approvers by a fixed notice. No links in the note.",
+    input: z.object({ note: z.string().trim().min(1).max(600).optional() }),
+    output: z.object({
+      reportId: Id,
+      report: z.object({
+        day: z.string(),
+        since: IsoDateTime,
+        sent: z.number().int().nonnegative(),
+        replies: z.number().int().nonnegative(),
+        won: z.number().int().nonnegative(),
+        approvalsWaiting: z.number().int().nonnegative(),
+        stages: z.record(ProspectStage, z.number().int().nonnegative()),
+        goal: GoalProgress.nullable(),
+        note: z.string().nullable(),
+      }),
+      notified: z.number().int().nonnegative(),
+    }),
+  },
+  client_questions: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description: "Questions your client asked in its portal, newest first, the text wrapped as untrusted.",
+    input: z.object({ limit: Limit(20, 10), unansweredOnly: z.boolean().default(true) }),
+    output: z.object({
+      questions: z.array(
+        z.object({ questionId: Id, question: Untrusted, at: IsoDateTime, answered: z.boolean() }),
+      ),
+    }),
+  },
+  answer_client: {
+    agents: ["account_manager"],
+    policy: "allow",
+    description:
+      "Answers one portal question; the client sees it in its portal. Rejects prices not in the profile, links off the client's own hosts and email addresses.",
+    input: z.object({ questionId: Id, answer: z.string().trim().min(1).max(2000) }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true) }),
+      z.object({ ok: z.literal(false), reasons: z.array(z.string()).min(1) }),
+    ]),
   },
 } as const satisfies Record<
   string,
