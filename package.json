@@ -31,7 +31,8 @@
     "listing": "tsx --env-file-if-exists=.env scripts/publish-listing.ts",
     "email:resume": "tsx --env-file-if-exists=.env scripts/email-resume.ts",
     "eval:triage": "tsx --env-file-if-exists=.env scripts/eval-triage.ts",
-    "hubspot:setup": "tsx --env-file-if-exists=.env scripts/hubspot-setup.ts"
+    "hubspot:setup": "tsx --env-file-if-exists=.env scripts/hubspot-setup.ts",
+    "e2e:full": "tsx --env-file-if-exists=.env scripts/e2e-full.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

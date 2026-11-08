@@ -1,6 +1,7 @@
 import type { Config } from "@outrun/core";
 import type { Integrations } from "@outrun/core/integrations";
 import { logger } from "@outrun/core/log";
+import type { MxLookup } from "@outrun/core/email/mx";
 import type { Handlers } from "@outrun/core/queue";
 import { createRuntime, type Runtime } from "@outrun/core/runtime";
 import { checkStuckHandlers } from "./jobs/check_stuck";
@@ -28,6 +29,8 @@ export interface StartOptions {
   /** false runs every job on its stub (pnpm e2e:loop). */
   real?: boolean;
   integrations?: Partial<Integrations>;
+  mx?: MxLookup;
+  sitePreflight?: (url: string) => Promise<unknown>;
   schedules?: boolean;
   retryDelaySeconds?: number;
   retryBackoff?: boolean;
@@ -61,6 +64,8 @@ export async function startWorker(opts: StartOptions): Promise<Worker> {
     startQueue: false,
     queue: tuning,
     ...(opts.integrations ? { integrations: opts.integrations } : {}),
+    ...(opts.mx ? { mx: opts.mx } : {}),
+    ...(opts.sitePreflight ? { sitePreflight: opts.sitePreflight } : {}),
   });
   const queue = runtime.queue;
   await queue.start();

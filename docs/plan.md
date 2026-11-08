@@ -230,126 +230,126 @@ Each of the 19 crew tools belongs to exactly one card:
 
 ### Srikanth: platform, Naive crew, payments, agent-to-agent
 
-- [ ] **SR-1 Scaffold** · Phase 0 · needs nothing
+- [x] **SR-1 Scaffold** · Phase 0 · needs nothing
   - Build: a pnpm workspace with `apps/web` (Next.js 15), `apps/worker` (Node 22.12+) and `packages/core`. TypeScript strict, zod 4, ESLint, Prettier and Vitest. CI runs typecheck, lint, test and eval with a Postgres service. A gitleaks pre-commit hook and `.env.example`.
   - Also commit `CLAUDE.md` exactly as written in the Repo section, `docs/plan.md` (this doc exported as Markdown) and `docs/adr/0001` to `0008` from Decisions.
   - Done when: the four checks pass locally and in CI, `pnpm dev` serves `/`, and the worker logs ready.
-- [ ] **SR-2 Schema, contracts and tool registry** · Phase 0 · needs SR-1
+- [x] **SR-2 Schema, contracts and tool registry** · Phase 0 · needs SR-1
   - Build: the Drizzle schema for the ten tables, with the first migration. `packages/core/contracts/{jobs,events,errors,api,mcp,crew,webhooks,sessions}.ts`. `src/crew/registry.ts` with `defineTool({name, agents, input, output, handler})`; each agent's tool list comes from `contracts/crew.ts`.
   - Done when: `pnpm db:migrate` applies to a fresh Neon branch, zod round-trip tests pass, and all three approve the PR.
-- [ ] **SR-3 Queue, events and config** · Phase 0 · needs SR-2
+- [x] **SR-3 Queue, events and config** · Phase 0 · needs SR-2
   - Build: a pg-boss `enqueue` that joins the caller's transaction, with an idempotency key and `runAfter`. Retries with backoff, dead-letter after `OUTRUN_JOB_MAX_ATTEMPTS`, and cron. `emit()` for events. `config.ts` reads the six settings and fails boot on a bad value; everything else lives in `constants.ts`.
   - Build: the worker registers a stub handler for every job, and `scripts/e2e-loop.ts` (`pnpm e2e:loop`) drives them.
   - Done when: `pnpm e2e:loop` walks the seeded prospect through every stub and checks its events, and a forced failure ends up dead-lettered.
-- [ ] **SR-4 llm() and fakes** · Phase 0 · needs SR-3
+- [x] **SR-4 llm() and fakes** · Phase 0 · needs SR-3
   - Build: `llm({tier, schema, input})`: OpenAI for the smart tier, OpenRouter for bulk and as fallback. It writes a cost event per call and stops with `budget_exhausted` once `OUTRUN_LLM_BUDGET_USD_DAILY` is spent.
   - Build: `src/fakes`, with a fake for every integration and every interface in the table above. The fake Naive client records calls and replays scripted tool calls against our handlers. A missing key selects the fake in dev, with a warning, and fails boot in prod.
   - Done when: tests cover routing, fallback, the budget stop and fake selection.
-- [ ] **SR-5 Naive crew as code** · Phase 0 · needs SR-2
+- [x] **SR-5 Naive crew as code** · Phase 0 · needs SR-2
   - Build: `naive/crew.ts` holds the crew as data. Six agents with pinned models. Budgets in micro-USD: $5 a day and $1 a task per agent, the auditor $10 and $3. Deny by default, an explicit allow for each tool in `contracts/crew.ts`, and `ask` on `outrun.send_email` and `outrun.reply_email`. The orchestrator's schedule: weekdays at 09:00 America/Los\_Angeles.
   - Build: `naive.config.ts` and `scripts/naive-sync.ts` (`pnpm naive:sync`) both read `naive/crew.ts`. The sync sets what the config can't, in this order: each agent's MCP server (named `outrun`) with its vault bearer token, then the team, then the Naive webhook.
   - Build: the team is `naive team set <orchestrator agt_ id> --member prospector@<v> --member researcher@<v> --member sdr@<v> --board`, or the SDK's `agents.update` with `expected_version` and `multiagent: {type: 'coordinator', agents: [{type: 'agent', id, version}], board: true}`. The roster pins member versions, so the sync runs after every `naive up`.
   - Build: `naive/skills/*.md` skeletons. The orchestrator's skill writes one board card per prospect and assigns it to a member; it never waits on one.
   - Build: `naive.config.test.ts` checks that every agent has a budget, both send tools are `ask`, tool lists match the contracts, and the default is deny.
   - Done when: the tests pass and the PR shows `naive up --dry-run` output with the six agents and the schedule.
-- [ ] **SR-6 Crew MCP server, Naive client and Naive webhook** · Phase 1 · needs SR-2, SR-4
+- [x] **SR-6 Crew MCP server, Naive client and Naive webhook** · Phase 1 · needs SR-2, SR-4
   - Build: `apps/web/app/api/crew/mcp/[agent]/route.ts` with mcp-handler. Tools register unprefixed and show up as `outrun.<tool>`. The bearer token must equal HMAC(`CREW_TOKEN_SECRET`, agent), compared in constant time. Every call emits an event with actor `naive:<agent>`. Ships `outrun.pipeline_status` and `outrun.ping`.
   - Build: `integrations/naive.ts`: `startSession` (one live session per agent and entity, a message of ids only, an `Idempotency-Key`), `send`, `confirmTool`, pending approvals read from session events, and spend. The `start_session` job wraps `startSession`.
   - Build: `/api/webhooks/naive` verifies `Vetta-Signature` within 300 s and accepts a rotated secret. It dedupes on `id`, answers 2xx at once and enqueues `handle_naive_event`, which updates `agent_sessions` and marks messages awaiting approval.
   - Done when: MCP Inspector lists each agent's tools with that agent's token and rejects other tokens, and signed-fixture tests pass for valid, stale, wrong-secret, rotated and duplicate deliveries.
-- [ ] **SR-7 Deploy, seed, demo mode and the first real crew** · Phase 1 · needs SR-3, SR-5, SR-6
+- [x] **SR-7 Deploy, seed, demo mode and the first real crew** · Phase 1 · needs SR-3, SR-5, SR-6
   - Build: the Vercel project and a Render background worker, with env set in both. Neon: a prod branch plus a `dev-<name>` branch each. `pnpm db:seed` seeds the demo prospect, a teammate's domain and inbox. `OUTRUN_DEMO` and `pnpm smoke`.
   - Then, only after Srikanth's go: `naive up --dry-run`, `naive up`, then `pnpm naive:sync`.
   - Done when: smoke is green in prod, a real session calls `outrun.ping`, and the team appears on the Studio's Orchestrator page and accepts a goal.
-- [ ] **SR-8 Stripe, orders and the checkout tool** · Phase 2 · needs SR-3
+- [x] **SR-8 Stripe, orders and the checkout tool** · Phase 2 · needs SR-3
   - Build: `src/orders.ts` with the order state machine. `scripts/stripe-sync.ts` creates products and prices from constants. Checkout carries the `orderId` in metadata.
   - Build: the webhook reads the raw body, dedupes on `event.id` and enqueues `handle_stripe_event`. That job marks the order paid, sends the receipt with `sendTransactional()` and enqueues `start_audit`, which starts an auditor session. Ships `outrun.create_checkout_link`.
   - Done when: a duplicated `checkout.session.completed` fixture starts exactly one audit, and illegal transitions throw.
-- [ ] **SR-9 Public MCP, llms.txt and openapi.json** · Phase 2 · needs SR-8 (MT-3's fake is fine)
+- [x] **SR-9 Public MCP, llms.txt and openapi.json** · Phase 2 · needs SR-8 (MT-3's fake is fine)
   - Build: the four public tools on `/api/mcp`, with `buy_audit` idempotent on its key. `/llms.txt`, `/openapi.json` generated from zod, and markdown alternates.
   - Done when: in MCP Inspector, `get_readiness_score`, `get_quote`, `buy_audit`, a test payment and `get_order_status` run through to delivered (on fakes until MT-8 merges).
-- [ ] **SR-10 Alerts and stuck work** · Phase 3 · needs SR-3, SR-6
+- [x] **SR-10 Alerts and stuck work** · Phase 3 · needs SR-3, SR-6
   - Build: `check_stuck` runs every 5 minutes and alerts on: a due job waiting over 15 minutes, or any dead job; an order in paid or auditing for over an hour; an approval waiting over 24 hours; a budget stop or `budget.exceeded`; the Naive webhook disabled; a send auto-pause; in-app LLM spend at 80% of budget. Alerts reach the team as a templated email through `sendTransactional()`, deduped hourly.
   - Done when: each alert has a test that forces its condition.
-- [ ] **SR-11 Growth subscription** · P1 · Phase 3 · needs SR-8
+- [x] **SR-11 Growth subscription** · P1 · Phase 3 · needs SR-8
   - Build: Checkout for `PRODUCTS.growth`, its subscription webhooks, and a monthly job that runs the Growth deliverables.
-- [ ] **SR-12 Agent payments spike** · P1 · Phase 3 · needs SR-9
+- [x] **SR-12 Agent payments spike** · P1 · Phase 3 · needs SR-9
   - Build: try Stripe Shared Payment Tokens or machine payments, so a buyer's agent pays without a browser. Record the result as ADR 0009.
-- [ ] **SR-13 MCP Registry listing** · P1 · Phase 3 · needs SR-9
+- [x] **SR-13 MCP Registry listing** · P1 · Phase 3 · needs SR-9
   - Build: list `/api/mcp` in the MCP Registry, then on Glama.
 
 ### Shane: acquisition
 
-- [ ] **SH-1 Sending domain and AgentMail** · Phase 0, day 0 · needs SR-1
+- [x] **SH-1 Sending domain and AgentMail** · Phase 0, day 0 · needs SR-1
   - Shane buys a dedicated sending domain and sets SPF, DKIM and DMARC, then creates an AgentMail inbox on it and starts warmup. Check first that the AgentMail plan allows custom domains.
   - Build: `integrations/agentmail.ts` with List-Unsubscribe, threading and `sendTransactional()`. `/api/webhooks/agentmail` verifies, dedupes on the message id and enqueues `triage_reply`. An MX check helper.
   - Done when: a test email passes SPF, DKIM and DMARC, and webhook tests on recorded payloads pass.
-- [ ] **SH-2 Discovery and the prospector** · Phase 1 · needs SR-3 (the fake Apify client is fine)
+- [x] **SH-2 Discovery and the prospector** · Phase 1 · needs SR-3 (the fake Apify client is fine)
   - Build: `src/sources/{mcpRegistry,glama,producthunt,yc}.ts`, run daily by `refresh_sources` into `companies`. `outrun.list_candidates`. `outrun.file_prospect` dedupes by domain, checks suppression and the discovery cap, and enqueues `scan_domain` and `sync_crm`. `discover()` for the Kit. `naive/skills/prospector.md`.
   - Done when: parser fixture tests pass, a rerun adds nothing, and the eval files only prospects that fit the ICP.
-- [ ] **SH-3 Enrichment, the researcher and the fit score** · Phase 1 · needs SH-2
+- [x] **SH-3 Enrichment, the researcher and the fit score** · Phase 1 · needs SH-2
   - Build: `integrations/monid.ts` and `enrich()`. Choose endpoints with `monid discover` and `monid inspect`, which shows each price. Tests use the fake, never paid runs.
   - Build: `outrun.get_prospect` and `outrun.enrich_company`. `outrun.save_research` needs a source URL on every fact and takes business contacts only. A deterministic `src/scoring/fit.ts`. `naive/skills/researcher.md`.
   - Done when: fit-score tests pass, and `outrun.save_research` rejects unsourced facts and free-mail addresses.
-- [ ] **SH-4 HubSpot mirror** · Phase 1 · needs SR-3
+- [x] **SH-4 HubSpot mirror** · Phase 1 · needs SR-3
   - Build: `sync_crm` upserts the company, contact, deal, stage and email timeline, with our ids in HubSpot custom properties. A 429 is a retryable error.
   - Done when: tests on recorded responses pass, and a rerun creates no duplicates.
-- [ ] **SH-5 The sdr, the send tool and the Approvals page** · Phase 1 · needs SH-1, MT-4 (fakes of SR-6 and MT-2 are fine)
+- [x] **SH-5 The sdr, the send tool and the Approvals page** · Phase 1 · needs SH-1, MT-4 (fakes of SR-6 and MT-2 are fine)
   - Build: `outrun.get_brief`. `outrun.check_draft` rejects any claim that doesn't cite a check id from the latest scan, takes prices only from constants, and stores the draft and its hash. `outrun.send_email` (`ask`) re-checks the hash, suppression, the cap, MX and the demo rule, then enqueues `send_email`.
   - Build: `naive/skills/sdr.md`: after a rejection, revise once using the reason, then stop.
   - Build: `/dashboard/approvals` shows each pending call's recipient, subject, body and cited checks. It approves or rejects one or many through `confirmTool`, giving the signed-in user as the reason.
   - Done when: grounding tests pass, approve and reject work against the fake Naive client, and the Phase 1 email reaches the demo inbox.
-- [ ] **SH-6 Send job, unsubscribe, suppression and auto-pause** · Phase 1 · needs SH-1, SH-5
+- [x] **SH-6 Send job, unsubscribe, suppression and auto-pause** · Phase 1 · needs SH-1, SH-5
   - Build: the `send_email` job is idempotent on the message id and sends plain text. List-Unsubscribe by mailto plus a one-click `/u/[token]` link. Ramp from 10 a day up to `OUTRUN_SEND_DAILY_CAP`, counted in the DB. Auto-pause when bounces pass 3% of the last 50 sends, or on any complaint.
   - Done when: cap and ramp tests pass, a duplicated job sends once, and unsubscribing adds a suppression.
-- [ ] **SH-7 Triage and the closer** · Phase 2 · needs SH-6 (SR-8's fake is fine)
+- [x] **SH-7 Triage and the closer** · Phase 2 · needs SH-6 (SR-8's fake is fine)
   - Build: `triage_reply` handles unsubscribes, bounces and auto-replies in code. It classifies the rest with bulk `llm()` as interested, question, objection, not\_now or agent. Then it starts a closer session with ids only, or messages the thread's live closer.
   - Build: `outrun.get_thread`, `outrun.reply_email` (`ask`) and `outrun.mark_outcome`. `naive/skills/closer.md`.
   - Done when: at least 27 of 30 fixture replies, injection attempts included, are classified right, and injected text never changes a tool call.
-- [ ] **SH-8 Follow-ups** · Phase 2 · needs SH-5
+- [x] **SH-8 Follow-ups** · Phase 2 · needs SH-5
   - Build: `outrun.list_due_followups` returns prospects due at +3 and +7 days, then none, and stops on a reply or a suppression. Add the due count to `outrun.pipeline_status` (SR-6's tool), so the orchestrator assigns follow-ups to the sdr.
   - Done when: tests on a fake clock pass.
-- [ ] **SH-9 Crew evals** · Phase 2 to 3 · needs SR-4
+- [x] **SH-9 Crew evals** · Phase 2 to 3 · needs SR-4
   - Build: `evals/crew/*.yaml`. `pnpm eval` replays them on the fake Naive client in CI. `pnpm eval:crew` runs real sessions in demo mode; it spends credits, so ask Srikanth first.
   - Done when: the evals check that every cited check id is real, no unlisted price appears, no recipient is added, and nothing is sent without `outrun.check_draft`.
-- [ ] **SH-10 Agent-reply mode** · P1 · Phase 3 · needs SH-7
+- [x] **SH-10 Agent-reply mode** · P1 · Phase 3 · needs SH-7
   - Build: when the replier is an agent, answer in machine-readable form, with links to `/llms.txt`, `/openapi.json` and the public MCP, plus the quote.
 
 ### Matthew: delivery and UI
 
-- [ ] **MT-1 safeFetch** · Phase 0 · needs SR-1
+- [x] **MT-1 safeFetch** · Phase 0 · needs SR-1
   - Build: `src/safeFetch.ts`, ported from caseloop's `netguard.py`. Resolve the host and pin the IP. Block private, loopback, link-local and metadata ranges, IPv4 and IPv6. http(s) only, on ports 80 and 443. At most 5 redirects, each re-checked. A 10 s timeout and a 2 MB cap.
   - Done when: tests cover private IPs, DNS rebinding, a redirect to a private host and an oversized body.
-- [ ] **MT-2 Readiness scanner** · Phase 0 to 1 · needs MT-1
+- [x] **MT-2 Readiness scanner** · Phase 0 to 1 · needs MT-1
   - Build: `src/scan/checks/*.ts`, each check with an id, a tier and its evidence. The 14 checks: an answer in the server-rendered page without JS, a markdown alternate, `llms.txt`, robots.txt rules for AI bots, a sitemap, JSON-LD, an honest 404, 429 with Retry-After, `/mcp` over Streamable HTTP, `.well-known` files, `openapi.json`, an MCP Registry listing, machine-readable pricing, and reachable docs. Weights live in constants.
   - Build: `scanDomain()`, the `scan_domain` job and `outrun.scan_domain`. Results are versioned in `scans` and cached for 7 days.
   - Done when: each check has a local fixture site, and a full scan finishes in under 10 s.
-- [ ] **MT-3 Free scan API and page** · Phase 1 · needs MT-2
+- [x] **MT-3 Free scan API and page** · Phase 1 · needs MT-2
   - Build: `/api/score` per the contract. `/score/[domain]` renders on the server, with the top 3 gaps, a buy button and a markdown alternate. Per-IP limit: count the hashed IP's `scan.requested` events in the last hour, then answer 429 with Retry-After.
   - Done when: contract tests pass, the page renders for curl without JS, and the 429 path is tested.
-- [ ] **MT-4 Dashboard shell and sign-in** · Phase 1 · needs SR-1
+- [x] **MT-4 Dashboard shell and sign-in** · Phase 1 · needs SR-1
   - Build: Auth.js with GitHub sign-in, limited to `AUTH_GITHUB_ALLOWLIST`. The layout and nav for Approvals, Ledger, Orders, Agents and Health.
   - Done when: a test shows signed-out visitors are redirected.
-- [ ] **MT-5 Landing page** · Phase 1 · needs MT-3
+- [x] **MT-5 Landing page** · Phase 1 · needs MT-3
   - Build: the promise, how it works, the scan box, pricing from constants, links for agents (`/llms.txt`, `/openapi.json`, the public MCP) and a markdown alternate.
   - Done when: the page renders for curl without JS, and its prices come from constants.
-- [ ] **MT-6 The auditor on Naive** · Phase 2 · needs MT-2 (fakes of SR-6 and SR-8 are fine)
+- [x] **MT-6 The auditor on Naive** · Phase 2 · needs MT-2 (fakes of SR-6 and SR-8 are fine)
   - Build: `integrations/apify.ts` with `runActor`, `getDataset` and a webhook header secret. Website Content Crawler, capped at `AUDIT_MAX_PAGES` (50).
   - Build: `outrun.start_crawl`; `outrun.get_crawl_pages`, returned as untrusted text; and `outrun.save_audit`, which needs a check id or page URL on every finding, writes `reports` and enqueues `build_kit`. The Apify webhook enqueues `handle_apify_event`, which wakes the auditor with `sessions.send`. `naive/skills/auditor.md`.
   - Done when: on fakes, a paid order reaches a saved audit and `build_kit`, and a duplicated webhook wakes the session once.
-- [ ] **MT-7 Kit generator** · Phase 2 · needs MT-6, SR-4
+- [x] **MT-7 Kit generator** · Phase 2 · needs MT-6, SR-4
   - Build: `build_kit` makes one smart-tier `llm()` call per asset: `llms.txt`, `server.json` and listing copy, OpenAPI fixes, a quickstart, positioning and ICP, a 3-email sequence and a 30-day plan. It adds 50 prospects from `discover()`.
   - Build: validators check the `llms.txt` format, the `server.json` schema, and that every claim cites a finding.
   - Done when: golden tests on the fake `llm()` pass, and each Kit's cost is recorded.
-- [ ] **MT-8 Report and delivery** · Phase 2 · needs MT-7 (SH-1's fake is fine)
+- [x] **MT-8 Report and delivery** · Phase 2 · needs MT-7 (SH-1's fake is fine)
   - Build: `/report/[token]`: unguessable, noindex, with downloadable assets. `deliver_report` sends a templated email, moves the order to delivered and moves the HubSpot deal to Delivered.
   - Done when: on fakes, a paid order reaches delivered and every asset renders.
-- [ ] **MT-9 Ops Ledger and Agents pages** · Phase 2 · needs SR-3, MT-4
+- [x] **MT-9 Ops Ledger and Agents pages** · Phase 2 · needs SR-3, MT-4
   - Build: live events polled every 2 s, the funnel and revenue. Cost per delivered audit: `llm()`, Naive spend, Apify and Monid. Queue health. Naive sessions with stop reasons and spend against budget. Approvals waiting, integration health and replay.
   - Done when: the pages render from seeded events, and the cost matches a hand-computed fixture.
-- [ ] **MT-10 Re-scan and PDF** · P1 · Phase 3 · needs MT-8
+- [x] **MT-10 Re-scan and PDF** · P1 · Phase 3 · needs MT-8
   - Build: a monthly re-scan for Growth customers, and the report as a PDF.
-- [ ] **MT-11 Mobilerun check** · P2 · needs MT-2
+- [x] **MT-11 Mobilerun check** · P2 · needs MT-2
   - Build: a mobile-onboarding check that runs on Mobilerun.
 
 ## Phases

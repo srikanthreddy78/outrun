@@ -3,6 +3,7 @@ import type { Handlers } from "@outrun/core/queue";
 import type { Runtime } from "@outrun/core/runtime";
 import { runTriage } from "@outrun/core/triage";
 import { z } from "zod";
+import { syncProspectOf } from "./send_email";
 
 const Payload = z.object({ messageId: z.uuid() });
 
@@ -20,6 +21,7 @@ export function triageHandlers(rt: Pick<Runtime, "db" | "emit" | "llm" | "config
         },
         messageId,
       );
+      await syncProspectOf(rt, messageId, env.traceId);
     },
   };
 }

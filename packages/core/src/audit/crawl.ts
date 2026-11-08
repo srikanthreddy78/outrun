@@ -134,11 +134,14 @@ export async function savePaidAudit(
     .limit(1);
   const knownChecks = new Set(
     (latestScan?.checks ?? []).flatMap((check): string[] =>
-      check && typeof check === "object" && "id" in check && typeof check.id === "string" ? [check.id] : [],
+      check && typeof check === "object" && "id" in check && typeof check.id === "string"
+        ? [check.id.replace(/-/g, "_")]
+        : [],
     ),
   );
+  // Agents see ids as llms_txt (get_brief, get_prospect) or as stored (llms-txt): both are one check.
   for (const finding of input.findings) {
-    if (finding.checkId && !knownChecks.has(finding.checkId))
+    if (finding.checkId && !knownChecks.has(finding.checkId.replace(/-/g, "_")))
       throw new AppError("bad_request", `unknown check ID: ${finding.checkId}`);
     if (finding.pageUrl && !cleanPublicPageUrl(finding.pageUrl, order.domain))
       throw new AppError("bad_request", "finding URL must be an audited public page");

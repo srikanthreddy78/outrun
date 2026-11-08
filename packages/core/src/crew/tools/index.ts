@@ -34,7 +34,7 @@ export function allTools(opts: {
   settings: PipelineSettings;
   followupsDue?: FollowupsDue;
   orders?: CheckoutDeps;
-  audit?: { apify: ApifyClient; appUrl: string };
+  audit?: { apify: ApifyClient; appUrl: string; preflight?: (url: string) => Promise<unknown> };
   /** SH-5/7/8: the sdr's and closer's tools; with them, pipeline_status counts real follow-ups. */
   outreach?: OutreachDeps;
   /** SH-2/3: the prospector's and researcher's tools. */
@@ -46,7 +46,7 @@ export function allTools(opts: {
     pipelineStatus(opts.settings, followupsDue),
     planDay(opts.settings, followupsDue),
     scanDomainTool,
-    ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl) : []),
+    ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl, opts.audit.preflight) : []),
     createCheckoutLink(opts.orders ?? noOrders),
     ...(opts.outreach ? outreachTools(opts.outreach) : []),
     ...(opts.prospecting ? prospectingTools(opts.prospecting) : []),

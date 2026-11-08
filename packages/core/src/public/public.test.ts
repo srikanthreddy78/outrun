@@ -129,14 +129,14 @@ describe("public tools for other agents", () => {
       input("spt-growth-01", "growth"),
       meta("192.0.2.80"),
     );
-    expect(growth.checkoutUrl).toMatch(/checkout\.stripe\.test/);
+    expect(growth.checkoutUrl).toMatch(/checkout\.stripe\.com\/c\/pay/);
     const off = await callPublicTool(
       { ...deps, stripe },
       "buy_audit",
       input("spt-off-0001"),
       meta("192.0.2.80"),
     );
-    expect(off.checkoutUrl).toMatch(/checkout\.stripe\.test/);
+    expect(off.checkoutUrl).toMatch(/checkout\.stripe\.com\/c\/pay/);
     expect(stripe.tokenPayments).toHaveLength(1);
     await expect(
       callPublicTool(
