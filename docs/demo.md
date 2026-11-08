@@ -35,6 +35,10 @@ Each is stacked on the one before. After each merge, GitHub retargets the next P
 - Self-serve: a teammate signs a second company up at `/hire` with an email at its domain,
   then signs in from the link. That starts its six agents on Naive.
 - One small Hunter run is approved (5–10 results); report its cost.
+- `/hire` takes 3 new clients a day and 3 per IP an hour; rehearsal signups count. An unverified
+  signup stops counting after an hour, and anyone at that domain can claim it.
+- `/ops` counts only real ledger events: `pnpm db:seed` adds none, and a client shows there only
+  after its profile is confirmed.
 
 ## 5. The 3-minute demo
 
@@ -54,5 +58,5 @@ Each is stacked on the one before. After each merge, GitHub retargets the next P
 - The owner confirms each client's profile (prices and offer are never set by an agent).
 - The client approves each email before it is sent.
 - The owner accepts or rejects the CEO's ICP proposals.
-Everything else, from finding prospects to triaging replies and starting each client's day,
-is the agents and the worker.
+  Everything else, from finding prospects to triaging replies and starting each client's day,
+  is the agents and the worker.

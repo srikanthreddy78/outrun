@@ -76,7 +76,8 @@ export const PUBLIC_BUY_LIMIT_PER_HOUR = 10;
  * crew budget (CLIENT_BUDGETS), so this caps what strangers can spend. A known domain is always free.
  */
 export const SELF_SERVE_DAILY_CAP = 3;
-export const SELF_SERVE_CALLER_LIMIT_PER_HOUR = 1;
+// A venue or office shares one IP; the daily cap and the crew cap still bound the spend.
+export const SELF_SERVE_CALLER_LIMIT_PER_HOUR = 3;
 /** The A2A protocol version our agent card and endpoint speak. */
 export const A2A_PROTOCOL_VERSION = "0.3.0";
 /**

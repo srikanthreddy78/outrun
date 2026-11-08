@@ -59,7 +59,9 @@ export default async function ClientPortal({ params }: { params: Promise<{ slug:
 
   return (
     <main style={{ maxWidth: "52rem", margin: "2rem auto", padding: "0 1rem" }}>
-      <p style={{ display: "flex", justifyContent: "space-between" }}>
+      <div
+        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "1rem 0" }}
+      >
         <span>
           {c.name} · signed in as {email}
           {mine.length > 1 && (
@@ -72,7 +74,7 @@ export default async function ClientPortal({ params }: { params: Promise<{ slug:
         <form action={signOutAction}>
           <button type="submit">Sign out</button>
         </form>
-      </p>
+      </div>
 
       <h1>Emails waiting for you</h1>
       <p>
