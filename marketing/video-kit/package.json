@@ -1,0 +1,13 @@
+{
+  "name": "video-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders a vertical short-form video for an app from a beats file and real screenshots.",
+  "scripts": {
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}

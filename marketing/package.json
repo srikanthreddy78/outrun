@@ -1,0 +1,20 @@
+{
+  "name": "@outrun/marketing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "@usenaive-sdk/blueprints": "^0.18.0",
+    "esbuild": "^0.28.2",
+    "typescript": "~5.9.3"
+  }
+}

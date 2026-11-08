@@ -1,0 +1,102 @@
+{
+  "_how": "Files in assets, audio and beats are relative to the assets folder. dur is seconds; a beat with a voice clip grows to fit it. cam is [progress, centreX, centreY, zoom]. taps are [progress, x, y] and callout boxes are [x0, y0, x1, y1] as fractions of the image. Use only the app's real words and screens.",
+  "brand": {
+    "name": "Daybreak",
+    "url": "https://daybreak-jwr4vkpk5pr6.vercel.app",
+    "palette": {
+      "bg": ["#f0c489", "#e8ad85", "#d39d8f", "#bd93a6"],
+      "fg": "#2a1f18",
+      "accent": "#9a4d2a",
+      "card": "#fff8f1",
+      "glow": "#ffd66b"
+    },
+    "fonts": {
+      "display": "Fraunces",
+      "displaySerif": true,
+      "displayWeight": 300,
+      "body": "Inter"
+    },
+    "tone": "quiet, unhurried, plain"
+  },
+  "assets": "assets",
+  "audio": {
+    "music": "music.mp3"
+  },
+  "beats": [
+    {
+      "scene": "hook",
+      "id": "hook",
+      "dur": 2.3,
+      "lines": ["Start your day", "with intention."],
+      "italic": true,
+      "sub": "A guided morning routine."
+    },
+    {
+      "scene": "walkthrough",
+      "id": "welcome",
+      "dur": 2.9,
+      "img": "01-welcome.png",
+      "caption": "Press anywhere to start.",
+      "cam": [
+        [0, 0.5, 0.5, 1.06],
+        [1, 0.5, 0.46, 1.2]
+      ],
+      "taps": [[0.45, 0.5, 0.52]]
+    },
+    {
+      "scene": "clip",
+      "id": "breathe",
+      "dur": 3,
+      "clip": "breathe.mp4",
+      "clipStart": 1.2,
+      "caption": "Stop and breathe."
+    },
+    {
+      "scene": "callout",
+      "id": "intention",
+      "dur": 3.3,
+      "img": "07-intention.png",
+      "caption": "Say what today is for.",
+      "cam": [
+        [0, 0.5, 0.42, 1.04],
+        [1, 0.5, 0.42, 1.12]
+      ],
+      "callouts": [
+        {
+          "text": "Your intention",
+          "at": 0.5,
+          "box": [0.08, 0.385, 0.92, 0.47],
+          "place": "low"
+        }
+      ]
+    },
+    {
+      "scene": "walkthrough",
+      "id": "gratitude",
+      "dur": 2.6,
+      "img": "08-gratitude.png",
+      "caption": "Name one thing you're grateful for.",
+      "cam": [
+        [0, 0.5, 0.42, 1.2],
+        [1, 0.5, 0.42, 1.06]
+      ]
+    },
+    {
+      "scene": "walkthrough",
+      "id": "ready",
+      "dur": 2.6,
+      "img": "09-ready.png",
+      "caption": "You're ready.",
+      "cam": [
+        [0, 0.5, 0.36, 1.05],
+        [1, 0.5, 0.36, 1.18]
+      ]
+    },
+    {
+      "scene": "cta",
+      "id": "cta",
+      "dur": 3.2,
+      "lines": ["A guided morning routine to start your day with intention."]
+    }
+  ]
+}

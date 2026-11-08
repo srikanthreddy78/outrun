@@ -3,6 +3,8 @@ packages:
   - packages/*
   # Shane's user-acquisition Naive project (outreach app, landing page, crew); see its README.
   - user_acquisition
+  # Outrun's marketing loop on Naive (studio app, promoter, producer, listener); see its README.
+  - marketing
 # daybreak3/ is Matthew's standalone template app; it is not part of the workspace.
 allowBuilds:
   esbuild: true
