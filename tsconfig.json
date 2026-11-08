@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["scripts/**/*.ts", "evals/**/*.ts", "*.ts"],
+  "exclude": ["node_modules", "daybreak3"]
+}

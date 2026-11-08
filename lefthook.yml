@@ -1,0 +1,9 @@
+pre-commit:
+  commands:
+    gitleaks:
+      run: |
+        if command -v gitleaks >/dev/null 2>&1; then
+          gitleaks git --staged --redact --no-banner
+        else
+          echo "gitleaks not installed (brew install gitleaks); CI still scans every push" >&2
+        fi

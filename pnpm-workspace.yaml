@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - packages/*
+# daybreak3/ is Matthew's standalone template app; it is not part of the workspace.
+allowBuilds:
+  esbuild: true
+  lefthook: true
+  sharp: true
+  unrs-resolver: true
