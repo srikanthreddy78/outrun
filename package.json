@@ -30,7 +30,8 @@
     "stripe:sync": "tsx --env-file-if-exists=.env scripts/stripe-sync.ts",
     "listing": "tsx --env-file-if-exists=.env scripts/publish-listing.ts",
     "email:resume": "tsx --env-file-if-exists=.env scripts/email-resume.ts",
-    "eval:triage": "tsx --env-file-if-exists=.env scripts/eval-triage.ts"
+    "eval:triage": "tsx --env-file-if-exists=.env scripts/eval-triage.ts",
+    "hubspot:setup": "tsx --env-file-if-exists=.env scripts/hubspot-setup.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

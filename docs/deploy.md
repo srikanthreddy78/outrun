@@ -28,6 +28,12 @@ into Vercel env, Render env and the Naive vault, never into git, prompts or chat
 - Send one test email to a mail-tester address and check SPF, DKIM and DMARC pass before any outreach.
 - Sending starts at 10 a day and adds 5 a day up to `OUTRUN_SEND_DAILY_CAP`. A complaint, or bounces past 3% of the last 50 sends, pauses it; fix the cause, then `pnpm email:resume "<why>"`.
 
+
+## 2b. Prospecting: sources, Monid and HubSpot (SH-2 to SH-4)
+
+- Discovery needs no keys. `refresh_sources` runs daily at 06:00 Pacific and reads the MCP Registry, YC's developer-tools and API companies (the yc-oss mirror) and Product Hunt's feed. Glama needs an API key and credit on every page that shows its data, so it isn't a source yet. Demo mode and tests use the fixtures.
+- `MONID_API_KEY` turns on `enrich()`. It uses akta company enrichment (firmographic, customer_profile and management_profile, about $0.20 a company) and only runs when the researcher calls `outrun.enrich_company`. akta has names and titles but no emails.
+- HubSpot: create a private app with write access to companies, contacts, deals and their schemas. Set `HUBSPOT_ACCESS_TOKEN`, then run `pnpm hubspot:setup` once to create the `outrun_id` and `outrun_stage` properties. `sync_crm` mirrors each prospect one way, keyed on `outrun_id`.
 ## 3. Render (worker)
 
 - New Blueprint from `render.yaml`, which gives one starter background worker and runs migrations before each deploy.

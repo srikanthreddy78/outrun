@@ -1,0 +1,33 @@
+{
+  "credits_consumed": 3,
+  "data": {
+    "uuid": "00000l1",
+    "firmographic": {
+      "name": "Acme API",
+      "website": "http://www.acme.dev",
+      "company_type": { "code": "private", "label": "Private" },
+      "founded_year": 2023,
+      "company_description_short": "Acme is an API for invoices that developers and AI agents call to bill customers.",
+      "operating_status": { "code": "operating", "label": "Operating" },
+      "ownership_category": { "code": "venture_seed", "label": "Venture Seed" },
+      "headcount_range": "11-50"
+    },
+    "customer_profile": {
+      "segment": [
+        {
+          "title": "Developers at SaaS startups",
+          "is_primary": true,
+          "source": ["https://acme.dev/customers"]
+        },
+        { "title": "Finance teams", "is_primary": false, "source": ["not a url"] }
+      ]
+    },
+    "management_profile": {
+      "number_of_profiles": 2,
+      "profiles": [
+        { "name": "Ada Lovelace", "designation": "Co-founder & CEO", "source": ["https://acme.dev/about"] },
+        { "name": "Bo", "source": ["https://acme.dev/about"] }
+      ]
+    }
+  }
+}
