@@ -61,6 +61,10 @@ export const SCAN_CACHE_DAYS = 7;
 export const SCAN_TIMEOUT_MS = 10_000;
 export const AUDIT_MAX_PAGES = 50;
 export const SCORE_RATE_LIMIT_PER_HOUR = 20;
+/** New orders one public caller (hashed IP) may open per hour through MCP or A2A; repeating a key is free. */
+export const PUBLIC_BUY_LIMIT_PER_HOUR = 10;
+/** The A2A protocol version our agent card and endpoint speak. */
+export const A2A_PROTOCOL_VERSION = "0.3.0";
 
 /** safeFetch */
 export const FETCH_TIMEOUT_MS = 10_000;

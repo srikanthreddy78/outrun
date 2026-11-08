@@ -6,6 +6,9 @@
  *   crew MCP: unknown agent 404, no token 401, and with CREW_TOKEN_SECRET set, each agent
  *     lists its own tools and orchestrator's ping answers
  *   Naive webhook: unsigned delivery refused (401; 503 means NAIVE_WEBHOOK_SECRET is unset)
+ *   Stripe webhook: unsigned delivery refused
+ *   agent discovery: llms.txt, openapi.json, the A2A agent card and the MCP server card point at
+ *     this host; the public MCP lists four tools; A2A answers get_quote (read-only, no order)
  *
  * In production it also fails on fakes in use or a missing webhook secret.
  */
@@ -122,6 +125,74 @@ async function main(): Promise<void> {
     if (res.status === 503 && !isLocal) throw new Error("503: NAIVE_WEBHOOK_SECRET is not set");
     expectStatus(res, 401, 503);
     return res.status === 503 ? "no secret configured (local)" : undefined;
+  });
+
+  await check("Stripe webhook refuses unsigned", async () => {
+    const res = await get("/api/webhooks/stripe", { method: "POST", body: "{}" });
+    if (res.status === 503 && !isLocal) throw new Error("503: STRIPE_WEBHOOK_SECRET is not set");
+    expectStatus(res, 401, 503);
+    return res.status === 503 ? "no secret configured (local)" : undefined;
+  });
+
+  for (const [path, needle] of [
+    ["/llms.txt", "/api/mcp"],
+    ["/openapi.json", '"openapi"'],
+    ["/.well-known/agent-card.json", "/api/a2a"],
+    ["/.well-known/agent.json", "/api/a2a"],
+    ["/.well-known/mcp/server-card.json", "/api/mcp"],
+  ] as const) {
+    await check(`discovery ${path}`, async () => {
+      const res = await get(path);
+      expectStatus(res, 200);
+      const text = await res.text();
+      if (!text.includes(needle)) throw new Error(`missing ${needle}`);
+      if (!text.includes(new URL(base).host))
+        throw new Error(`links don't point at ${new URL(base).host}; check APP_URL`);
+    });
+  }
+
+  await check("public MCP lists four tools", async () => {
+    const res = await get("/api/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-06-18",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+    expectStatus(res, 200);
+    const tools = ((await rpcResult(res)).tools ?? []) as { name: string }[];
+    if (tools.length !== 4) throw new Error(`expected 4 tools, got ${tools.map((x) => x.name).join(",")}`);
+  });
+
+  await check("A2A answers a quote", async () => {
+    const res = await get("/api/a2a", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "smoke",
+        method: "message/send",
+        params: {
+          message: {
+            role: "user",
+            kind: "message",
+            messageId: `smoke-${Date.now()}`,
+            parts: [
+              {
+                kind: "data",
+                data: { skill: "get_quote", input: { domain: "example.com", package: "auditKit" } },
+              },
+            ],
+          },
+        },
+      }),
+    });
+    expectStatus(res, 200);
+    const body = (await res.json()) as { result?: { status?: { state?: string } }; error?: unknown };
+    if (body.result?.status?.state !== "completed")
+      throw new Error(JSON.stringify(body.error ?? body.result));
   });
 
   for (const r of results)
