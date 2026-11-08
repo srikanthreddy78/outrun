@@ -255,13 +255,13 @@ describe("autonomyReport", () => {
     expect(acme.counts.total).toBe(9); // everything but the agency-wide CEO brief
   });
 
-  it("redacts: no @, no subjects or bodies, no uncontacted domains, people as roles", async () => {
+  it("redacts: no @, no subjects or bodies, no prospect domains, people as roles", async () => {
     const r = await autonomyReport(t.db, { since, redact: true });
     const all = strings(r);
     expect(all.filter((s) => s.includes("@"))).toEqual([]);
     expect(all.some((s) => s.includes("Private"))).toBe(false);
     expect(all.some((s) => s.includes("secret-co.com"))).toBe(false);
-    expect(all.some((s) => s.includes("contacted-co.com"))).toBe(true);
+    expect(all.some((s) => s.includes("contacted-co.com"))).toBe(false);
     expect(r.stepIns.map((s) => s.actor).sort()).toEqual(["client approver", "owner"]);
     expect(r.counts.total).toBe(10);
   });

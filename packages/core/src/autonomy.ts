@@ -82,18 +82,6 @@ const STEP_IN_TYPES = new Set([
   "portal.link_used",
 ]);
 
-/** Prospect stages after the first email went out; only these prospects' domains are public. */
-const CONTACTED_STAGES = new Set([
-  "contacted",
-  "replied",
-  "interested",
-  "checkout_sent",
-  "won",
-  "not_now",
-  "lost",
-  "unsubscribed",
-]);
-
 const FEED_LIMIT = 50;
 const ROW_LIMIT = 20_000;
 
@@ -212,10 +200,8 @@ export async function autonomyReport(
   const sessionById = new Map(sessionRows.map((s) => [s.id, s]));
   const prospectById = new Map(prospectRows.map((p) => [p.id, p]));
   const clientById = new Map(clientRows.map((c) => [c.id, c]));
-  const allowedDomains = new Set<string>([
-    ...clientRows.map((c) => c.domain.toLowerCase()),
-    ...prospectRows.filter((p) => CONTACTED_STAGES.has(p.stage)).map((p) => p.domain.toLowerCase()),
-  ]);
+  // Public text names only our clients; a prospect never agreed to appear on our page.
+  const allowedDomains = new Set<string>(clientRows.map((c) => c.domain.toLowerCase()));
 
   const entityOf = (payload: Record<string, unknown>) =>
     (payload.entity ?? null) as { type?: string; id?: string } | null;
@@ -299,7 +285,7 @@ export async function autonomyReport(
   const prospectDomain = (prospectId: string | null | undefined) => {
     const p = prospectId ? prospectById.get(prospectId) : undefined;
     if (!p) return "a prospect";
-    return !redact || CONTACTED_STAGES.has(p.stage) ? p.domain : "a prospect";
+    return redact ? "a prospect" : p.domain;
   };
   const item = (r: Row, summary: string, type = r.type): FeedItem => ({
     id: r.id,
