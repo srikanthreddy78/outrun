@@ -1,9 +1,13 @@
+import { existsSync } from "node:fs";
 import { defineConfig } from "vitest/config";
+
+if (existsSync(".env")) process.loadEnvFile(".env");
 
 export default defineConfig({
   test: {
     include: [
       "packages/*/src/**/*.test.ts",
+      "packages/*/contracts/**/*.test.ts",
       "apps/*/src/**/*.test.ts",
       "apps/web/app/**/*.test.ts",
       "scripts/**/*.test.ts",

@@ -17,7 +17,9 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "eval": "tsx scripts/eval.ts",
-    "prepare": "lefthook install || true"
+    "prepare": "lefthook install || true",
+    "db:migrate": "pnpm --filter @outrun/core db:migrate",
+    "db:generate": "pnpm --filter @outrun/core db:generate"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
