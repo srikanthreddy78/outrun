@@ -179,6 +179,9 @@ importers:
       '@types/node':
         specifier: ^22.19.0
         version: 22.20.5
+      '@usenaive-sdk/blueprints':
+        specifier: ^0.18.0
+        version: 0.18.0
       '@usenaive-sdk/cli':
         specifier: ^1.0.0
         version: 1.0.0
@@ -1246,10 +1249,18 @@ packages:
     resolution: {integrity: sha512-SB8xqipSzZHUePCCLNeYxqnxq83X61/qzNhjQGbTfjxGZIeOEP7tBgWYX05Tcd6CgE02WdTJnh5b8kMZJ/+bnQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@usenaive-sdk/blueprints@0.18.0':
+    resolution: {integrity: sha512-M5bAdair8aoinnn3JLfNHoWjN56iAH3NHShKaDc470pJNKDG3FdmCQOHfZm4SG3irzLjlqcRW0iDxebLuh6WAQ==}
+    engines: {node: '>=20'}
+
   '@usenaive-sdk/cli@1.0.0':
     resolution: {integrity: sha512-fU75WLBbW0diHXJocfkGfM1Tzg62PXENIluH0ohlTbriRGxDQgBWZWTBUxAvxCQKV1AolODNaGcH49gFwqHWVw==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@usenaive-sdk/managed-agents@0.12.0':
+    resolution: {integrity: sha512-UsNlYbMxlzkB6rbBWV7gM7wqn3vPZeMEomktt79YNJfns78k3hqSOftG1aN2KLELUH5BcRh0hXWu/QRWVNuRmQ==}
+    engines: {node: '>=20'}
 
   '@vitest/expect@3.2.7':
     resolution: {integrity: sha512-E8eBXaKibuvH2pSZErOjdVb5vF4PbKYcrnluBTYxEk1l/VhhwZg1kZQsdtjq+CsF5CFydf2Rdkz7jDHKSisi3w==}
@@ -2864,9 +2875,20 @@ snapshots:
       '@typescript-eslint/types': 8.72.1
       eslint-visitor-keys: 5.0.1
 
+  '@usenaive-sdk/blueprints@0.18.0':
+    dependencies:
+      '@usenaive-sdk/managed-agents': 0.12.0
+      ignore: 7.0.14
+      jiti: 2.7.0
+      zod: 4.6.7
+
   '@usenaive-sdk/cli@1.0.0':
     dependencies:
       jiti: 2.7.0
+
+  '@usenaive-sdk/managed-agents@0.12.0':
+    dependencies:
+      zod: 4.6.7
 
   '@vitest/expect@3.2.7':
     dependencies:

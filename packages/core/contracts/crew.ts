@@ -286,12 +286,19 @@ export function toolsForAgent(agent: AgentName): CrewToolName[] {
   return CREW_TOOL_NAMES.filter((t) => (CREW_TOOLS[t].agents as readonly AgentName[]).includes(agent));
 }
 
-/** Naive built-in tools each agent gets; everything else is denied. */
+/** Naive built-in tools each agent gets; everything else is denied. `read_skill` loads the agent's playbook. */
 export const BUILTIN_TOOLS: Record<AgentName, readonly string[]> = {
-  orchestrator: ["board_read", "board_write", "send_to_agent", "wait_for_agents", "list_agents"],
-  prospector: [],
-  researcher: ["web_search", "web_fetch"],
-  sdr: [],
-  closer: [],
-  auditor: ["web_search", "web_fetch"],
+  orchestrator: [
+    "read_skill",
+    "board_read",
+    "board_write",
+    "send_to_agent",
+    "wait_for_agents",
+    "list_agents",
+  ],
+  prospector: ["read_skill"],
+  researcher: ["read_skill", "web_search", "web_fetch"],
+  sdr: ["read_skill"],
+  closer: ["read_skill"],
+  auditor: ["read_skill", "web_search", "web_fetch"],
 };
