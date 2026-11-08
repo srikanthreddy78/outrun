@@ -169,7 +169,7 @@ describe("public tools for other agents", () => {
       artifacts?: { parts: { kind: string; data: Record<string, unknown> }[] }[];
     };
 
-    it("publishes a card with the four skills at our endpoint", () => {
+    it("publishes a card with the five skills at our endpoint", () => {
       const card = agentCard(APP);
       expect(card).toMatchObject({
         protocolVersion: "0.3.0",

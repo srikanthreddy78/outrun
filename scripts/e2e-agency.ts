@@ -13,6 +13,10 @@
  *
  * Both clients prospect the same company and the same person, so it also proves: drafts,
  * approvals, inboxes, unsubscribes and replies never cross clients, and Outrun is untouched.
+ *
+ * Then a third client, Gamma Grid, hires the agency itself through the public hire_agency tool:
+ * the worker provisions its six agents on the (fake) Naive API, its researcher drafts the
+ * profile, the owner confirms it, and its sending domain verifies.
  */
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "@outrun/core";
@@ -26,6 +30,7 @@ import { isSuppressed } from "@outrun/core/email/rules";
 import { readUnsubscribeToken, unsubscribeContact } from "@outrun/core/email/unsubscribe";
 import { createFakes, FakeLlmProvider, FakeNaiveClient } from "@outrun/core/fakes";
 import { assertPortalAccess } from "@outrun/core/portal";
+import { callPublicTool } from "@outrun/core/public/service";
 import type { Runtime } from "@outrun/core/runtime";
 import { seedDemo } from "@outrun/core/seed";
 import { createTempDatabase } from "@outrun/core/testing/db";
@@ -143,7 +148,12 @@ async function main(): Promise<void> {
     rt = worker.runtime;
     const db = rt.db.db;
     naiveOpts.registry = rt.registry;
-    naiveOpts.ctx = (agent: AgentName, clientSlug: string): ToolContext => {
+    naiveOpts.ctx = async (agent: AgentName, clientSlug: string): Promise<ToolContext> => {
+      // A self-serve client's id is known to the database before it is known here.
+      if (!ids.has(clientSlug)) {
+        const [row] = await db.select({ id: clients.id }).from(clients).where(eq(clients.slug, clientSlug));
+        if (row) ids.set(clientSlug, row.id);
+      }
       const clientId = ids.get(clientSlug);
       if (!clientId) throw new Error(`e2e: unknown client ${clientSlug}`);
       return {
@@ -553,6 +563,111 @@ async function main(): Promise<void> {
       "the CEO sees which crew member ran",
     );
     ok("no draft, approval, inbox or unsubscribe crossed clients; Outrun untouched; the CEO sees both");
+
+    console.log("F. a third client hires the agency itself");
+    const GAMMA: ClientSpec = {
+      slug: "gamma-grid",
+      name: "Gamma Grid",
+      domain: "gamma-grid.dev",
+      approver: "gus@gamma-grid.dev",
+      keyword: "grid",
+      pitch: "A free week of load forecasts for your grid.",
+      cta: "https://gamma-grid.dev/trial",
+      price: "$99/month",
+    };
+    // Its researcher, once provisioned, drafts the profile from its site.
+    naive.script(`${GAMMA.slug}-researcher`, [
+      { tool: "get_client_profile", input: {} },
+      { tool: "save_client_profile", input: { profile: profileOf(GAMMA) } },
+    ]);
+    const publicDeps = {
+      db,
+      emit: rt.emit,
+      stripe: fakes.stripe,
+      appUrl: config.appUrl,
+      scan: async () => {
+        throw new Error("e2e: no scans here");
+      },
+      selfServe: {
+        enqueue: deps.enqueue,
+        sendTransactional: rt.integrations.sendTransactional,
+        secret: config.keys.crewTokenSecret,
+      },
+    };
+    const hireMeta = { protocol: "mcp" as const, callerIp: "203.0.113.50", requestId: randomUUID() };
+    const hired = await callPublicTool(
+      publicDeps,
+      "hire_agency",
+      { companyName: GAMMA.name, domain: GAMMA.domain, approverEmail: GAMMA.approver },
+      hireMeta,
+    );
+    check(hired.created && hired.slug === GAMMA.slug, `${GAMMA.name} signed up as ${GAMMA.slug}`);
+    ids.set(GAMMA.slug, hired.clientId);
+    const again = await callPublicTool(
+      publicDeps,
+      "hire_agency",
+      { companyName: GAMMA.name, domain: GAMMA.domain, approverEmail: GAMMA.approver },
+      { ...hireMeta, requestId: randomUUID() },
+    );
+    check(!again.created && again.clientId === hired.clientId, "a repeat signup returns the same client");
+    const [added] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, "client.added"), eq(events.entityId, hired.clientId)));
+    check(added?.actor === "web", "added by code (web), not by a person");
+    check(
+      fakes.agentmail.transactional.some(
+        (m) => m.to === GAMMA.approver && m.text.includes(`${config.appUrl}/portal/auth/`),
+      ),
+      "the approver got a portal sign-in link",
+    );
+    ok(
+      "Gamma Grid hired the agency over MCP with hire_agency; a repeat is idempotent; its approver got a portal link",
+    );
+
+    const provisioned = await waitFor("Gamma's crew provisioned", async () => {
+      const [e] = await db
+        .select()
+        .from(events)
+        .where(and(eq(events.type, "client.crew_provisioned"), eq(events.entityId, hired.clientId)));
+      return e;
+    });
+    check(provisioned.actor === "worker", "provisioned by the worker");
+    const gammaAgents = naive.agents.filter((a) => a.name.startsWith(`${GAMMA.slug}-`));
+    check(gammaAgents.length === 6, `six Gamma agents on Naive (${gammaAgents.length})`);
+    check(
+      naive.credentials.filter((c) => c.key.startsWith(`crew-${GAMMA.slug}-`)).length === 6,
+      "six vault tokens for Gamma's crew MCP URLs",
+    );
+    ok("the worker created Gamma's six agents and vault tokens through the Naive API (fake)");
+
+    await waitFor("Gamma's profile draft", async () => {
+      noFailures();
+      const [r] = await db.select().from(clients).where(eq(clients.id, hired.clientId));
+      return r?.status === "awaiting_confirmation";
+    });
+    const [draft] = await db.select().from(clients).where(eq(clients.id, hired.clientId));
+    check(!draft?.profileConfirmedAt, "not confirmed until the owner does");
+    check(
+      naive.toolCalls.some(
+        (t) => t.tool === "save_client_profile" && naive.sessions.get(t.sessionId)?.clientSlug === GAMMA.slug,
+      ),
+      "Gamma's own researcher drafted it",
+    );
+    ok("Gamma's provisioned researcher drafted its profile; it waits for the owner");
+
+    await confirmProfile(deps, hired.clientId, profileOf(GAMMA), OWNER);
+    await waitFor("Gamma's DNS records", async () => {
+      const [r] = await db.select().from(clients).where(eq(clients.id, hired.clientId));
+      return r?.status === "email_setup" && r.dnsStatus === "pending" && r.dnsRecords.length > 0;
+    });
+    fakes.agentmail.addDns(GAMMA.domain);
+    await startEmailSetup(deps, hired.clientId, new Date(Date.now() + 60_000));
+    await waitFor("Gamma to go active", async () => {
+      const [r] = await db.select().from(clients).where(eq(clients.id, hired.clientId));
+      return r?.status === "active" && r.agentmailInboxId === `hello@${GAMMA.domain}`;
+    });
+    ok("the owner confirmed Gamma's profile; its domain verified and it is active with its own inbox");
 
     const dead = await db.select().from(events).where(eq(events.type, "job.dead"));
     check(

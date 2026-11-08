@@ -33,7 +33,7 @@ describe("contracts round-trip", () => {
       traceId: "t1",
     };
     expect(roundTrip(JobEnvelope, env)).toEqual(env);
-    expect(JOB_TYPES).toHaveLength(17);
+    expect(JOB_TYPES).toHaveLength(18);
   });
 
   it("event", () => {
@@ -161,12 +161,13 @@ describe("crew contract", () => {
     });
   });
 
-  it("public MCP serves exactly four tools", () => {
+  it("public MCP serves exactly five tools", () => {
     expect(Object.keys(PUBLIC_TOOLS).sort()).toEqual([
       "buy_audit",
       "get_order_status",
       "get_quote",
       "get_readiness_score",
+      "hire_agency",
     ]);
   });
 });

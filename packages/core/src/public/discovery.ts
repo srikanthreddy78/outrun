@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { PUBLIC_TOOLS, ScoreQuery, ScoreResponse, ErrorBody, type PublicToolName } from "../../contracts";
-import { AGENT_PAYMENTS_ENABLED, PRODUCTS } from "../constants";
+import { AGENT_PAYMENTS_ENABLED, PRODUCTS, SELF_SERVE_DAILY_CAP } from "../constants";
 
 const TOOLS = Object.keys(PUBLIC_TOOLS) as PublicToolName[];
 const paid = [PRODUCTS.auditKit, PRODUCTS.growth];
@@ -23,7 +23,7 @@ export function llmsTxt(appUrl: string): string {
 - OpenAPI: ${appUrl}/openapi.json
 - MCP server card: ${appUrl}/.well-known/mcp/server-card.json
 
-## Tools (the same four on MCP and A2A)
+## Tools (the same ${TOOLS.length} on MCP and A2A)
 ${TOOLS.map((t) => `- \`${t}\`: ${PUBLIC_TOOLS[t].description}`).join("\n")}
 
 ## Products
@@ -40,8 +40,12 @@ ${paid.map((p) => `- ${p.name} (\`${p.key}\`): ${price(p)}. ${p.deliverables.joi
   }
 4. Poll \`get_order_status\` until the state is \`delivered\`; it then carries the report link.
 
+## Hire the agency (free trial)
+\`hire_agency\` with a company name, its domain and an approver email at that domain, or the form at ${appUrl}/hire. The company gets its own crew of six agents; Outrun's owner confirms its profile before anything is sent, and the approver approves every email in the portal (${appUrl}/portal). No payment. Repeat calls for a domain return the same client.
+
 ## Limits
 - Scores: 20 per caller per hour. New orders: 10 per caller per hour; repeating a key is free.
+- New agency clients: ${SELF_SERVE_DAILY_CAP} a day in all, one per caller per hour; a known domain is free.
 - Errors have the shape {"error": {"code", "message", "requestId", "retryable"}}.
 `;
 }

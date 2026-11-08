@@ -10,8 +10,16 @@
  * sits in the vault, keyed by that URL. Agents never see the token.
  */
 import { defineProject } from "@usenaive-sdk/blueprints";
-import { IDENTITY, PROJECT_NAME, VAULT, crew, loadClientCrews, skillFiles } from "./naive/crew";
-import { MCP_SERVER_NAME } from "./packages/core/contracts";
+import {
+  IDENTITY,
+  PROJECT_NAME,
+  VAULT,
+  agentConfig,
+  credentialKey,
+  crew,
+  loadClientCrews,
+  skillFiles,
+} from "./naive/crew";
 
 const appUrl = process.env.APP_URL ?? "";
 if (!/^https:\/\//.test(appUrl) && process.env.NAIVE_CONFIG_ALLOW_LOCAL !== "1") {
@@ -34,25 +42,16 @@ export default defineProject({
       name: VAULT,
       credentials: members.map((a) => ({
         kind: "static_bearer" as const,
-        key: `crew-${a.name}`,
+        key: credentialKey(a),
         mcp_server_url: a.mcpUrl,
         value: { from_env: a.tokenEnv },
       })),
     },
   ],
+  // agentConfig is also what provision_client_crew POSTs for a self-serve client's crew.
   agents: members.map((a) => ({
-    name: a.name,
-    description: a.description,
-    model: a.model,
-    budget: a.budget,
-    system: a.system,
-    skills: a.skills,
+    ...agentConfig(a),
     identity: IDENTITY,
-    tools: a.tools,
-    mcp_servers: [{ name: MCP_SERVER_NAME, url: a.mcpUrl }],
-    // No multiagent team (coming soon on Naive) and no handoffs; outrun.plan_day and
-    // outrun.kick_client start sessions.
-    handoffs: false as const,
     ...(a.schedule
       ? {
           schedules: [

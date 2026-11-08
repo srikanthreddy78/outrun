@@ -132,6 +132,23 @@ export function createNaiveClient(
     }
   }
 
+  /** Every row of a cursor-paged list. */
+  async function listAll<T>(path: string): Promise<T[]> {
+    const out: T[] = [];
+    let after: string | undefined;
+    for (let page = 0; page < 50; page++) {
+      const sep = path.includes("?") ? "&" : "?";
+      const r = await call<{ data: T[]; has_more?: boolean; next_cursor?: string }>(
+        "GET",
+        `${path}${sep}limit=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+      );
+      out.push(...r.data);
+      if (!r.has_more || !r.next_cursor) break;
+      after = r.next_cursor;
+    }
+    return out;
+  }
+
   /** A 404 on an agent-scoped call means `naive up` recreated it: forget the cached id. */
   function forgetOn404<T>(p: Promise<T>, agentId: string): Promise<T> {
     return p.catch((err: unknown) => {
@@ -242,6 +259,57 @@ export function createNaiveClient(
         agentId,
       );
       return (r.spent_micro_usd ?? 0) / 1_000_000;
+    },
+
+    async listAgents() {
+      const rows = await listAll<{ id: string; name: string }>("/v1/agents");
+      for (const a of rows) if (parseNaiveAgentName(a.name)) agentIds.set(a.name, a.id);
+      return rows.map((a) => ({ id: a.id, name: a.name }));
+    },
+
+    async createAgent(body, idempotencyKey) {
+      const r = await call<{ id?: string }>("POST", "/v1/agents", body, idempotencyKey);
+      if (typeof r.id !== "string" || !r.id)
+        throw new AppError("upstream_error", "naive: agent create returned no id", { retryable: true });
+      agentIds.set(body.name, r.id);
+      return { id: r.id };
+    },
+
+    async listVaults() {
+      const rows = await listAll<{ id: string; name: string }>("/v1/vaults");
+      return rows.map((v) => ({ id: v.id, name: v.name }));
+    },
+
+    async listCredentials(vaultId) {
+      const rows = await listAll<{ id: string; kind: string; key: string; mcp_server_url?: string | null }>(
+        `/v1/vaults/${encodeURIComponent(vaultId)}/credentials`,
+      );
+      return rows.map((c) => ({
+        id: c.id,
+        kind: c.kind,
+        key: c.key,
+        mcp_server_url: c.mcp_server_url ?? null,
+      }));
+    },
+
+    async createCredential(vaultId, body, idempotencyKey) {
+      const r = await call<{ id?: string }>(
+        "POST",
+        `/v1/vaults/${encodeURIComponent(vaultId)}/credentials`,
+        body,
+        idempotencyKey,
+      );
+      return { id: r.id ?? "" };
+    },
+
+    async listDeployments() {
+      const rows = await listAll<{ id: string; agent_id: string; cron: string }>("/v1/deployments");
+      return rows.map((d) => ({ id: d.id, agent_id: d.agent_id, cron: d.cron }));
+    },
+
+    async createDeployment(body, idempotencyKey) {
+      const r = await call<{ id?: string }>("POST", "/v1/deployments", body, idempotencyKey);
+      return { id: r.id ?? "" };
     },
   };
 }

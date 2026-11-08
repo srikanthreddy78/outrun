@@ -196,6 +196,34 @@ export interface CrewAgent {
   schedule?: typeof SCHEDULE | typeof CEO_SCHEDULE;
 }
 
+/**
+ * One agent as Naive takes it: naive.config.ts declares exactly this (plus the persona and the
+ * schedule), and provision_client_crew POSTs it to /v1/agents, so `naive up` and runtime
+ * provisioning can't drift. The persona is attached and the schedule deployed separately.
+ */
+export function agentConfig(a: CrewAgent) {
+  return {
+    name: a.name,
+    description: a.description,
+    model: a.model,
+    budget: a.budget,
+    system: a.system,
+    skills: a.skills,
+    tools: a.tools,
+    mcp_servers: [{ name: MCP_SERVER_NAME, url: a.mcpUrl }],
+    // No multiagent team (coming soon on Naive) and no handoffs; outrun.plan_day and
+    // outrun.kick_client start sessions.
+    handoffs: false as const,
+  };
+}
+
+/** The vault credential that carries a member's crew token to its MCP URL. */
+export const credentialKey = (a: Pick<CrewAgent, "name">): string => `crew-${a.name}`;
+
+/** One client's six agents, as crew() builds them. */
+export const clientCrew = (appUrl: string, client: ClientCrewSpec): CrewAgent[] =>
+  crew(appUrl, [client]).filter((a) => a.clientSlug === client.slug);
+
 /** The agency: the CEO, Outrun's own crew, and one six-agent crew per client. */
 export function crew(appUrl: string, clients: readonly ClientCrewSpec[] = []): CrewAgent[] {
   const outrun: CrewAgent[] = AGENTS.map((role) => ({

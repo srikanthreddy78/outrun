@@ -1,6 +1,7 @@
 /**
- * The four public tools (contracts/mcp.ts PUBLIC_TOOLS) that other companies' agents call, with
- * no person in the loop: get_readiness_score, get_quote, buy_audit and get_order_status. The
+ * The five public tools (contracts/mcp.ts PUBLIC_TOOLS) that other companies' agents call, with
+ * no person in the loop: get_readiness_score, get_quote, buy_audit, get_order_status and
+ * hire_agency (a free agency trial, see selfServe.ts). The
  * public MCP server (/api/mcp) and the A2A endpoint (/api/a2a) both call callPublicTool, so the
  * two protocols can't drift. No LLM runs here; every answer comes from code and Postgres.
  */
@@ -15,6 +16,7 @@ import type { Emit } from "../events";
 import type { StripeGateway } from "../integrations/types";
 import { checkoutFor, createOrder, getOrder, payWithSharedToken } from "../orders";
 import type { ScanResult as SiteScan } from "../scan/contracts";
+import { hireAgency, type SelfServeDeps } from "../selfServe";
 
 export type PublicProtocol = "mcp" | "a2a";
 
@@ -27,6 +29,8 @@ export interface PublicDeps {
   scan: (domain: string, callerIp: string) => Promise<SiteScan>;
   /** Overrides AGENT_PAYMENTS_ENABLED; tests only. */
   agentPayments?: boolean;
+  /** hire_agency's queue, email and portal secret; without them it answers not_configured. */
+  selfServe?: Pick<SelfServeDeps, "enqueue" | "sendTransactional" | "secret">;
 }
 
 export interface CallMeta {
@@ -127,6 +131,13 @@ async function run(
       return buy(deps, input as unknown as BuyInput, meta);
     case "get_order_status":
       return status(deps, String(input.orderId));
+    case "hire_agency":
+      if (!deps.selfServe)
+        throw new AppError("not_configured", "hiring is unavailable right now", { retryable: true });
+      return hireAgency({ ...deps.selfServe, db: deps.db, emit: deps.emit, appUrl: deps.appUrl }, input, {
+        channel: meta.protocol,
+        caller: meta.caller,
+      });
   }
 }
 

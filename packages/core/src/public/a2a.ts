@@ -21,6 +21,7 @@ const SKILL_NAMES: Record<PublicToolName, string> = {
   get_quote: "Quote",
   buy_audit: "Buy an audit",
   get_order_status: "Order status",
+  hire_agency: "Hire the agency (free trial)",
 };
 const SKILL_EXAMPLES: Record<PublicToolName, string[]> = {
   get_readiness_score: ['{"skill":"get_readiness_score","input":{"domain":"example.com"}}'],
@@ -29,6 +30,9 @@ const SKILL_EXAMPLES: Record<PublicToolName, string[]> = {
     '{"skill":"buy_audit","input":{"domain":"example.com","package":"auditKit","contactEmail":"founder@example.com","idempotencyKey":"order-2026-11-07-1"}}',
   ],
   get_order_status: ['{"skill":"get_order_status","input":{"orderId":"<uuid from buy_audit>"}}'],
+  hire_agency: [
+    '{"skill":"hire_agency","input":{"companyName":"Example Inc","domain":"example.com","approverEmail":"founder@example.com"}}',
+  ],
 };
 const SKILLS = Object.keys(PUBLIC_TOOLS) as PublicToolName[];
 
@@ -57,7 +61,10 @@ export function agentCard(appUrl: string) {
       id,
       name: SKILL_NAMES[id],
       description: PUBLIC_TOOLS[id].description,
-      tags: ["agent-readiness", id === "buy_audit" || id === "get_quote" ? "commerce" : "readiness"],
+      tags:
+        id === "hire_agency"
+          ? ["agency", "outbound-marketing"]
+          : ["agent-readiness", id === "buy_audit" || id === "get_quote" ? "commerce" : "readiness"],
       examples: SKILL_EXAMPLES[id],
       inputModes: ["application/json"],
       outputModes: ["application/json"],

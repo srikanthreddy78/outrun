@@ -2,6 +2,8 @@
  * pnpm clients:export: writes .naive/clients.json (slug and name of every client but Outrun)
  * from the database, for naive.config.ts and scripts/naive-up.ts. Paused clients stay listed:
  * dropping one would make `naive up` delete its agents; a paused crew is refused at its MCP URL.
+ * Self-serve clients (/hire, hire_agency) are listed like any other: when provision_client_crew
+ * ends in client.crew_pending, this plus naive up gives them their crew.
  * Read-only on the database; no secrets in the file. Then preview with pnpm naive:up --dry-run.
  */
 import { mkdirSync, writeFileSync } from "node:fs";

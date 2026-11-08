@@ -70,6 +70,13 @@ export const AUDIT_MAX_PAGES = 50;
 export const SCORE_RATE_LIMIT_PER_HOUR = 20;
 /** New orders one public caller (hashed IP) may open per hour through MCP or A2A; repeating a key is free. */
 export const PUBLIC_BUY_LIMIT_PER_HOUR = 10;
+/**
+ * Self-serve agency trials (/hire and hire_agency): new clients the whole agency takes per rolling
+ * 24 hours, and per public caller (hashed IP) per hour. Each new client adds up to $13.50/day of
+ * crew budget (CLIENT_BUDGETS), so this caps what strangers can spend. A known domain is always free.
+ */
+export const SELF_SERVE_DAILY_CAP = 3;
+export const SELF_SERVE_CALLER_LIMIT_PER_HOUR = 1;
 /** The A2A protocol version our agent card and endpoint speak. */
 export const A2A_PROTOCOL_VERSION = "0.3.0";
 /**

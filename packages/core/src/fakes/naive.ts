@@ -11,7 +11,14 @@ import type { ToolRegistry } from "../crew/registry";
 import type { ToolContext } from "../crew/types";
 import { parseNaiveAgentName } from "../crew/identity";
 import { AppError } from "../errors";
-import type { NaiveClient, NaiveEvent, NaiveSession } from "../integrations/types";
+import { naiveError } from "../integrations/naive";
+import type {
+  NaiveAgentBody,
+  NaiveClient,
+  NaiveCredentialRow,
+  NaiveEvent,
+  NaiveSession,
+} from "../integrations/types";
 
 export interface ScriptedCall {
   tool: CrewToolName;
@@ -52,7 +59,7 @@ export class FakeNaiveClient implements NaiveClient {
     private readonly opts: {
       registry?: ToolRegistry;
       /** The tool context for a crew member: its role, and its client by slug. */
-      ctx?: (agent: AgentName, clientSlug: string) => ToolContext;
+      ctx?: (agent: AgentName, clientSlug: string) => ToolContext | Promise<ToolContext>;
       /** Called on every idle, like Naive's session.idle webhook. */
       onIdle?: (sessionId: string, stopReason: StopReason) => void | Promise<void>;
     } = {},
@@ -204,6 +211,101 @@ export class FakeNaiveClient implements NaiveClient {
     return this.spend.get(agentId) ?? 0;
   }
 
+  /* ---------- runtime provisioning ---------- */
+
+  /** Agents created through createAgent; their ids are agentIdOf(name), so startSession works. */
+  readonly agents: (NaiveAgentBody & { id: string })[] = [];
+  /** The org vault `naive up` made; tests empty it to see the "no vault" path. */
+  readonly vaults: { id: string; name: string }[] = [{ id: "vlt_fake_outrun-crew", name: "outrun-crew" }];
+  /** Credential rows, values included so tests can check them (the real API never returns them). */
+  readonly credentials: (NaiveCredentialRow & { vaultId: string; value: string; agent_id?: string })[] = [];
+  readonly deployments: {
+    id: string;
+    agent_id: string;
+    cron: string;
+    timezone: string;
+    input_template: string;
+    budget_micro_usd: number;
+  }[] = [];
+  /** Answer every provisioning call with this status (401/403 scope errors, 409 conflicts). */
+  provisionStatus: { status: number; code: string } | null = null;
+  private readonly postKeys = new Map<string, { id: string }>();
+
+  private provisionGate(method: string, args: unknown[]): void {
+    this.calls.push({ method, args });
+    const s = this.provisionStatus;
+    if (s) throw naiveError(s.status, s.code, `fake naive: ${method} → ${s.status} ${s.code}`, null);
+  }
+
+  async listAgents() {
+    this.provisionGate("listAgents", []);
+    return this.agents.map((a) => ({ id: a.id, name: a.name }));
+  }
+
+  async createAgent(body: NaiveAgentBody, idempotencyKey: string) {
+    this.provisionGate("createAgent", [body.name, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    if (this.agents.some((a) => a.name === body.name))
+      throw naiveError(409, "already_exists", `fake naive: agent ${body.name} exists`, null);
+    const id = this.agentIdOf(body.name);
+    this.agents.push({ ...body, id });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
+  async listVaults() {
+    this.provisionGate("listVaults", []);
+    return this.vaults.map((v) => ({ ...v }));
+  }
+
+  async listCredentials(vaultId: string) {
+    this.provisionGate("listCredentials", [vaultId]);
+    return this.credentials
+      .filter((c) => c.vaultId === vaultId)
+      .map(({ id, kind, key, mcp_server_url }) => ({ id, kind, key, mcp_server_url }));
+  }
+
+  async createCredential(
+    vaultId: string,
+    body: { kind: "static_bearer"; key: string; value: string; mcp_server_url: string; agent_id?: string },
+    idempotencyKey: string,
+  ) {
+    // Never record the value in `calls`.
+    this.provisionGate("createCredential", [vaultId, body.key, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    if (!this.vaults.some((v) => v.id === vaultId)) throw naiveError(404, "not_found", "no vault", null);
+    const id = `cred_fake_${randomUUID().slice(0, 8)}`;
+    this.credentials.push({ id, vaultId, ...body });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
+  async listDeployments() {
+    this.provisionGate("listDeployments", []);
+    return this.deployments.map(({ id, agent_id, cron }) => ({ id, agent_id, cron }));
+  }
+
+  async createDeployment(
+    body: {
+      agent_id: string;
+      cron: string;
+      timezone: string;
+      input_template: string;
+      budget_micro_usd: number;
+    },
+    idempotencyKey: string,
+  ) {
+    this.provisionGate("createDeployment", [body.agent_id, body.cron, idempotencyKey]);
+    const seen = this.postKeys.get(idempotencyKey);
+    if (seen) return seen;
+    const id = `dep_fake_${randomUUID().slice(0, 8)}`;
+    this.deployments.push({ id, ...body });
+    this.postKeys.set(idempotencyKey, { id });
+    return { id };
+  }
+
   private must(id: string): FakeSession {
     const s = this.sessions.get(id);
     if (!s) throw new Error(`FakeNaiveClient: unknown session ${id}`);
@@ -274,7 +376,7 @@ export class FakeNaiveClient implements NaiveClient {
         s.agent,
         step.tool,
         step.input,
-        this.opts.ctx(s.agent, s.clientSlug),
+        await this.opts.ctx(s.agent, s.clientSlug),
       );
     } catch (err) {
       const e = err as { code?: string; message?: string };
