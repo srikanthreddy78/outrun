@@ -248,6 +248,10 @@ export const storage = {
     const state = read();
     write({ ...state, cachedWeather: { date, data } });
   },
+  clearCachedWeather: (): void => {
+    const state = read();
+    write({ ...state, cachedWeather: null });
+  },
 
   getCustomElements: (): CustomElement[] => read().customElements ?? [],
   setCustomElements: (customElements: CustomElement[]): void => {

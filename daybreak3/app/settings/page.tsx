@@ -106,6 +106,13 @@ export default function Settings() {
     );
   };
 
+  const handleRemoveLocation = () => {
+    storage.setSettings({ location: null });
+    storage.clearCachedWeather();
+    setCity(null);
+    setLocStatus("idle");
+  };
+
   const handleSave = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -194,6 +201,12 @@ export default function Settings() {
                     >
                       re-detect
                     </button>
+                    <button
+                      onClick={handleRemoveLocation}
+                      className="text-[#4A3728] text-sm font-[Inter] opacity-50 hover:opacity-80 transition-opacity shrink-0"
+                    >
+                      remove
+                    </button>
                   </div>
                   <p className="text-[#4A3728] text-xs font-[Inter] font-light opacity-50 px-2">
                     Edit if the city name looks wrong.
@@ -214,7 +227,7 @@ export default function Settings() {
                     </p>
                   )}
                   <p className="text-[#4A3728] text-xs font-[Inter] font-light opacity-60 px-2">
-                    Used only for weather. Never stored outside your device.
+                    Requested only after you tap this button. Coordinates are stored on this device and sent to Open-Meteo and OpenStreetMap&apos;s Nominatim only to show local weather and a city label.
                   </p>
                 </div>
               )}

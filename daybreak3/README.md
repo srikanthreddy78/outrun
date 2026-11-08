@@ -21,5 +21,3 @@ npx tsc --noEmit # type-check
 - **Schedule** — assign routines to days; optional "add to Google Calendar" links.
 
 See `CLAUDE.md` for architecture and design conventions. Haptics and notifications (`lib/haptics.ts`, `lib/notifications.ts`) are intentionally inert stubs in this web-only template.
-
-Built by Matthew Huang.

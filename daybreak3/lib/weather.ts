@@ -2,10 +2,10 @@ import { storage } from "./storage";
 import { getTodayKey } from "./time";
 import type { WeatherData } from "@/types";
 
-// Weather comes from Open-Meteo — free, no API key, and far higher limits than
-// keyed providers. It returns WMO weather codes rather than text, so we map them
-// to Daybreak's condition words. City name isn't provided here; the caller fills
-// it from the stored (IP-derived) location.
+// Weather comes from Open-Meteo — free and without an API key. It returns WMO
+// weather codes rather than text, so we map them to Daybreak's condition words.
+// City name isn't provided here; the caller fills it from the location the user
+// explicitly chose to share.
 const OPEN_METEO = "https://api.open-meteo.com/v1/forecast";
 
 // WMO weather code → condition label (matches the app's existing vocabulary).
@@ -91,39 +91,6 @@ export function formatWeatherProse(data: WeatherData): string {
   return prose;
 }
 
-// IP-based location approximation (city-level, no permission prompt). Each
-// provider is a free, no-key, HTTPS endpoint. They get rate-limited
-// individually, so we try them in order until one answers — a single 429
-// no longer breaks weather.
-const IP_PROVIDERS = [
-  "https://ipapi.co/json/",
-  "https://ipwho.is/",
-  "https://get.geojs.io/v1/ip/geo.json",
-];
-
-async function getLocationFromIP(): Promise<{ lat: number; lng: number; city: string } | null> {
-  // Race all providers so the fastest to answer wins — a slow or rate-limited
-  // endpoint no longer holds up the others (previously they were tried in
-  // series, so one slow provider added its full latency before the next).
-  const attempts = IP_PROVIDERS.map(async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("bad status");
-    const data = await res.json();
-    // ipwho.is signals failure via { success: false } with a 200 status.
-    if (data.success === false) throw new Error("provider failure");
-    // Providers return lat/lng as either numbers or strings.
-    const lat = parseFloat(data.latitude);
-    const lng = parseFloat(data.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("no coords");
-    return { lat, lng, city: data.city ?? "" };
-  });
-  try {
-    return await Promise.any(attempts);
-  } catch {
-    return null;
-  }
-}
-
 // The last weather we cached, regardless of which day — lets the UI show
 // something instantly while today's fresh read loads (stale-while-revalidate).
 export function getLastWeather(): WeatherData | null {
@@ -132,14 +99,10 @@ export function getLastWeather(): WeatherData | null {
 
 export async function getWeatherForToday(): Promise<WeatherData | null> {
   const settings = storage.getSettings();
-
-  let location = settings.location ?? null;
-  if (!location) {
-    const ipLoc = await getLocationFromIP();
-    if (!ipLoc) return null;
-    storage.setSettings({ location: ipLoc });
-    location = ipLoc;
-  }
+  // Never infer a visitor's location from their IP address. Weather is only
+  // fetched after the user has explicitly granted location access in Settings.
+  const location = settings.location;
+  if (!location) return null;
 
   const today = getTodayKey();
   const cached = storage.getCachedWeather();
