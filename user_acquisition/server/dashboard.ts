@@ -165,6 +165,8 @@ interface LeadRow {
   email_source_url: string;
   verified_at: Date;
   suppressed: string | null;
+  fit_score: number | null;
+  fit_band: string | null;
 }
 
 interface SuppressionRow {
@@ -177,10 +179,11 @@ interface SuppressionRow {
 export async function leadsPage(db: Db): Promise<string> {
   const leads = await db.query<LeadRow>(
     `select p.company, p.domain, p.found_via, p.listing_url, p.why_fit, p.contact_email, p.contact_name,
-            p.contact_role, p.email_source_url, p.verified_at, s.reason as suppressed
+            p.contact_role, p.email_source_url, p.verified_at, s.reason as suppressed,
+            p.fit_score, p.fit_band
        from outrun_prospects p
        left join outrun_suppressions s on s.email = p.contact_email
-      order by p.verified_at desc`,
+      order by p.fit_score desc nulls last, p.verified_at desc`,
   );
   const suppressions = await db.query<SuppressionRow>(
     "select email, reason, source, created_at from outrun_suppressions order by created_at desc",
@@ -192,6 +195,7 @@ export async function leadsPage(db: Db): Promise<string> {
   const rows = leads.rows
     .map(
       (row) => `<tr>
+  <td>${row.fit_score === null ? "–" : `<b>${escape(row.fit_score)}</b><br><span class="tag">${escape(row.fit_band ?? "")}</span>`}</td>
   <td><b>${escape(row.company)}</b><br>${safeLink(`https://${row.domain}`, row.domain)}</td>
   <td>${escape(row.contact_email)}${row.suppressed === null ? "" : ` <span class="tag">${escape(row.suppressed)}</span>`}</td>
   <td>${escape(row.contact_name ?? "")}${row.contact_role === null ? "" : `<br><span class="tag">${escape(row.contact_role)}</span>`}</td>
@@ -223,9 +227,9 @@ export async function leadsPage(db: Db): Promise<string> {
 </div>
 <div class="wrap">
 <table>
-  <thead><tr><th>Company</th><th>Email</th><th>Contact</th><th>Why they fit</th><th>Found via</th><th>Email source</th><th>Verified (UTC)</th></tr></thead>
+  <thead><tr><th>Fit</th><th>Company</th><th>Email</th><th>Contact</th><th>Why they fit</th><th>Found via</th><th>Email source</th><th>Verified (UTC)</th></tr></thead>
   <tbody>
-${rows || `<tr><td colspan="7">No leads yet.</td></tr>`}
+${rows || `<tr><td colspan="8">No leads yet.</td></tr>`}
   </tbody>
 </table>
 </div>

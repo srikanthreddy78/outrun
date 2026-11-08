@@ -12,6 +12,7 @@ export default defineConfig({
       "apps/web/app/**/*.test.ts",
       "apps/web/lib/**/*.test.ts",
       "scripts/**/*.test.ts",
+      "user_acquisition/crm/**/*.test.ts",
       "*.test.ts",
     ],
     exclude: ["daybreak3/**", "**/node_modules/**"],

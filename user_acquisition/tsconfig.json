@@ -4,5 +4,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["naive.config.ts", "crew/**/*.ts", "server/**/*.ts"]
+  "include": ["naive.config.ts", "crew/**/*.ts", "server/**/*.ts", "crm/**/*.ts"]
 }

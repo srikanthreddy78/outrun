@@ -49,6 +49,13 @@ create table if not exists outrun_prospects (
   mx_host text not null,
   verified_at timestamptz not null default now()
 );
+alter table outrun_prospects add column if not exists enrichment jsonb;
+alter table outrun_prospects add column if not exists fit_score integer;
+alter table outrun_prospects add column if not exists fit_band text;
+alter table outrun_prospects add column if not exists fit_parts jsonb;
+alter table outrun_prospects add column if not exists crm_contact_id text;
+alter table outrun_prospects add column if not exists crm_fit_score integer;
+alter table outrun_prospects add column if not exists crm_synced_at timestamptz;
 create table if not exists outrun_inbound (
   message_id text primary key,
   from_email text,
