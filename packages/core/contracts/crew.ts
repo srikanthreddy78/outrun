@@ -54,6 +54,18 @@ export const CREW_TOOLS = {
       demo: z.boolean(),
     }),
   },
+  plan_day: {
+    agents: ["orchestrator"],
+    policy: "allow",
+    description:
+      "Enqueues today's sessions: researcher for filed prospects, sdr for researched ones (within the send cap), one prospector batch. Returns at once.",
+    input: z.object({ limitPerAgent: Limit(25, 10) }),
+    output: z.object({
+      /** prospectId is null for batch sessions (the prospector's discovery, the sdr's follow-ups). */
+      enqueued: z.array(z.object({ agent: AgentName, prospectId: Id.nullable() })),
+      capsLeft: z.object({ send: z.number().int(), discovery: z.number().int() }),
+    }),
+  },
   list_candidates: {
     agents: ["prospector"],
     policy: "allow",
@@ -296,16 +308,13 @@ export function toolsForAgent(agent: AgentName): CrewToolName[] {
   return CREW_TOOL_NAMES.filter((t) => (CREW_TOOLS[t].agents as readonly AgentName[]).includes(agent));
 }
 
-/** Naive built-in tools each agent gets; everything else is denied. `read_skill` loads the agent's playbook. */
+/**
+ * Naive built-in tools each agent gets; everything else is denied. `read_skill` loads the agent's
+ * playbook. No team tools: Naive lists multiagent teams as coming soon, so the orchestrator plans
+ * with outrun.plan_day instead.
+ */
 export const BUILTIN_TOOLS: Record<AgentName, readonly string[]> = {
-  orchestrator: [
-    "read_skill",
-    "board_read",
-    "board_write",
-    "send_to_agent",
-    "wait_for_agents",
-    "list_agents",
-  ],
+  orchestrator: ["read_skill"],
   prospector: ["read_skill"],
   researcher: ["read_skill", "web_search", "web_fetch"],
   sdr: ["read_skill"],

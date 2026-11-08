@@ -1,13 +1,15 @@
 /**
  * Fake Naive client. Records every call and, when given a registry, replays scripted tool
  * calls for each agent against our real tool handlers. Tools whose policy is `ask` are held
- * as pending actions until `confirmTool`, exactly as Naive holds them.
+ * as pending actions until `confirmTool`, exactly as Naive holds them. Like Naive, each session
+ * keeps an event log (tool.confirm, tool.confirm.resolved, session.idle) with a seq, and
+ * `onIdle` fires on every idle the way the session.idle webhook does.
  */
 import { randomUUID } from "node:crypto";
 import { AGENTS, type AgentName, CREW_TOOLS, type CrewToolName, type StopReason } from "../../contracts";
 import type { ToolRegistry } from "../crew/registry";
 import type { ToolContext } from "../crew/types";
-import type { NaiveClient, NaiveSession } from "../integrations/types";
+import type { NaiveClient, NaiveEvent, NaiveSession } from "../integrations/types";
 
 export interface ScriptedCall {
   tool: CrewToolName;
@@ -29,6 +31,8 @@ interface FakeSession extends NaiveSession {
   steps: ScriptedCall[];
   cursor: number;
   messages: string[];
+  events: NaiveEvent[];
+  seq: number;
 }
 
 export class FakeNaiveClient implements NaiveClient {
@@ -44,8 +48,13 @@ export class FakeNaiveClient implements NaiveClient {
     private readonly opts: {
       registry?: ToolRegistry;
       ctx?: (agent: AgentName) => ToolContext;
+      /** Called on every idle, like Naive's session.idle webhook. */
+      onIdle?: (sessionId: string, stopReason: StopReason) => void | Promise<void>;
     } = {},
   ) {}
+
+  /** Who the fake records as deciding a confirmation. */
+  actor: { type: "user" | "key" | "system"; id: string } = { type: "user", id: "usr_fake" };
 
   agentIdOf(agent: AgentName): string {
     return `agt_fake_${agent}`;
@@ -89,6 +98,8 @@ export class FakeNaiveClient implements NaiveClient {
       steps,
       cursor: 0,
       messages: [req.message],
+      events: [],
+      seq: 0,
     };
     this.sessions.set(id, s);
     this.byKey.set(req.idempotencyKey, id);
@@ -117,6 +128,15 @@ export class FakeNaiveClient implements NaiveClient {
     if (!pending) throw new Error(`FakeNaiveClient: no pending call ${toolCallId}`);
     s.pendingActions = s.pendingActions.filter((p) => p.toolCallId !== toolCallId);
     const step = s.steps[s.cursor]!;
+    this.event(s, "tool.confirm.resolved", {
+      tool_call_id: toolCallId,
+      decision,
+      reason: decision === "deny" ? reason : null,
+      scope: "call",
+      actor: this.actor,
+      proposed_args: pending.input,
+      final_args: pending.input,
+    });
     s.cursor++;
     if (decision === "allow") await this.invoke(s, step, "allow");
     else
@@ -144,6 +164,23 @@ export class FakeNaiveClient implements NaiveClient {
     };
   }
 
+  async getEvents(
+    sessionId: string,
+    o: { afterSeq: number; includeAccepted?: boolean },
+  ): Promise<NaiveEvent[]> {
+    this.calls.push({ method: "getEvents", args: [sessionId, o] });
+    return this.must(sessionId).events.filter(
+      (e) => e.seq > o.afterSeq && (o.includeAccepted || e.type !== "tool.confirm.resolved"),
+    );
+  }
+
+  /** Ends a session as if cancelled in the Studio. */
+  cancel(sessionId: string): void {
+    const s = this.must(sessionId);
+    s.status = "cancelled";
+    s.pendingActions = [];
+  }
+
   async agentSpendUsd(agentId: string): Promise<number> {
     this.calls.push({ method: "agentSpendUsd", args: [agentId] });
     return this.spend.get(agentId) ?? 0;
@@ -160,24 +197,43 @@ export class FakeNaiveClient implements NaiveClient {
     while (s.cursor < s.steps.length) {
       const step = s.steps[s.cursor]!;
       if (CREW_TOOLS[step.tool].policy === "ask") {
+        const toolCallId = `tc_${randomUUID().slice(0, 8)}`;
+        const parked = this.event(s, "tool.confirm", {
+          tool_call_id: toolCallId,
+          name: `outrun.${step.tool}`,
+        });
         s.pendingActions.push({
           kind: "tool",
-          toolCallId: `tc_${randomUUID().slice(0, 8)}`,
+          toolCallId,
           tool: `outrun.${step.tool}`,
           input: step.input,
+          parkedSeq: parked.seq,
         });
-        this.idle(s, "awaiting_approval");
+        await this.idle(s, "awaiting_approval");
         return;
       }
       s.cursor++;
       await this.invoke(s, step);
     }
-    this.idle(s, "end_turn");
+    await this.idle(s, "end_turn");
   }
 
-  private idle(s: FakeSession, reason: StopReason): void {
+  private event(s: FakeSession, type: string, data: Record<string, unknown>): NaiveEvent {
+    const e = {
+      seq: ++s.seq,
+      type,
+      data: { session_id: s.id, ...data },
+      createdAt: new Date().toISOString(),
+    };
+    s.events.push(e);
+    return e;
+  }
+
+  private async idle(s: FakeSession, reason: StopReason): Promise<void> {
     s.status = "idle";
     s.stopReason = reason;
+    this.event(s, "session.idle", { stop_reason: reason });
+    await this.opts.onIdle?.(s.id, reason);
   }
 
   private async invoke(s: FakeSession, step: ScriptedCall, decision?: "allow"): Promise<void> {

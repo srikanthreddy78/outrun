@@ -71,6 +71,8 @@ export const FETCH_MAX_REDIRECTS = 5;
 export const JOB_RETRY_DELAY_SECONDS = 10;
 export const JOB_RETRY_DELAY_MAX_SECONDS = 600;
 export const JOB_EXPIRE_SECONDS = 15 * 60;
+/** Finished jobs are kept this long, which is how long a repeated idempotency key stays a no-op. */
+export const JOB_KEEP_DAYS = 30;
 export const WORKER_CONCURRENCY = 4;
 export const CRON_TZ = "America/Los_Angeles";
 export const CRON = {
@@ -83,6 +85,8 @@ export const CRON = {
 export const STUCK_JOB_MINUTES = 15;
 export const STUCK_ORDER_MINUTES = 60;
 export const STUCK_APPROVAL_HOURS = 24;
+/** A session row left `starting` this long belongs to a crashed attempt and is reclaimed. */
+export const SESSION_START_STALE_MINUTES = 10;
 export const LLM_BUDGET_ALERT_RATIO = 0.8;
 
 /** In-app models. The smart model is OUTRUN_SMART_MODEL on OpenAI; bulk and fallback go through OpenRouter. */
@@ -100,5 +104,5 @@ export const MODEL_PRICES_PER_MTOK: Record<string, { input: number; output: numb
   "openai/gpt-5.4-mini": { input: 0.75, output: 4.5 },
 };
 
-/** Webhooks */
-export const WEBHOOK_TOLERANCE_SECONDS = 300;
+/** Log level. Not an env setting: the six OUTRUN_* variables are the only ones. Tests are silent. */
+export const LOG_LEVEL = "info";

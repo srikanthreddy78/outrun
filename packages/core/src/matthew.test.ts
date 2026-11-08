@@ -1,7 +1,9 @@
 import { it as test } from "vitest";
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { safeFetch, isPublicIp, UnsafeUrlError, ResponseLimitError } from "./safeFetch";
-import { quickScan, fullScan, normalizeDomain } from "./scan/scan";
+import { bodyText, quickScan, fullScan, normalizeDomain } from "./scan/scan";
 import { MemoryScanStore, RateLimitError, ScanService } from "./scan/service";
 import { DbScanStore } from "./scan/db-store";
 import type { Db } from "./db/client";
@@ -387,4 +389,85 @@ test("signed-in ledger uses event totals and shows agent stop reasons", () => {
   assert.equal(renderDashboard("ledger", input, false).status, 302);
   assert.match(renderDashboard("ledger", input, true).body, /\$3\.00/);
   assert.match(renderDashboard("agents", input, true).body, /end_turn/);
+});
+
+test("safe fetch makes a real pinned request without an injected transport", async () => {
+  const hosts: string[] = [];
+  const server = createServer((req, res) => {
+    hosts.push(req.headers.host ?? "");
+    if (req.url === "/slow") return; // never answers
+    res.writeHead(200, { "content-type": "text/plain" }).end("hello from loopback");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  const resolver = async () => [{ address: "127.0.0.1", family: 4 as const }];
+  try {
+    const response = await safeFetch("http://pinned.example/hello", {
+      resolver,
+      allowLoopbackForTests: { address: "127.0.0.1", port },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body, "hello from loopback");
+    assert.match(hosts[0] ?? "", /^pinned\.example/);
+    // Without the test override the same DNS answer is still refused.
+    await assert.rejects(safeFetch("http://pinned.example/hello", { resolver }), UnsafeUrlError);
+    // A caller-supplied signal keeps the timeout deadline.
+    const started = Date.now();
+    await assert.rejects(
+      safeFetch("http://pinned.example/slow", {
+        resolver,
+        allowLoopbackForTests: { address: "127.0.0.1", port },
+        timeoutMs: 100,
+        signal: new AbortController().signal,
+      }),
+    );
+    assert.ok(Date.now() - started < 2000);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("scan regexes stay linear on a hostile 2 MB page", async () => {
+  const hostile = ("<a>" + "x".repeat(10)).repeat(Math.ceil((2 * 1024 * 1024) / 13));
+  const variants = [
+    hostile,
+    "<html><body>" + hostile,
+    '<a href="/x">xxx'.repeat(160_000),
+    "<script>xxxxx".repeat(160_000),
+    "<<<<".repeat(500_000),
+    "<h1 ".repeat(500_000),
+    "<link ".repeat(350_000),
+  ];
+  const source = (body: string) => async (url: string) => ({ url, status: 200, headers: {}, body });
+  const started = Date.now();
+  for (const body of variants) {
+    const partial = await quickScan("example.com", source(body));
+    await fullScan(partial, source(body));
+    bodyText(body.slice(0, 256 * 1024));
+  }
+  assert.ok(Date.now() - started < 1000, `took ${Date.now() - started} ms`);
+});
+
+test("scan CTA detection keeps working on normal markup", async () => {
+  const page = (cta: string) => async (url: string) => ({
+    url,
+    status: 200,
+    headers: {},
+    body: `<html><body><h1>A clear value proposition</h1>${cta}</body></html>`,
+  });
+  const cta = async (markup: string) =>
+    (await quickScan("example.com", page(markup))).checks.find((check) => check.id === "clear-cta")?.status;
+  assert.equal(await cta('<a href="/signup" class="btn"><span>Get <b>started</b></span></a>'), "pass");
+  assert.equal(await cta('<BUTTON type="button">Book demo</BUTTON>'), "pass");
+  assert.equal(await cta('<a href="/about">About us</a><p>no action</p>'), "fail");
+  assert.equal(
+    (await quickScan("example.com", page(""))).checks.find((check) => check.id === "value-proposition")
+      ?.status,
+    "pass",
+  );
+  assert.equal(
+    bodyText('<p>Hi<script>var a = "<b>";</script> <style>p{}</style><b>there</b></p>'),
+    "Hi there",
+  );
 });

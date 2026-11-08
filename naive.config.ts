@@ -26,8 +26,9 @@ export default defineProject({
   identities: [{ name: IDENTITY, description: "Outrun's crew persona" }],
   vaults: [
     {
+      // Org-wide, not bound to the persona: sessions name no identity, and a persona-bound vault
+      // is only used by sessions that carry that identity.
       name: VAULT,
-      identity: IDENTITY,
       credentials: AGENTS.map((a) => ({
         kind: "static_bearer" as const,
         key: `crew-${a}`,
@@ -46,12 +47,8 @@ export default defineProject({
     identity: IDENTITY,
     tools: a.tools,
     mcp_servers: [{ name: MCP_SERVER_NAME, url: a.mcpUrl }],
-    ...(a.team
-      ? {
-          multiagent: { type: "coordinator" as const, agents: [...a.team], board: true },
-          handoffs: "team" as const,
-        }
-      : { handoffs: false as const }),
+    // No multiagent team (coming soon on Naive) and no handoffs; outrun.plan_day starts sessions.
+    handoffs: false as const,
     ...(a.schedule
       ? {
           schedules: [

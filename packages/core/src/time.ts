@@ -22,3 +22,13 @@ export function startOfDayIn(timeZone: string, now: Date = new Date()): Date {
   const offsetMs = asUtc - Math.floor(now.getTime() / 1000) * 1000;
   return new Date(Date.UTC(get("year"), get("month") - 1, get("day")) - offsetMs);
 }
+
+/** The calendar day in a time zone, as YYYY-MM-DD. */
+export function dayIn(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}

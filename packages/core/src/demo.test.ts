@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "./config";
 import { assertDemoDiscovery, assertDemoRecipient } from "./demo";
+import { companies, contacts, prospects } from "./db/schema";
+import { recordWebhookOnce } from "./events";
 import { checkHealth } from "./health";
 import { demoInboxes, seedDemo } from "./seed";
 import { createTempDatabase, type TempDb } from "./testing/db";
@@ -45,6 +47,33 @@ describe("demo mode", () => {
     await expect(assertDemoRecipient(t.db, { demo: false }, "ceo@bigco.com")).resolves.toBeUndefined();
   });
 
+  it("ignores a prospect an agent filed with reason demo; only the seed's flag counts", async () => {
+    const [c] = await t.db
+      .insert(companies)
+      .values({ domain: "bigco.com", source: "fixture", kind: "prospect" })
+      .returning();
+    const [ct] = await t.db
+      .insert(contacts)
+      .values({
+        companyId: c!.id,
+        name: "CEO",
+        role: "CEO",
+        email: "ceo@bigco.com",
+        sourceUrl: "https://bigco.com",
+      })
+      .returning();
+    await t.db.insert(prospects).values({ companyId: c!.id, contactId: ct!.id, filedReason: "demo" });
+    await expect(assertDemoRecipient(t.db, { demo: true }, "ceo@bigco.com")).rejects.toMatchObject({
+      code: "forbidden",
+    });
+  });
+
+  it("refuses a demo inbox that belongs to another company", async () => {
+    await expect(
+      seedDemo(t.db, { domain: "other.dev", name: "Other", contactName: "X", inbox: "ceo@bigco.com" }),
+    ).rejects.toThrow(/another company/);
+  });
+
   it("allows discovery only from fixtures while in demo", () => {
     expect(() => assertDemoDiscovery({ demo: true }, "monid")).toThrow(/fixtures/);
     expect(() => assertDemoDiscovery({ demo: true }, "fixture")).not.toThrow();
@@ -73,5 +102,8 @@ describe("health", () => {
     expect(h.checks.migrations).toBe(true);
     expect(h.fakes).toEqual(["hubspot", "stripe"]);
     expect(h.ok).toBe(h.checks.queue);
+    expect(h.lastNaiveWebhookAt).toBeNull();
+    await recordWebhookOnce(t.db, "naive", "evt_health");
+    expect((await checkHealth({ db: t.db, demo: true, fakes: [] })).lastNaiveWebhookAt).not.toBeNull();
   });
 });

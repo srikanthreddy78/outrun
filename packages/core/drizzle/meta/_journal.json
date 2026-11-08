@@ -12,8 +12,22 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1794107327559,
-      "tag": "0001_gigantic_cerise",
+      "when": 1794105908575,
+      "tag": "0001_naive_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794107392057,
+      "tag": "0002_demo_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794110035542,
+      "tag": "0003_striped_impossible_man",
       "breakpoints": true
     }
   ]

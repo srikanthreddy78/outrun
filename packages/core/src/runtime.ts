@@ -32,6 +32,8 @@ export interface RuntimeOptions {
   /** Start pg-boss so enqueue works. The worker also registers handlers. */
   startQueue?: boolean;
   poolMax?: number;
+  /** "producer" for the web app: enqueue only (see Queue). */
+  queueRole?: "worker" | "producer";
   /** Retry and polling timing; tests shorten it. */
   queue?: Pick<QueueOptions, "retryDelaySeconds" | "retryBackoff" | "pollingIntervalSeconds">;
 }
@@ -50,6 +52,7 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
     connectionString: config.databaseUrlUnpooled ?? url,
     maxAttempts: config.settings.jobMaxAttempts,
     emit,
+    role: opts.queueRole ?? "worker",
     ...opts.queue,
   });
   if (opts.startQueue ?? true) await queue.start();

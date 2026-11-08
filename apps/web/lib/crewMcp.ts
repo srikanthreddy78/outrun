@@ -12,6 +12,7 @@ import { verifyCrewToken } from "@outrun/core/crew/tokens";
 import { AppError, toAppError } from "@outrun/core";
 import type { Runtime } from "@outrun/core/runtime";
 import type { ToolContext } from "@outrun/core/crew";
+import { logger } from "@outrun/core/log";
 
 type CrewRuntime = Pick<Runtime, "config" | "db" | "emit" | "queue" | "registry">;
 
@@ -19,23 +20,40 @@ function errorResponse(err: AppError, requestId: string): Response {
   return Response.json(err.toBody(requestId) satisfies ErrorBody, { status: err.status });
 }
 
-export async function crewMcpResponse(rt: CrewRuntime, agentParam: string, req: Request): Promise<Response> {
+/** Agent and bearer checks, from config alone, before any database work. */
+export function authorizeCrew(
+  secret: string | undefined,
+  agentParam: string,
+  req: Request,
+): { agent: AgentName } | { response: Response } {
   const requestId = randomUUID();
   if (!(AGENTS as readonly string[]).includes(agentParam)) {
-    return errorResponse(new AppError("not_found", "unknown agent"), requestId);
+    return { response: errorResponse(new AppError("not_found", "unknown agent"), requestId) };
   }
   const agent = agentParam as AgentName;
-  const secret = rt.config.keys.crewTokenSecret;
-  if (!secret)
-    return errorResponse(new AppError("not_configured", "crew tokens are not configured"), requestId);
+  if (!secret) {
+    return {
+      response: errorResponse(new AppError("not_configured", "crew tokens are not configured"), requestId),
+    };
+  }
   const bearer = req.headers
     .get("authorization")
     ?.match(/^Bearer\s+(.+)$/i)?.[1]
     ?.trim();
   if (!verifyCrewToken(secret, agent, bearer)) {
-    return errorResponse(new AppError("unauthorized", "invalid crew token"), requestId);
+    return { response: errorResponse(new AppError("unauthorized", "invalid crew token"), requestId) };
   }
+  return { agent };
+}
 
+export async function crewMcpResponse(rt: CrewRuntime, agentParam: string, req: Request): Promise<Response> {
+  const auth = authorizeCrew(rt.config.keys.crewTokenSecret, agentParam, req);
+  if ("response" in auth) return auth.response;
+  return serveCrew(rt, auth.agent, req);
+}
+
+/** For an authorized agent: its tools only. */
+export async function serveCrew(rt: CrewRuntime, agent: AgentName, req: Request): Promise<Response> {
   const handler = createMcpHandler(
     (server) => {
       for (const tool of rt.registry.forAgent(agent)) {
@@ -50,32 +68,32 @@ export async function crewMcpResponse(rt: CrewRuntime, agentParam: string, req: 
             enqueue: (job, o) => rt.queue.enqueue(job, o),
             emit: rt.emit,
           };
-          try {
-            const result = await rt.registry.call(agent, tool.name, args, ctx);
-            await rt.emit({
-              actor: `naive:${agent}`,
-              type: "tool.called",
-              entityType: "system",
-              entityId: tool.name,
-              payload: { tool: tool.name, ok: true, requestId: callId },
-            });
-            return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
-          } catch (err) {
-            const e = toAppError(err);
-            await rt
+          const record = (payload: Record<string, unknown>) =>
+            rt
               .emit({
                 actor: `naive:${agent}`,
                 type: "tool.called",
                 entityType: "system",
                 entityId: tool.name,
-                payload: { tool: tool.name, ok: false, code: e.code, requestId: callId },
+                payload: { tool: tool.name, requestId: callId, ...payload },
               })
-              .catch(() => {});
+              .catch((err: unknown) => logger.error({ err, tool: tool.name }, "tool.called event failed"));
+          let result: unknown;
+          try {
+            result = await rt.registry.call(agent, tool.name, args, ctx);
+          } catch (err) {
+            const e = toAppError(err);
+            if (e.code === "internal")
+              logger.error({ err: e.cause ?? err, tool: tool.name, agent }, "crew tool failed");
+            await record({ ok: false, code: e.code });
             return {
               isError: true,
               content: [{ type: "text" as const, text: JSON.stringify(e.toBody(callId)) }],
             };
           }
+          // The tool's work is done; a failed ledger write must not tell the agent it failed.
+          await record({ ok: true });
+          return { content: [{ type: "text" as const, text: JSON.stringify(result) }] };
         });
       }
     },

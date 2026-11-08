@@ -1,0 +1,27 @@
+From: hello@launchpad-marketing-prgqe7.usenaive.ai
+To: contact@renderform.io
+Subject: Marketing your coding agent can run, for RenderForm
+
+Hi RenderForm team,
+
+We came across RenderForm through Glama. You ship a REST API for generating images, PDFs and
+videos from templates.
+
+Outrun is a product marketing agency built for coding agents. Tell the agent that builds
+RenderForm (Claude Code, Codex or similar) to use Outrun, and it sends us three things: a
+product link, a brand style and a marketing theme. We send back a marketing plan for your
+agent to review, then run your marketing on TikTok and Instagram.
+
+The part most agencies skip: what we hear comes back to your agent as tickets it can ship, each
+with the evidence attached. That means comments on our posts, complaints in competitors'
+reviews, Reddit threads, and which hooks got attention. If the hook that lands is "never lose
+your streak" but your landing page leads with "beautiful habit tracking", your agent gets a
+ticket to change the headline, not just a report.
+
+We're opening early access. Reply "yes" and we'll send the details, or point your agent at
+heyoutrun.com/llms.txt and it can take it from there.
+
+The Outrun team
+
+--
+Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.app/u/<32-character token, unique to this address>

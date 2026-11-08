@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AppError } from "../errors";
-import { createNaiveClient, mapSession } from "./naive";
+import { createNaiveClient, mapSession, naiveError } from "./naive";
 
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 
@@ -30,17 +30,60 @@ describe("Naive client", () => {
     });
   });
 
-  it("confirms a tool call with the decision and a reason", async () => {
-    const f = vi.fn(async () => reply(200, { id: "ses_1", status: "running", pending_actions: [] }));
+  it("confirms a tool call; the key carries parked seq and decision, a reason only on deny", async () => {
+    const f = vi.fn(async () => reply(202, { id: "ses_1", status: "running", pending_actions: [] }));
     const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
-    await c.confirmTool("ses_1", "call_1", "allow", "user:sri");
-    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    await c.confirmTool("ses_1", "call_1", "allow", "ignored", 7);
+    await c.confirmTool("ses_1", "call_1", "deny", "off tone", 9);
+    const [[url, allow], [, deny]] = f.mock.calls as unknown as [
+      [string, RequestInit],
+      [string, RequestInit],
+    ];
     expect(url).toBe("https://api.vetta.sh/v1/sessions/ses_1/tool_confirmations");
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(JSON.parse(String(allow!.body))).toEqual({ tool_call_id: "call_1", decision: "allow" });
+    expect(JSON.parse(String(deny!.body))).toEqual({
       tool_call_id: "call_1",
-      decision: "allow",
-      reason: "user:sri",
+      decision: "deny",
+      reason: "off tone",
     });
+    expect((allow!.headers as Record<string, string>)["idempotency-key"]).toBe(
+      "confirm:ses_1:call_1:7:allow",
+    );
+  });
+
+  it("sends with queue: true so a running turn doesn't 409", async () => {
+    const f = vi.fn(async () => reply(200, { session_id: "ses_1", status: "running" }));
+    const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
+    await c.send("ses_1", "hello", "k1");
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ message: "hello", queue: true });
+  });
+
+  it("pages session events with include_accepted, oldest first", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(
+        reply(200, {
+          data: [{ seq: 4, type: "tool.confirm.resolved", data: { decision: "allow" }, created_at: "x" }],
+          has_more: true,
+          next_cursor: "c1",
+        }),
+      )
+      .mockResolvedValueOnce(
+        reply(200, { data: [{ seq: 3, type: "session.idle", created_at: "x" }], has_more: false }),
+      );
+    const c = createNaiveClient("k", { fetch: f as unknown as typeof fetch });
+    const evs = await c.getEvents("ses_1", { afterSeq: 2, includeAccepted: true });
+    expect(evs.map((e) => e.seq)).toEqual([3, 4]);
+    expect(String(f.mock.calls[0]![0])).toContain("after_seq=2&limit=100&include_accepted=true");
+    expect(String(f.mock.calls[1]![0])).toContain("after=c1");
+  });
+
+  it("refuses a create that returns no session id", async () => {
+    const c = createNaiveClient("k", { fetch: (async () => reply(201, {})) as unknown as typeof fetch });
+    await expect(
+      c.startSession({ agentId: "a", message: "m", metadata: {}, idempotencyKey: "k" }),
+    ).rejects.toMatchObject({ code: "upstream_error", retryable: true });
   });
 
   it("resolves agent ids by name across pages", async () => {
@@ -75,6 +118,14 @@ describe("Naive client", () => {
     expect(await codeOf(503, "unavailable")).toBe("upstream_error");
     expect(await codeOf(404, "not_found")).toBe("not_found");
     expect(await codeOf(401, "unauthorized")).toBe("not_configured");
+    expect(await codeOf(403, "forbidden")).toBe("forbidden");
+    expect(await codeOf(429, "budget_exceeded")).toBe("budget_exhausted");
+    expect(naiveError(409, "version_conflict", "m", null)).toMatchObject({
+      code: "conflict",
+      retryable: true,
+    });
+    expect(naiveError(408, "timeout", "m", null).retryable).toBe(true);
+    expect(naiveError(429, "rate_limited", "m", "12").retryAfterSeconds).toBe(12);
   });
 
   it("maps a held session's pending actions", () => {
@@ -89,7 +140,13 @@ describe("Naive client", () => {
       consumed_micro_usd: 41870,
     });
     expect(s.pendingActions).toEqual([
-      { kind: "tool", toolCallId: "call_1", tool: "outrun.send_email", input: { draftId: "d1" } },
+      {
+        kind: "tool",
+        toolCallId: "call_1",
+        tool: "outrun.send_email",
+        input: { draftId: "d1" },
+        parkedSeq: null,
+      },
     ]);
     expect(s.consumedUsd).toBeCloseTo(0.04187);
     expect(s.stopReason).toBe("awaiting_approval");

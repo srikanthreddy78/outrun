@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { EmitInput, type Event } from "../contracts";
+import { EmitInput, type Event, type WebhookProvider } from "../contracts";
 import type { Db, TxScope } from "./db/client";
 import { events } from "./db/schema";
 
@@ -26,7 +26,7 @@ export function createEmitter(db: Db): Emit {
  */
 export async function recordWebhookOnce(
   db: Db,
-  provider: "stripe" | "agentmail" | "apify" | "naive",
+  provider: WebhookProvider,
   deliveryId: string,
   payload: Record<string, unknown> = {},
 ): Promise<boolean> {

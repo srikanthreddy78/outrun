@@ -21,11 +21,15 @@ export type StartSessionInput = z.infer<typeof StartSessionInput>;
 export const SESSION_STATUSES = ["starting", "running", "idle", "terminated", "error"] as const;
 export const SessionStatus = z.enum(SESSION_STATUSES);
 
+/** Naive's stop reasons (https://usenaive.ai/docs/api/sessions.md). */
 export const STOP_REASONS = [
   "end_turn",
   "awaiting_input",
   "awaiting_approval",
+  "awaiting_answer",
+  "awaiting_delegation",
   "budget_paused",
+  "context_exhausted",
   "interrupted",
   "max_iterations",
   "error",
@@ -35,7 +39,8 @@ export type StopReason = z.infer<typeof StopReason>;
 
 export const SessionRecord = z.object({
   id: Id,
-  sessionId: z.string().min(1),
+  /** Null while the row is still starting. */
+  sessionId: z.string().min(1).nullable(),
   agent: AgentName,
   entityType: Entity.shape.type,
   entityId: z.string().min(1),

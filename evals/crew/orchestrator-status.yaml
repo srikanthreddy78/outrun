@@ -1,0 +1,11 @@
+name: orchestrator reads the pipeline
+agent: orchestrator
+steps:
+  - { tool: pipeline_status }
+  - { tool: ping }
+expect:
+  calls:
+    - { tool: pipeline_status, ok: true }
+    - { tool: ping, ok: true }
+  held: 0
+  stopReason: end_turn
