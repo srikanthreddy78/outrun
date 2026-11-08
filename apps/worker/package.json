@@ -1,0 +1,18 @@
+{
+  "name": "@outrun/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@outrun/core": "workspace:*",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6"
+  }
+}
