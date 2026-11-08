@@ -52,6 +52,8 @@ const Env = Settings.extend({
   MONID_API_KEY: optionalKey,
   AGENTMAIL_API_KEY: optionalKey,
   AGENTMAIL_WEBHOOK_SECRET: optionalKey,
+  /** The sending inbox, which is its address (hello@<domain>). Required with AGENTMAIL_API_KEY. */
+  AGENTMAIL_INBOX_ID: z.preprocess((v) => (v === "" ? undefined : v), z.email().optional()),
   HUBSPOT_ACCESS_TOKEN: optionalKey,
   APIFY_TOKEN: optionalKey,
   APIFY_WEBHOOK_SECRET: optionalKey,
@@ -86,6 +88,7 @@ export interface Config {
     stripeWebhookSecretPrevious?: string;
     monid?: string;
     agentmail?: string;
+    agentmailInboxId?: string;
     agentmailWebhookSecret?: string;
     hubspot?: string;
     apify?: string;
@@ -107,6 +110,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (e.OUTRUN_DEMO && e.STRIPE_SECRET_KEY && /^(sk|rk)_live_/.test(e.STRIPE_SECRET_KEY)) {
     throw new ConfigError(
       "invalid configuration:\n  STRIPE_SECRET_KEY: OUTRUN_DEMO needs a Stripe test-mode key",
+    );
+  }
+  if (Boolean(e.AGENTMAIL_API_KEY) !== Boolean(e.AGENTMAIL_INBOX_ID)) {
+    throw new ConfigError(
+      "invalid configuration:\n  AGENTMAIL_API_KEY and AGENTMAIL_INBOX_ID must be set together",
     );
   }
   if (Boolean(e.APIFY_TOKEN) !== Boolean(e.APIFY_WEBHOOK_SECRET)) {
@@ -141,6 +149,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       stripeWebhookSecretPrevious: e.STRIPE_WEBHOOK_SECRET_PREVIOUS,
       monid: e.MONID_API_KEY,
       agentmail: e.AGENTMAIL_API_KEY,
+      agentmailInboxId: e.AGENTMAIL_INBOX_ID,
       agentmailWebhookSecret: e.AGENTMAIL_WEBHOOK_SECRET,
       hubspot: e.HUBSPOT_ACCESS_TOKEN,
       apify: e.APIFY_TOKEN,

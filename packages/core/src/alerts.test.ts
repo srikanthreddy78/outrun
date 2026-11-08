@@ -157,7 +157,7 @@ describe("alerts (SR-10)", () => {
     await t.db.insert(messages).values(sent);
     await t.db.insert(suppressions).values({ value: "p1@x.dev", kind: "email", reason: "hard_bounce" });
     expect(await kinds()).toEqual([]); // 1 in 50 is 2%, under 3%
-    await t.db.insert(suppressions).values({ value: "p2@x.dev", kind: "email", reason: "bounce" });
+    await t.db.insert(suppressions).values({ value: "p2@x.dev", kind: "email", reason: "hard_bounce" });
     expect(await kinds()).toEqual(["send_paused"]);
   });
 

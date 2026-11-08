@@ -11,6 +11,7 @@ import { createIntegrations } from "./integrations";
 import { createNaiveClient } from "./integrations/naive";
 import { ApifyClient } from "./integrations/apify";
 import { createStripeGateway } from "./integrations/stripe";
+import { createAgentMailClient } from "./integrations/agentmail";
 import type { Integrations } from "./integrations/types";
 import { createLlm, type Llm } from "./llm";
 import { Queue, type QueueOptions } from "./queue";
@@ -48,6 +49,10 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
     naive: { key: "naive", make: (c) => createNaiveClient(c.keys.naive!) },
     apify: { key: "apify", make: (c) => new ApifyClient(c.keys.apify!, c.keys.apifyWebhookSecret!) },
     stripe: { key: "stripe", make: (c) => createStripeGateway(c.keys.stripe!) },
+    agentmail: {
+      key: "agentmail",
+      make: (c) => createAgentMailClient(c.keys.agentmail!, c.keys.agentmailInboxId!),
+    },
   });
   const integrations: Integrations = { ...selected.integrations, ...opts.integrations };
   const queue = new Queue({

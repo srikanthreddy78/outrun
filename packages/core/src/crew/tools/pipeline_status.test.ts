@@ -43,7 +43,8 @@ describe("pipeline_status send cap", () => {
       capsLeft: { send: number };
       approvalsWaiting: number;
     };
-    expect(out.capsLeft.send).toBe(28);
+    // Warmup (SH-6): the first send was yesterday, so today allows 10 + 5 = 15; two count against it.
+    expect(out.capsLeft.send).toBe(13);
     expect(out.approvalsWaiting).toBe(1);
   });
 });
