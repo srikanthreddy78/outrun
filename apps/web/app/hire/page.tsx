@@ -8,11 +8,37 @@ export const metadata = {
   description: "A free trial of Outrun's agency: a crew of six AI agents that runs your outbound.",
 };
 
+const FIELD = {
+  display: "block",
+  width: "100%",
+  boxSizing: "border-box",
+  marginTop: 6,
+  padding: 12,
+  fontSize: 16,
+  border: "1px solid #9db6a8",
+  borderRadius: 5,
+} as const;
+
 /** Self-serve signup: a free trial of the agency, no payment. Agents can call hire_agency instead. */
 export default async function Hire({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const q = await searchParams;
   return (
-    <main style={{ maxWidth: "34rem", margin: "3rem auto", padding: "0 1rem" }}>
+    <main
+      style={{
+        maxWidth: "36rem",
+        margin: "0 auto",
+        padding: "48px 20px",
+        fontFamily: "system-ui, sans-serif",
+        color: "#172824",
+        lineHeight: 1.5,
+      }}
+    >
+      <nav style={{ marginBottom: 40 }}>
+        <a href="/" style={{ color: "#172824", fontWeight: 700, textDecoration: "none" }}>
+          Outrun
+        </a>{" "}
+        · <a href="/ops">Live ops</a>
+      </nav>
       <h1>Hire Outrun</h1>
       <p>
         Outrun gives your company its own crew of six AI agents: they find companies that fit, research them,
@@ -38,10 +64,10 @@ export default async function Hire({ searchParams }: { searchParams: Promise<Rec
       )}
       {q.error && <p role="alert">{q.error}</p>}
       {!q.hired && (
-        <form action={hireAction} style={{ display: "grid", gap: "0.75rem" }}>
+        <form action={hireAction} style={{ display: "grid", gap: "1rem", margin: "1.5rem 0" }}>
           <label>
             Company name
-            <input name="companyName" required maxLength={80} style={{ width: "100%" }} />
+            <input name="companyName" required maxLength={80} style={FIELD} />
           </label>
           <label>
             Website domain
@@ -51,14 +77,27 @@ export default async function Hire({ searchParams }: { searchParams: Promise<Rec
               maxLength={253}
               placeholder="acme.dev"
               pattern="[A-Za-z0-9.\-]+\.[A-Za-z]{2,63}"
-              style={{ width: "100%" }}
+              style={FIELD}
             />
           </label>
           <label>
             Your work email (at that domain); you approve every email
-            <input type="email" name="approverEmail" required maxLength={254} style={{ width: "100%" }} />
+            <input type="email" name="approverEmail" required maxLength={254} style={FIELD} />
           </label>
-          <button type="submit">Start the free trial</button>
+          <button
+            type="submit"
+            style={{
+              padding: "14px 20px",
+              border: 0,
+              borderRadius: 5,
+              background: "#14563e",
+              color: "white",
+              fontSize: 16,
+              cursor: "pointer",
+            }}
+          >
+            Start the free trial
+          </button>
         </form>
       )}
       <p style={{ fontSize: "0.85em", opacity: 0.75 }}>

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
-import { SELF_SERVE_DAILY_CAP } from "./constants";
+import { SELF_SERVE_CALLER_LIMIT_PER_HOUR, SELF_SERVE_DAILY_CAP } from "./constants";
 import { clientUsers, clients, events } from "./db/schema";
 import { createEmitter } from "./events";
 import { FakeStripe } from "./fakes";
@@ -127,12 +127,13 @@ describe("self-serve agency signups", () => {
     expect(known.created).toBe(false);
   });
 
-  it("limits one caller to one new client an hour", async () => {
-    await hireAgency(
-      deps(),
-      { companyName: "One Co", domain: "one.dev", approverEmail: "a@one.dev" },
-      via("same"),
-    );
+  it(`limits one caller to ${SELF_SERVE_CALLER_LIMIT_PER_HOUR} new clients an hour`, async () => {
+    for (let i = 0; i < SELF_SERVE_CALLER_LIMIT_PER_HOUR; i++)
+      await hireAgency(
+        deps(),
+        { companyName: `One Co ${i}`, domain: `one-${i}.dev`, approverEmail: `a@one-${i}.dev` },
+        via("same"),
+      );
     await expect(
       hireAgency(
         deps(),
