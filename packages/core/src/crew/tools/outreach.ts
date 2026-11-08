@@ -408,8 +408,18 @@ async function queueApprovedDraft(
     .where(and(eq(messages.id, input.draftId), eq(messages.clientId, ctx.clientId)));
   if (!m || m.direction !== "outbound" || !kinds.includes(m.kind as never))
     throw new AppError("not_found", "no such draft for this tool");
-  if (m.status === "approved" || m.status === "sending" || m.status === "sent")
+  if (m.status === "sending" || m.status === "sent") return { messageId: m.id, status: "queued" as const };
+  if (m.status === "approved") {
+    // Naive's confirm event can be reconciled (marking it approved) before this call runs; the
+    // send still has to be queued. The job key makes a second enqueue a no-op.
+    await ctx.enqueue({
+      type: "send_email",
+      payload: { messageId: m.id },
+      idempotencyKey: `send:${m.id}`,
+      traceId: randomUUID(),
+    });
     return { messageId: m.id, status: "queued" as const };
+  }
   if (m.status !== "checked" && m.status !== "awaiting_approval")
     throw new AppError("conflict", `the draft is ${m.status}; check a new one`);
   const again = draftHash({
