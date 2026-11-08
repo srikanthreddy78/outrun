@@ -1,4 +1,4 @@
-import { downloadAsset, renderReportPage } from "@outrun/core/audit/pipeline";
+import { renderReportPage } from "@outrun/core/audit/pipeline";
 import { getDeliveredReport } from "@outrun/core/report/delivery";
 import { getRuntime } from "@/lib/runtime";
 
@@ -12,7 +12,8 @@ export async function GET(
   const { token } = await params;
   const rt = await getRuntime();
   const report = await getDeliveredReport(rt.db.db, token);
-  if (!report) return new Response("Report not found", { status: 404, headers: { "cache-control": "no-store" } });
+  if (!report)
+    return new Response("Report not found", { status: 404, headers: { "cache-control": "no-store" } });
   return new Response(renderReportPage(report), {
     headers: {
       "content-type": "text/html; charset=utf-8",

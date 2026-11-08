@@ -3,6 +3,7 @@ import { uuidv7 } from "uuidv7";
 import { eq } from "drizzle-orm";
 import { orders, reports } from "../db/schema";
 import { createEmitter } from "../events";
+import { createFakeDiscover } from "../fakes";
 import type { Llm } from "../llm";
 import { createTempDatabase, TEST_DB_URL } from "../testing/db";
 import { buildKit, validateKitAsset } from "./build";
@@ -21,6 +22,11 @@ const audit = {
 };
 
 describe("Kit asset validation", () => {
+  it("has 50 sourced fake prospects for a local Kit run", async () => {
+    const prospects = await createFakeDiscover()({ limit: 50 });
+    expect(prospects).toHaveLength(50);
+    expect(new Set(prospects.map((prospect) => prospect.domain)).size).toBe(50);
+  });
   it("accepts evidence-backed llms.txt and MCP server metadata", () => {
     expect(() =>
       validateKitAsset("llms.txt", "# Example\nAPI examples are missing [f1]", audit),

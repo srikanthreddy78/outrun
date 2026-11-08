@@ -115,6 +115,13 @@ function defaultCompanies(): DiscoveredCompany[] {
       sourceRef: "fixture:2",
       summary: "Agent-native CRM API",
     },
+    ...Array.from({ length: 48 }, (_, index) => ({
+      domain: `fixture-agent-${index + 3}.dev`,
+      name: `Fixture Agent ${index + 3}`,
+      source: "fixture" as const,
+      sourceRef: `fixture:${index + 3}`,
+      summary: "Fixture API business",
+    })),
   ];
 }
 

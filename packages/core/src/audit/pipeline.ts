@@ -9,7 +9,13 @@ export type Finding = {
   detail: string;
   evidence: { sourceUrl?: string; checkId?: string };
 };
-export type Audit = { orderId: string; domain: string; findings: Finding[]; crawlRunId: string };
+export type Audit = {
+  orderId: string;
+  domain: string;
+  summary?: string;
+  findings: Finding[];
+  crawlRunId: string;
+};
 export type KitAsset = { name: string; content: string; mediaType: string };
 export type Report = {
   orderId: string;
@@ -184,5 +190,5 @@ export function renderReportPage(report: Report): string {
       /[&<>"']/g,
       (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!,
     );
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Audit for ${esc(report.domain)}</title></head><body><main><h1>${esc(report.domain)} audit</h1><p>${esc(PRODUCTS[report.offer].name)}</p><h2>Findings</h2><ol>${report.audit.findings.map((finding) => `<li><strong>${esc(finding.title)}</strong> — ${esc(finding.detail)}</li>`).join("")}</ol><h2>Kit assets</h2><ul>${report.assets.map((asset) => `<li><a href="/report/${encodeURIComponent(report.token)}/asset/${encodeURIComponent(asset.name)}">${esc(asset.name)}</a></li>`).join("")}</ul></main></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><title>Audit for ${esc(report.domain)}</title></head><body><main><h1>${esc(report.domain)} audit</h1><p>${esc(PRODUCTS[report.offer].name)}</p>${report.audit.summary ? `<p>${esc(report.audit.summary)}</p>` : ""}<h2>Findings</h2><ol>${report.audit.findings.map((finding) => `<li><strong>${esc(finding.title)}</strong> — ${esc(finding.detail)} <small>${finding.evidence.checkId ? `Check: ${esc(finding.evidence.checkId)}` : finding.evidence.sourceUrl && /^https?:\/\//.test(finding.evidence.sourceUrl) ? `<a href="${esc(finding.evidence.sourceUrl)}">Source</a>` : ""}</small></li>`).join("")}</ol><h2>Kit assets</h2><ul>${report.assets.map((asset) => `<li><a href="/report/${encodeURIComponent(report.token)}/asset/${encodeURIComponent(asset.name)}">${esc(asset.name)}</a></li>`).join("")}</ul></main></body></html>`;
 }

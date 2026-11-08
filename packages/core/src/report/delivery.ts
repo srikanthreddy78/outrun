@@ -8,10 +8,15 @@ import type { HubSpotClient, SendTransactionalFn } from "../integrations/types";
 import type { Report } from "../audit/pipeline";
 
 const StoredAudit = z.object({
-  findings: z.array(z.object({
-    id: z.string(), title: z.string(), detail: z.string(),
-    evidence: z.object({ checkId: z.string().optional(), sourceUrl: z.string().optional() }),
-  })),
+  summary: z.string().optional(),
+  findings: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      detail: z.string(),
+      evidence: z.object({ checkId: z.string().optional(), sourceUrl: z.string().optional() }),
+    }),
+  ),
   crawlRunId: z.string(),
 });
 const StoredKit = z.object({
@@ -26,17 +31,27 @@ export async function getDeliveredReport(db: Db, token: string): Promise<Report 
   const [report] = await db.select().from(reports).where(eq(reports.accessToken, token));
   if (!report) return null;
   const [order] = await db.select().from(orders).where(eq(orders.id, report.orderId));
-  if (!order || order.state !== "delivered" || !order.deliveredAt || order.product === "freeScan") return null;
+  if (!order || order.state !== "delivered" || !order.deliveredAt || order.product === "freeScan")
+    return null;
   const audit = StoredAudit.safeParse(report.audit);
   const kit = StoredKit.safeParse(report.kit);
   if (!audit.success || !kit.success) return null;
-  const [crawl] = await db.select({ costUsd: auditCrawls.costUsd }).from(auditCrawls).where(eq(auditCrawls.orderId, order.id));
+  const [crawl] = await db
+    .select({ costUsd: auditCrawls.costUsd })
+    .from(auditCrawls)
+    .where(eq(auditCrawls.orderId, order.id));
   return {
     orderId: order.id,
     domain: order.domain,
     offer: order.product,
     token,
-    audit: { orderId: order.id, domain: order.domain, findings: audit.data.findings, crawlRunId: audit.data.crawlRunId },
+    audit: {
+      orderId: order.id,
+      domain: order.domain,
+      summary: audit.data.summary,
+      findings: audit.data.findings,
+      crawlRunId: audit.data.crawlRunId,
+    },
     assets: kit.data.assets,
     totalCostUsd: kit.data.costUsd + Number(crawl?.costUsd ?? 0),
     deliveredAt: order.deliveredAt.toISOString(),
@@ -44,17 +59,27 @@ export async function getDeliveredReport(db: Db, token: string): Promise<Report 
 }
 
 export async function deliverReport(
-  deps: { db: Db; appUrl: string; sendTransactional: SendTransactionalFn; hubspot: HubSpotClient; emit: Emit },
+  deps: {
+    db: Db;
+    appUrl: string;
+    sendTransactional: SendTransactionalFn;
+    hubspot: HubSpotClient;
+    emit: Emit;
+  },
   orderId: string,
   reportId: string,
 ): Promise<void> {
   const [order] = await deps.db.select().from(orders).where(eq(orders.id, orderId));
-  const [report] = await deps.db.select().from(reports).where(and(eq(reports.id, reportId), eq(reports.orderId, orderId)));
+  const [report] = await deps.db
+    .select()
+    .from(reports)
+    .where(and(eq(reports.id, reportId), eq(reports.orderId, orderId)));
   if (!order || !report) throw new AppError("not_found", "audit report not found");
   if (order.state === "delivered") return;
   if (order.state !== "auditing") throw new AppError("conflict", "order is not auditing");
   const kit = StoredKit.safeParse(report.kit);
-  if (!kit.success || kit.data.assets.length < 9) throw new AppError("conflict", "Kit is not complete", { retryable: true });
+  if (!kit.success || kit.data.assets.length < 9)
+    throw new AppError("conflict", "Kit is not complete", { retryable: true });
   const url = `${deps.appUrl}/report/${report.accessToken}`;
   await deps.sendTransactional({
     to: order.contactEmail,
@@ -68,17 +93,30 @@ export async function deliverReport(
       ? await deps.db.select().from(companies).where(eq(companies.id, prospect.companyId))
       : [];
     if (company) {
-      const mirror = await deps.hubspot.upsertCompany({ outrunId: company.id, domain: company.domain, name: company.name });
+      const mirror = await deps.hubspot.upsertCompany({
+        outrunId: company.id,
+        domain: company.domain,
+        name: company.name,
+      });
       await deps.hubspot.upsertDeal({
-        outrunId: order.id, name: `${order.domain} ${order.product}`, stage: "Delivered", companyId: mirror.id,
+        outrunId: order.id,
+        name: `${order.domain} ${order.product}`,
+        stage: "Delivered",
+        companyId: mirror.id,
       });
     }
   }
-  const [updated] = await deps.db.update(orders).set({ state: "delivered", deliveredAt: new Date() })
+  const [updated] = await deps.db
+    .update(orders)
+    .set({ state: "delivered", deliveredAt: new Date() })
     .where(and(eq(orders.id, orderId), eq(orders.state, "auditing")))
     .returning({ id: orders.id });
-  if (updated) await deps.emit({
-    actor: "worker", type: "report.delivered", entityType: "order", entityId: orderId,
-    payload: { reportId },
-  });
+  if (updated)
+    await deps.emit({
+      actor: "worker",
+      type: "report.delivered",
+      entityType: "order",
+      entityId: orderId,
+      payload: { reportId },
+    });
 }

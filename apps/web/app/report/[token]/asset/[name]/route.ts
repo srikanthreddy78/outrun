@@ -12,7 +12,8 @@ export async function GET(
   const { token, name } = await params;
   const rt = await getRuntime();
   const report = await getDeliveredReport(rt.db.db, token);
-  if (!report) return new Response("Asset not found", { status: 404, headers: { "cache-control": "no-store" } });
+  if (!report)
+    return new Response("Asset not found", { status: 404, headers: { "cache-control": "no-store" } });
   const asset = downloadAsset(report, name);
   return new Response(asset.body, {
     status: asset.status,

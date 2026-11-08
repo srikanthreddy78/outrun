@@ -5,6 +5,7 @@ import type { Runtime } from "@outrun/core/runtime";
 import type { Handlers } from "@outrun/core/queue";
 import { startSession } from "@outrun/core/sessions";
 import { buildKit } from "@outrun/core/kit/build";
+import { deliverReport } from "@outrun/core/report/delivery";
 import { AppError } from "@outrun/core";
 
 const OrderPayload = z.object({ orderId: z.uuid() });
@@ -16,7 +17,7 @@ const ApifyPayload = z.object({
 });
 
 export function auditHandlers(
-  rt: Pick<Runtime, "db" | "emit" | "integrations"> & Partial<Pick<Runtime, "llm" | "queue">>,
+  rt: Pick<Runtime, "db" | "emit" | "integrations"> & Partial<Pick<Runtime, "llm" | "queue" | "config">>,
 ): Handlers {
   const db = rt.db.db;
   const session = { db, emit: rt.emit, naive: rt.integrations.naive };
@@ -33,6 +34,26 @@ export function auditHandlers(
                 llm: rt.llm!,
                 discover: rt.integrations.discover,
                 enqueue: rt.queue!.enqueue.bind(rt.queue),
+                emit: rt.emit,
+              },
+              orderId,
+              reportId,
+            );
+          },
+        } satisfies Handlers)
+      : {}),
+    ...(rt.config
+      ? ({
+          deliver_report: async (env) => {
+            const { orderId, reportId } = z
+              .object({ orderId: z.uuid(), reportId: z.uuid() })
+              .parse(env.payload);
+            await deliverReport(
+              {
+                db,
+                appUrl: rt.config!.appUrl,
+                sendTransactional: rt.integrations.sendTransactional,
+                hubspot: rt.integrations.hubspot,
                 emit: rt.emit,
               },
               orderId,
