@@ -1,0 +1,2 @@
+# Fake Stripe-shaped key in an early scrub() test fixture (not a real secret); removed in the next commit.
+e2d61cf9d06ee27365f6c5450c5b41085229e584:packages/core/src/crew/registry.test.ts:stripe-access-token:105
