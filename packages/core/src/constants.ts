@@ -144,3 +144,9 @@ export const CLIENT_FOCUS_MAX = 25;
 export const PROPOSAL_COOLDOWN_DAYS = 7;
 /** Rejection reasons and replied-to subject lines kept in client_insights and get_brief's lessons. */
 export const LESSONS_KEPT = 5;
+
+/** The account manager: client questions per client per day from the portal, and their length. */
+export const CLIENT_QUESTIONS_PER_DAY = 5;
+export const CLIENT_QUESTION_MAX_CHARS = 1000;
+/** plan_day starts a staffed account manager's weekly report when the last is this old. */
+export const CLIENT_REPORT_EVERY_DAYS = 7;

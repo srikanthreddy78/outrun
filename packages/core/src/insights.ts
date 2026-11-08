@@ -521,3 +521,38 @@ export async function clientInsights(db: Db, clientId: string, opts: { since: Da
 
 /** client_insights' default window. */
 export const insightsSince = (now: Date) => new Date(now.getTime() - INSIGHT_DAYS * DAY);
+
+/**
+ * A client's goal and how far along it is, counted since the profile was confirmed:
+ *   interested  interested replies (client_insights' interested)
+ *   meetings    prospects the closer marked interested, or further (checkout_sent, won)
+ *   customers   wins (client_insights' wins)
+ * On track: met, or not past due and at least the straight-line share of the target by now.
+ * Null when the client has no goal.
+ */
+export async function goalProgress(db: Db, clientId: string, now: Date = new Date()) {
+  const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
+  if (!c) throw new AppError("not_found", `client ${clientId}`);
+  const goal = ClientProfile.safeParse(c.profile).data?.goal;
+  if (!goal) return null;
+  const start = c.profileConfirmedAt ?? c.createdAt;
+  let current: number;
+  if (goal.metric === "meetings") {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(prospects)
+      .where(
+        and(eq(prospects.clientId, c.id), inArray(prospects.stage, ["interested", "checkout_sent", "won"])),
+      );
+    current = Number(row?.n ?? 0);
+  } else {
+    const i = await clientInsights(db, c.id, { since: start });
+    current = goal.metric === "customers" ? i.wins : i.interested;
+  }
+  const met = current >= goal.target;
+  const end = new Date(`${goal.by}T23:59:59.999Z`).getTime();
+  const span = Math.max(1, end - start.getTime());
+  const share = Math.min(1, Math.max(0, (now.getTime() - start.getTime()) / span));
+  const onTrack = met || (now.getTime() <= end && current >= Math.floor(goal.target * share));
+  return { metric: goal.metric, target: goal.target, by: goal.by, current, met, onTrack };
+}

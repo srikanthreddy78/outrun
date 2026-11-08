@@ -43,6 +43,17 @@ export const COMPANY_SIZES = [
 /** A price the crew may quote, exactly as written (e.g. "$49/month"). */
 export const ProfilePrice = z.object({ label: Text(80), amount: Text(40) });
 
+/** What a client's goal counts: interested replies, meetings (prospects marked interested), customers (won). */
+export const GOAL_METRICS = ["interested", "meetings", "customers"] as const;
+/** The client's goal: the researcher may draft it, the owner confirms it with the profile. */
+export const ClientGoal = z.object({
+  metric: z.enum(GOAL_METRICS),
+  target: z.number().int().min(1).max(1000),
+  /** The day it is due, YYYY-MM-DD. */
+  by: z.iso.date(),
+});
+export type ClientGoal = z.infer<typeof ClientGoal>;
+
 export const ClientProfile = z.object({
   /** One sentence: what the client sells and to whom. */
   summary: Text(400),
@@ -78,6 +89,8 @@ export const ClientProfile = z.object({
   tone: Text(200).default("plain, specific, friendly; no hype"),
   /** The pages the profile was drafted from, so the owner can check them. */
   sources: z.array(Https).min(1).max(20),
+  /** Optional: what the crew drives toward, e.g. 10 interested replies by a date. */
+  goal: ClientGoal.optional(),
 });
 export type ClientProfile = z.infer<typeof ClientProfile>;
 

@@ -19,13 +19,18 @@
  * Then a third client, Gamma Grid, hires the agency itself through the public hire_agency tool:
  * the worker provisions its six agents on the (fake) Naive API, its researcher drafts the
  * profile, the owner confirms it, and its sending domain verifies.
+ *
+ * Last, the CEO staffs Acme an account manager: the worker adds exactly that agent on the (fake)
+ * Naive, it saves a weekly report the client sees in its portal (the email is a fixed notice),
+ * and it answers the client's portal question.
  */
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "@outrun/core";
 import { addClient, confirmProfile, startEmailSetup, startProfiling } from "@outrun/core/clients";
+import { askClientQuestion, clientQuestions, latestClientReport } from "@outrun/core/accountManager";
 import { applyProfileProposal, clientFocus, proposalsFor } from "@outrun/core/insights";
 import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
-import type { AgentName } from "@outrun/core/contracts";
+import { CORE_CLIENT_ROLES, type AgentName } from "@outrun/core/contracts";
 import type { ToolContext } from "@outrun/core/crew";
 import { agencyOverview } from "@outrun/core/crew/tools/agency";
 import { and, clientCandidates, clients, desc, eq, events, messages, prospects } from "@outrun/core/db";
@@ -41,6 +46,7 @@ import { createTempDatabase } from "@outrun/core/testing/db";
 import { acceptAgentMailEvent } from "@outrun/core/webhooks/agentmail";
 import { startWorker } from "@outrun/worker";
 import { submitDecisions } from "../apps/web/lib/approvals-core";
+import { agentConfig, clientCrew } from "../naive/crew";
 
 const TIMEOUT_MS = 180_000;
 const OWNER = "user:srikanth@outrun.example";
@@ -749,6 +755,84 @@ async function main(): Promise<void> {
       return r?.status === "active" && r.agentmailInboxId === `hello@${GAMMA.domain}`;
     });
     ok("the owner confirmed Gamma's profile; its domain verified and it is active with its own inbox");
+
+    console.log("H. the CEO staffs Acme an account manager, who reports and answers in the portal");
+    const ACME = CLIENTS[0]!;
+    // Acme's six came from naive up; only the new role should be added at runtime.
+    for (const m of clientCrew(config.appUrl, {
+      slug: ACME.slug,
+      name: ACME.name,
+      roles: [...CORE_CLIENT_ROLES],
+    }))
+      if (!naive.agents.some((a) => a.name === m.name))
+        await naive.createAgent(agentConfig(m), `naive-up:${m.name}`);
+    const acmeBefore = naive.agents.filter((a) => a.name.startsWith(`${ACME.slug}-`)).map((a) => a.name);
+    naive.script("ceo", [
+      {
+        tool: "staff_client",
+        input: { clientId: acme, add: ["account_manager"], reason: "Acme's approver wants weekly numbers" },
+      },
+    ]);
+    await startAgent("outrun", "ceo", { type: "system", id: "ceo-staffs" });
+    const amName = `${ACME.slug}-account-manager`;
+    await waitFor("Acme's account manager on Naive", async () => {
+      noFailures();
+      const [e] = await db
+        .select()
+        .from(events)
+        .where(and(eq(events.type, "client.crew_provisioned"), eq(events.entityId, acme)));
+      return e;
+    });
+    const acmeAfter = naive.agents.filter((a) => a.name.startsWith(`${ACME.slug}-`)).map((a) => a.name);
+    const addedAgents = acmeAfter.filter((n) => !acmeBefore.includes(n));
+    check(
+      addedAgents.length === 1 && addedAgents[0] === amName,
+      `the fake Naive got exactly ${amName} (${addedAgents.join(", ")})`,
+    );
+    ok("the CEO staffed Acme an account manager; the worker added exactly that agent");
+
+    const note = "Two first emails went out and one prospect asked for a demo.";
+    naive.script(amName, [
+      { tool: "get_client_profile", input: {} },
+      { tool: "client_weekly_report", input: { note } },
+    ]);
+    await startAgent(ACME.slug, "account_manager", { type: "system", id: "am-weekly" });
+    const notice = await waitFor("Acme's report notice", async () => {
+      noFailures();
+      return fakes.agentmail.transactional.find(
+        (m) => m.to === ACME.approver && m.subject.includes("weekly report"),
+      );
+    });
+    check(
+      notice.text.includes(`${config.appUrl}/portal/${ACME.slug}`) && !notice.text.includes(note),
+      "the notice is the fixed template with a portal link, no agent text",
+    );
+    await assertPortalAccess(db, ACME.approver, acme);
+    const report = await latestClientReport(db, acme);
+    check(report?.report.note === note && report.report.sent === 2, "Acme's portal shows the report");
+    ok("Acme's account manager saved the weekly report; the client got a fixed notice and sees it");
+
+    naive.script(amName, [
+      { tool: "client_questions", input: {} },
+      {
+        tool: "answer_client",
+        input: (calls: { tool: string; result?: unknown }[]) => {
+          const r = calls.find((x) => x.tool === "client_questions")?.result as {
+            questions: { questionId: string }[];
+          };
+          return { questionId: r.questions[0]!.questionId, answer: `Book a demo at ${ACME.cta}.` };
+        },
+      },
+    ]);
+    const asked = await askClientQuestion(deps, acme, ACME.approver, "How do prospects book a call?");
+    check(asked.routed === "account_manager", "the question went to Acme's account manager");
+    const answered = await waitFor("the account manager's answer", async () => {
+      noFailures();
+      const [q] = await clientQuestions(db, acme);
+      return q?.answer;
+    });
+    check(answered.text.includes(ACME.cta), "the portal shows the answer");
+    ok("the client asked in the portal; its account manager answered there");
 
     const dead = await db.select().from(events).where(eq(events.type, "job.dead"));
     check(

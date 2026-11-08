@@ -92,7 +92,7 @@ export const CEO_SCHEDULE = {
   cron: "30 8 * * 1-5",
   timezone: "America/Los_Angeles",
   input:
-    "Weekday run. Call outrun.agency_status and outrun.list_clients; for each active client other than Outrun, outrun.client_insights, outrun.set_client_focus, at most one outrun.propose_profile_change if the numbers support it, and outrun.kick_client; then outrun.save_brief once listing every decision, and stop.",
+    "Weekday run. Call outrun.agency_status and outrun.list_clients; for each active client other than Outrun, outrun.client_insights, outrun.set_client_focus, at most one outrun.propose_profile_change if the numbers support it, outrun.client_goal (outrun.mark_goal_met when met), outrun.staff_client if its needs call for a role, and outrun.kick_client; then outrun.save_brief once listing every decision, and stop.",
   budget_micro_usd: 1 * USD,
 };
 

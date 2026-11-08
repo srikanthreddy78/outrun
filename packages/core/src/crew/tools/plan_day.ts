@@ -11,11 +11,14 @@
  * Keys are `plan:<day in CRON_TZ>:<agent>:<entity id>`, so a second run the same day enqueues
  * nothing new. Messages name ids only. In demo mode only the seeded demo prospect is planned
  * and discovery is skipped.
+ * Sessions start only for roles on the client's crew (clients.crew_roles). A client the CEO
+ * staffed an account manager gets one weekly-report session when its last report is a week old.
  */
 import { and, asc, eq, type SQL } from "drizzle-orm";
-import type { AgentName, Entity, ProspectStage } from "../../../contracts";
-import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
-import { prospects } from "../../db/schema";
+import { staffedRoles, type AgentName, type Entity, type ProspectStage } from "../../../contracts";
+import { latestClientReport } from "../../accountManager";
+import { CLIENT_REPORT_EVERY_DAYS, CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
+import { clients, prospects } from "../../db/schema";
 import { clientFocus } from "../../insights";
 import { DEMO_FILED_REASON } from "../../seed";
 import { CLIENT_CANDIDATES_ENOUGH } from "../../sources/clientSources";
@@ -36,8 +39,15 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
       const counts = await pipelineCounts(ctx.db, ctx.clientId, settings, now);
       const limit = input.limitPerAgent;
       const enqueued: { agent: AgentName; prospectId: string | null }[] = [];
+      const [crew] = await ctx.db
+        .select({ crewRoles: clients.crewRoles })
+        .from(clients)
+        .where(eq(clients.id, ctx.clientId));
+      const staffed = new Set<string>(staffedRoles(crew?.crewRoles));
 
       const start = async (agent: AgentName, entity: Entity, message: string) => {
+        // Only roles on this client's crew have an agent to start.
+        if (!staffed.has(agent)) return;
         // Outrun's keys predate clients; another client's carry its id, so days don't collide.
         const scope = ctx.clientId === OUTRUN_CLIENT_ID ? "" : `${ctx.clientId}:`;
         await ctx.enqueue({
@@ -99,6 +109,17 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
           idempotencyKey: `client-sources:${day}:${ctx.clientId}`,
           traceId: ctx.requestId,
         });
+
+      // A staffed account manager writes the client's weekly report.
+      if (ctx.clientId !== OUTRUN_CLIENT_ID && staffed.has("account_manager")) {
+        const last = await latestClientReport(ctx.db, ctx.clientId);
+        if (!last || now.getTime() - last.at.getTime() >= CLIENT_REPORT_EVERY_DAYS * 86_400_000)
+          await start(
+            "account_manager",
+            { type: "client", id: ctx.clientId },
+            "Write this week's report for your client with outrun.client_weekly_report, then answer any open questions from outrun.client_questions.",
+          );
+      }
 
       return { enqueued, capsLeft: counts.capsLeft };
     },

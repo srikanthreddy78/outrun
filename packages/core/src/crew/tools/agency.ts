@@ -5,13 +5,26 @@
  */
 import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gte, max, min, sql, sum } from "drizzle-orm";
-import { PROSPECT_STAGES, staffedRoles, type ProspectStage } from "../../../contracts";
-import { CRON_TZ, OUTRUN_CLIENT_ID, STUCK_APPROVAL_HOURS } from "../../constants";
+import {
+  OPTIONAL_CLIENT_ROLES,
+  PROSPECT_STAGES,
+  staffedRoles,
+  type OptionalClientRole,
+  type ProspectStage,
+} from "../../../contracts";
+import { openQuestionCount } from "../../accountManager";
+import { CLIENT_FOCUS_MIN, CRON_TZ, OUTRUN_CLIENT_ID, STUCK_APPROVAL_HOURS } from "../../constants";
 import type { Db } from "../../db/client";
 import { agentSessions, clients, events, messages, prospects } from "../../db/schema";
 import { AppError } from "../../errors";
 import { saveDraftProfile } from "../../clients";
-import { clientInsights, insightsSince, proposeProfileChange, setClientFocus } from "../../insights";
+import {
+  clientInsights,
+  goalProgress,
+  insightsSince,
+  proposeProfileChange,
+  setClientFocus,
+} from "../../insights";
 import { dayIn } from "../../time";
 import { naiveAgentName } from "../identity";
 import { defineTool } from "../registry";
@@ -23,7 +36,7 @@ const STATUSES = ["draft", "profiling", "awaiting_confirmation", "email_setup", 
 const crewOf = (slug: string, roles?: readonly string[] | null) =>
   staffedRoles(roles).map((role) => ({ role, naiveAgent: naiveAgentName(role, slug) }));
 
-async function clientById(db: Db, clientId: string) {
+export async function clientById(db: Db, clientId: string) {
   const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
   if (!c) throw new AppError("not_found", `client ${clientId}`);
   return c;
@@ -112,7 +125,9 @@ export async function clientNumbers(db: Db, clientId: string, since: Date, now: 
     .where(and(eq(agentSessions.clientId, clientId), gte(agentSessions.createdAt, since)))
     .groupBy(agentSessions.agent);
   const oldest = waiting?.oldest ? new Date(waiting.oldest) : null;
+  const openQuestions = clientId === OUTRUN_CLIENT_ID ? 0 : await openQuestionCount(db, clientId);
   return {
+    openQuestions,
     stages,
     sent: Number(sent?.n ?? 0),
     replies: Number(replies?.n ?? 0),
@@ -157,8 +172,13 @@ export const clientReport = defineTool({
 
 /** Why a client needs a person or the CEO's attention, or nothing. */
 export function attentionReasons(
-  c: { status: string; dnsStatus: string; profileConfirmedAt: Date | null },
-  n: { approvalsWaiting: number; oldestApprovalHours: number | null; perRole: { failed: number | string }[] },
+  c: { status: string; dnsStatus: string; profileConfirmedAt: Date | null; crewRoles?: string[] | null },
+  n: {
+    approvalsWaiting: number;
+    oldestApprovalHours: number | null;
+    perRole: { failed: number | string }[];
+    openQuestions?: number;
+  },
 ): string[] {
   const out: string[] = [];
   if (c.status === "awaiting_confirmation")
@@ -172,6 +192,12 @@ export function attentionReasons(
     );
   const failed = n.perRole.reduce((s, r) => s + Number(r.failed), 0);
   if (failed > 0) out.push(`${failed} agent session(s) failed this week`);
+  if (n.openQuestions)
+    out.push(
+      staffedRoles(c.crewRoles).includes("account_manager")
+        ? `${n.openQuestions} client question(s) wait for its account manager`
+        : `${n.openQuestions} client question(s) wait and it has no account manager; staff one with outrun.staff_client`,
+    );
   return out;
 }
 
@@ -292,6 +318,99 @@ export const setClientFocusTool = defineTool({
   },
 });
 
+/**
+ * staff_client: adds optional roles to a client's crew. Unions into clients.crew_roles in SQL, so
+ * it never removes one, and enqueues provision_client_crew keyed on the client and its full role
+ * list, so the same staffing provisions once.
+ */
+export const staffClientTool = defineTool({
+  name: "staff_client",
+  handler: async ({ clientId, add, reason }, ctx) => {
+    const c = await clientById(ctx.db, clientId);
+    if (c.id === OUTRUN_CLIENT_ID)
+      throw new AppError("bad_request", "Outrun's own crew is fixed; staff a client's crew instead");
+    const before = staffedRoles(c.crewRoles);
+    const want = [...new Set(add)].filter((r): r is OptionalClientRole =>
+      (OPTIONAL_CLIENT_ROLES as readonly string[]).includes(r),
+    );
+    const added = want.filter((r) => !before.includes(r));
+    if (added.length) {
+      const extra = sql.join(
+        added.map((r) => sql`${r}`),
+        sql`, `,
+      );
+      await ctx.db
+        .update(clients)
+        .set({
+          crewRoles: sql`(select array_agg(distinct r) from unnest(${clients.crewRoles} || array[${extra}]::text[]) as r)`,
+          updatedAt: new Date(),
+        })
+        .where(eq(clients.id, c.id));
+      await ctx.emit({
+        actor: `naive:${ctx.agent}`,
+        type: "ceo.staffed",
+        entityType: "client",
+        entityId: c.id,
+        payload: { added, reason },
+      });
+    }
+    const [row] = await ctx.db
+      .select({ crewRoles: clients.crewRoles })
+      .from(clients)
+      .where(eq(clients.id, c.id));
+    const roles = staffedRoles(row?.crewRoles);
+    const { jobId } = await ctx.enqueue({
+      type: "provision_client_crew",
+      payload: { clientId: c.id },
+      idempotencyKey: `provision:${c.id}:${[...roles].sort().join(",")}`,
+      traceId: ctx.requestId,
+    });
+    return { roles, added, provisioning: jobId !== null };
+  },
+});
+
+/** client_goal: a client's goal and how far along it is. */
+export const clientGoalTool = defineTool({
+  name: "client_goal",
+  handler: async ({ clientId }, ctx) => {
+    const c = await clientById(ctx.db, clientId);
+    return { clientId: c.id, goal: await goalProgress(ctx.db, c.id, ctx.now()) };
+  },
+});
+
+/** mark_goal_met: only when code counts it met; then the client's crew goes to maintenance. */
+export const markGoalMetTool = defineTool({
+  name: "mark_goal_met",
+  handler: async ({ clientId }, ctx) => {
+    const c = await clientById(ctx.db, clientId);
+    if (c.id === OUTRUN_CLIENT_ID) return { ok: false as const, reason: "Outrun has no client goal" };
+    const g = await goalProgress(ctx.db, c.id, ctx.now());
+    if (!g) return { ok: false as const, reason: "the client has no confirmed goal" };
+    if (!g.met)
+      return {
+        ok: false as const,
+        reason: `not met yet: ${g.current} of ${g.target} ${g.metric} by ${g.by}`,
+      };
+    await ctx.emit({
+      actor: `naive:${ctx.agent}`,
+      type: "client.goal_met",
+      entityType: "client",
+      entityId: c.id,
+      payload: { goal: g },
+    });
+    const f = await setClientFocus(
+      { db: ctx.db, emit: ctx.emit },
+      {
+        clientId: c.id,
+        dailyDraftLimit: CLIENT_FOCUS_MIN,
+        reason: `goal met (${g.current} of ${g.target} ${g.metric}): maintenance`,
+      },
+      `naive:${ctx.agent}`,
+    );
+    return { ok: true as const, dailyDraftLimit: f.dailyDraftLimit };
+  },
+});
+
 export const agencyTools = [
   getClientProfile,
   saveClientProfile,
@@ -303,6 +422,9 @@ export const agencyTools = [
   clientInsightsTool,
   proposeProfileChangeTool,
   setClientFocusTool,
+  staffClientTool,
+  clientGoalTool,
+  markGoalMetTool,
 ];
 
 /** /dashboard/agency: every client, its six agents with what each did this week, and the brief. */
