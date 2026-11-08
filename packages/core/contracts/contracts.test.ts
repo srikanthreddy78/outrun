@@ -100,8 +100,21 @@ describe("contracts round-trip", () => {
 });
 
 describe("crew contract", () => {
-  it("has the 45 tools, each with at least one agent", () => {
-    expect(CREW_TOOL_NAMES).toHaveLength(45);
+  it("has the 50 tools, each with at least one agent", () => {
+    expect(CREW_TOOL_NAMES).toHaveLength(50);
+    expect(toolsForAgent("signal_scout").sort()).toEqual([
+      "find_signals",
+      "get_client_profile",
+      "ping",
+      "save_signal",
+    ]);
+    expect(toolsForAgent("experimenter").sort()).toEqual([
+      "end_experiment",
+      "experiment_results",
+      "get_client_profile",
+      "ping",
+      "start_experiment",
+    ]);
     for (const t of CREW_TOOL_NAMES) expect(CREW_TOOLS[t].agents.length).toBeGreaterThan(0);
   });
 

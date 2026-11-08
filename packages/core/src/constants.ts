@@ -146,6 +146,12 @@ export const PROPOSAL_COOLDOWN_DAYS = 7;
 /** Rejection reasons and replied-to subject lines kept in client_insights and get_brief's lessons. */
 export const LESSONS_KEPT = 5;
 
+/** Signal scout: one Monid news search per prospect (~$0.002 for 5 articles); a signal is fresh this long. */
+export const SIGNAL_SEARCH_ENDPOINT = "context.dev:/news/search";
+export const SIGNAL_SEARCH_LIMIT = 5;
+export const SIGNAL_FRESH_DAYS = 30;
+/** Researched prospects plan_day names in the signal scout's one session a day. */
+export const SIGNAL_SESSION_PROSPECTS = 10;
 /** The CEO's brain (brain.ts): playbook sizes, replay and stuck-send limits. */
 export const PLAYBOOK_OWN_KEPT = 20;
 export const PLAYBOOK_AGENCY_KEPT = 20;

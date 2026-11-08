@@ -42,15 +42,15 @@ export interface InsightRow {
   interestRate: number;
 }
 
-const rate = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 1000 : 0);
+export const rate = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 1000 : 0);
 
 /** The labels that count as a person answering: not a bounce, an auto-reply or an unsubscribe. */
-const isReply = (label: string | null) =>
+export const isReply = (label: string | null) =>
   label === null || (REPLY_CLASSES as readonly string[]).includes(label);
-const isInterest = (label: string | null) => label === "interested" || label === "question";
+export const isInterest = (label: string | null) => label === "interested" || label === "question";
 
 /** Inbound messages for a client with their triage label (null while unlabelled). */
-async function labelledInbound(db: Db, clientId: string, since?: Date) {
+export async function labelledInbound(db: Db, clientId: string, since?: Date) {
   const rows = await db
     .select({
       id: messages.id,
