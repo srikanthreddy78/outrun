@@ -44,6 +44,12 @@ create table if not exists st_insights (
   comment_ids jsonb not null,
   created_at timestamptz not null default now()
 );
+alter table st_insights add column if not exists sent_at timestamptz;
+alter table st_insights add column if not exists sent_to text;
+create table if not exists st_meta (
+  key text primary key,
+  value text not null
+);
 create table if not exists st_test_inboxes (
   inbox_id text primary key,
   client_id text not null,
@@ -255,4 +261,37 @@ export async function testInboxFor(db: Db, clientId: string): Promise<string | n
     [clientId],
   );
   return (r.rows[0]?.["inbox_id"] as string | undefined) ?? null;
+}
+
+export async function latestInsight(db: Db, clientId: string): Promise<Record<string, unknown> | null> {
+  const { rows } = await db.query(
+    "select * from st_insights where client_id = $1 order by created_at desc, id desc limit 1",
+    [clientId],
+  );
+  return rows[0] ?? null;
+}
+
+/** Marks an insight as sending; false when it already went, so a summary can't go out twice. */
+export async function claimInsight(db: Db, insightId: number, to: string): Promise<boolean> {
+  const { rowCount } = await db.query(
+    "update st_insights set sent_at = now(), sent_to = $2 where id = $1 and sent_at is null",
+    [insightId, to],
+  );
+  return rowCount === 1;
+}
+
+export async function releaseInsight(db: Db, insightId: number): Promise<void> {
+  await db.query("update st_insights set sent_at = null, sent_to = null where id = $1", [insightId]);
+}
+
+export async function getMeta(db: Db, key: string): Promise<string | null> {
+  const { rows } = await db.query<{ value: string }>("select value from st_meta where key = $1", [key]);
+  return rows[0]?.value ?? null;
+}
+
+export async function setMeta(db: Db, key: string, value: string): Promise<void> {
+  await db.query(
+    "insert into st_meta (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value",
+    [key, value],
+  );
 }

@@ -1,6 +1,7 @@
 /**
- * The throwaway inboxes the agents use to sign up for an app they're triaging. The key stays on
- * this server. There is deliberately no way to send mail from here.
+ * Outrun's AgentMail use, with the key kept on this server: throwaway inboxes the agents sign up to
+ * an app with, and the one inbox that sends each app's owner their summary. Agents never choose a
+ * recipient or a body here: see send_summary in mcp.ts.
  */
 const BASE = "https://api.agentmail.to/v0";
 
@@ -69,4 +70,20 @@ export async function readInbox(inbox: string): Promise<InboxMessage[]> {
     text: (m.text ?? m.extracted_text ?? m.html ?? "").slice(0, 8_000),
     received_at: m.timestamp ?? m.created_at ?? "",
   }));
+}
+
+export async function createSummaryInbox(): Promise<string> {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const r = await call<{ inbox_id: string }>("/inboxes", {
+    method: "POST",
+    body: JSON.stringify({ username: `outrun-summaries-${suffix}`, display_name: "Outrun" }),
+  });
+  return r.inbox_id;
+}
+
+export async function sendMail(from: string, to: string, subject: string, text: string): Promise<void> {
+  await call(`${inboxPath(from)}/send`, {
+    method: "POST",
+    body: JSON.stringify({ to: [to], subject, text }),
+  });
 }

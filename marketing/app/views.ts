@@ -1,11 +1,12 @@
 /**
  * The internal dashboard: every app Outrun markets, and for each one its owner, posts, the
- * comments read, the suggestions made and the media produced, plus the summary email as it would
- * be sent (it isn't sent). Sign-in is the Studio's entry ticket or the generated password.
+ * comments read, the suggestions made and the media produced, plus the latest summary email and
+ * whether it has been sent. Sign-in is the Studio's entry ticket or the generated password.
  * Everything shown came from agents, X or the web, so every value is escaped.
  */
 import { createHmac } from "node:crypto";
 import { sameSecret } from "./mcp.ts";
+import { summaryEmail } from "./summary.ts";
 
 const COOKIE = "studio_session";
 
@@ -126,7 +127,7 @@ export function home(clients: Record<string, unknown>[]): string {
     .join("");
   return page(
     "Outrun studio",
-    `<h1>Outrun studio</h1><p class="sub">Every app Outrun markets: posts, comments read, suggestions and media. Internal only; nothing here sends email.</p>
+    `<h1>Outrun studio</h1><p class="sub">Every app Outrun markets: posts, comments read, suggestions and media. Internal only.</p>
 <div class="wrap"><table><thead><tr><th>App</th><th>Owner email</th><th>Posts</th><th>Comments</th><th>Suggestion sets</th><th>Media</th></tr></thead>
 <tbody>${rows || `<tr><td colspan="6">No apps yet.</td></tr>`}</tbody></table></div>`,
   );
@@ -151,21 +152,18 @@ export function clientPage(data: {
 <br><span class="tag">evidence: ${esc((Array.isArray(s["evidence"]) ? s["evidence"] : []).join(", "))}</span></div>`,
       )
       .join("");
-  const email = latest
-    ? `To: ${client["owner_email"] ?? "(no owner email yet)"}\nSubject: What people are saying about ${client["name"]}\n\n${latest["summary"]}\n\n${(Array.isArray(
-        latest["suggestions"],
-      )
-        ? (latest["suggestions"] as Record<string, unknown>[])
-        : []
-      )
-        .map((s, n) => `${n + 1}. ${s["title"]}\n   ${s["change"]}`)
-        .join("\n")}\n\nThe Outrun team`
+  const draft = latest ? summaryEmail(client["name"], latest) : null;
+  const email = draft
+    ? `To: ${client["owner_email"] ?? "(no owner email yet)"}\nSubject: ${draft.subject}\n\n${draft.text}`
     : "No suggestions yet.";
+  const emailState = latest?.["sent_at"]
+    ? `sent ${when(latest["sent_at"])} to ${esc(latest["sent_to"])}`
+    : "not sent";
   return page(
     String(client["name"]),
     `<p><a href="/">← All apps</a></p><h1>${esc(client["name"])}</h1>
 <p class="sub">${link(client["app_url"], client["app_url"])} · owner email: ${esc(client["owner_email"] ?? "–")}</p>
-<h2>Summary email (draft, not sent)</h2><div class="card"><pre>${esc(email)}</pre></div>
+<h2>Latest summary email (${emailState})</h2><div class="card"><pre>${esc(email)}</pre></div>
 <h2>Suggestions</h2>${insights.map((i) => `<p class="sub">${when(i["created_at"])} · ${esc(i["summary"])}</p>${suggestions(i)}`).join("") || "<p class='sub'>None yet.</p>"}
 <h2>Comments read</h2><div class="wrap"><table><thead><tr><th>When</th><th>Comment</th><th>Post</th><th>Used</th></tr></thead><tbody>
 ${comments.map((c) => `<tr><td>${when(c["posted_at"])}</td><td>${esc(c["text"])}</td><td>${esc(c["post_id"])}</td><td>${c["insight_id"] ? "yes" : "new"}</td></tr>`).join("") || `<tr><td colspan="4">No comments yet.</td></tr>`}
