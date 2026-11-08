@@ -111,7 +111,8 @@ describe("crew MCP server", () => {
     );
     const content = (r.result?.content as { text: string }[])[0]!;
     expect(JSON.parse(content.text)).toMatchObject({
-      capsLeft: { send: 30, discovery: 200 },
+      // Warmup (SH-6): 10 sends on the first sending day.
+      capsLeft: { send: 10, discovery: 200 },
       approvalsWaiting: 0,
     });
     const evs = await t.db.select().from(events).where(eq(events.type, "tool.called"));

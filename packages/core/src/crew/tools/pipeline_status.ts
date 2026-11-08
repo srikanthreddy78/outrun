@@ -1,9 +1,10 @@
 import { PROSPECT_STAGES, type ProspectStage } from "../../../contracts";
 import { CRON_TZ } from "../../constants";
-import { and, count, eq, gte, inArray, or } from "drizzle-orm";
+import { count, eq, gte } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { companies, messages, prospects } from "../../db/schema";
 import { startOfDayIn } from "../../time";
+import { effectiveSendCap, sentToday } from "../../email/rules";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
 
@@ -39,21 +40,8 @@ export async function pipelineCounts(
 
   const [candidates] = await db.select({ n: count() }).from(companies).where(eq(companies.kind, "candidate"));
   const [filedToday] = await db.select({ n: count() }).from(prospects).where(gte(prospects.createdAt, since));
-  const [sentToday] = await db
-    .select({ n: count() })
-    .from(messages)
-    .where(
-      and(
-        eq(messages.direction, "outbound"),
-        inArray(messages.kind, ["first", "followup", "reply"]),
-        // Today's cap: what went out today, plus what's approved and about to go. A later
-        // touch (bounce, CRM sync) to an old send must not count again.
-        or(
-          and(eq(messages.status, "sent"), gte(messages.sentAt, since)),
-          inArray(messages.status, ["approved", "sending"]),
-        ),
-      ),
-    );
+  const sent = await sentToday(db, now);
+  const sendCap = await effectiveSendCap(db, settings.sendDailyCap, now);
   const [waiting] = await db
     .select({ n: count() })
     .from(messages)
@@ -63,7 +51,7 @@ export async function pipelineCounts(
     stages,
     candidatesWaiting: Number(candidates?.n ?? 0),
     capsLeft: {
-      send: Math.max(0, settings.sendDailyCap - Number(sentToday?.n ?? 0)),
+      send: Math.max(0, sendCap - sent),
       discovery: Math.max(0, settings.discoveryDailyCap - Number(filedToday?.n ?? 0)),
     },
     approvalsWaiting: Number(waiting?.n ?? 0),

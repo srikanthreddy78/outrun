@@ -20,6 +20,14 @@ into Vercel env, Render env and the Naive vault, never into git, prompts or chat
   `AGENTMAIL_*`, `HUBSPOT_ACCESS_TOKEN`, `APIFY_*`, `AUTH_*` and `OUTRUN_DEMO=true`.
 - Hobby is non-commercial only. Move to Pro before live Stripe.
 
+## 2a. AgentMail (SH-1)
+
+- Buy a dedicated sending domain (never the main one) and add it to AgentMail with its SPF, DKIM and DMARC records; check the plan allows custom domains first. Create the inbox `hello@<domain>` and let it warm up.
+- `AGENTMAIL_API_KEY` and `AGENTMAIL_INBOX_ID=hello@<domain>` on Vercel and Render.
+- Add a webhook to `https://<app>/api/webhooks/agentmail` for `message.received`, `message.bounced` and `message.complained`; put its `whsec_…` secret in `AGENTMAIL_WEBHOOK_SECRET` on Vercel.
+- Send one test email to a mail-tester address and check SPF, DKIM and DMARC pass before any outreach.
+- Sending starts at 10 a day and adds 5 a day up to `OUTRUN_SEND_DAILY_CAP`. A complaint, or bounces past 3% of the last 50 sends, pauses it; fix the cause, then `pnpm email:resume "<why>"`.
+
 ## 3. Render (worker)
 
 - New Blueprint from `render.yaml`, which gives one starter background worker and runs migrations before each deploy.

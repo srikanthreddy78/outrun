@@ -11,20 +11,20 @@
  *   send_paused       bounces over BOUNCE_PAUSE_RATE in the last BOUNCE_WINDOW_SENDS sends
  *   llm_budget        in-app LLM spend today at LLM_BUDGET_ALERT_RATIO of the budget
  */
-import { and, count, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import {
   BOUNCE_PAUSE_RATE,
-  BOUNCE_WINDOW_SENDS,
   LLM_BUDGET_ALERT_RATIO,
   STUCK_APPROVAL_HOURS,
   STUCK_JOB_MINUTES,
   STUCK_ORDER_MINUTES,
 } from "./constants";
 import type { Db } from "./db/client";
-import { events, messages, orders, suppressions } from "./db/schema";
+import { events, messages, orders } from "./db/schema";
 import type { Emit } from "./events";
 import type { NaiveClient, SendTransactionalFn } from "./integrations/types";
 import { spentTodayUsd } from "./llm";
+import { sendPause } from "./email/rules";
 import { logger } from "./log";
 
 export const ALERT_KINDS = [
@@ -215,27 +215,19 @@ async function webhookAlerts(deps: AlertDeps): Promise<Alert[]> {
 }
 
 async function bounceAlerts(db: Db): Promise<Alert[]> {
-  const sent = await db
-    .select({ to: messages.toEmail })
-    .from(messages)
-    .where(and(eq(messages.direction, "outbound"), eq(messages.status, "sent")))
-    .orderBy(desc(messages.sentAt))
-    .limit(BOUNCE_WINDOW_SENDS);
-  const to = sent.map((s) => s.to?.toLowerCase()).filter((v): v is string => !!v);
-  if (to.length < 10) return [];
-  const [b] = await db
-    .select({ n: count() })
-    .from(suppressions)
-    .where(and(inArray(suppressions.value, to), sql`${suppressions.reason} ilike '%bounce%'`));
-  const rate = Number(b?.n ?? 0) / to.length;
-  if (rate < BOUNCE_PAUSE_RATE) return [];
+  // The same rule the send job obeys (email/rules.ts), so the alert and the pause agree.
+  const p = await sendPause(db);
+  if (!p.paused) return [];
   return [
     {
       kind: "send_paused",
       entity: "email",
-      summary: `Bounce rate ${(rate * 100).toFixed(1)}% over the last ${to.length} sends; sending should pause`,
-      action: "Check the sending domain's health and the contact sources before resuming",
-      detail: { rate, window: to.length, threshold: BOUNCE_PAUSE_RATE },
+      summary:
+        p.reason === "complaint"
+          ? "A recipient complained; outreach is paused"
+          : `Bounce rate ${(p.bounceRate * 100).toFixed(1)}% over the last ${p.window} sends; outreach is paused`,
+      action: 'Fix the cause (list source, sending domain), then run pnpm email:resume "<why>"',
+      detail: { reason: p.reason, rate: p.bounceRate, window: p.window, threshold: BOUNCE_PAUSE_RATE },
     },
   ];
 }
