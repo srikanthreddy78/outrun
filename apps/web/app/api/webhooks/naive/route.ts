@@ -1,17 +1,35 @@
-import { handleNaiveWebhook } from "@outrun/core/webhooks/naive";
+import { config } from "@outrun/core";
+import { logger } from "@outrun/core/log";
+import { acceptNaiveDelivery, verifyNaiveDelivery, type WebhookReply } from "@outrun/core/webhooks/naive";
 import { getRuntime } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const send = (r: WebhookReply) =>
+  Response.json(r.body, { status: r.status, ...(r.headers ? { headers: r.headers } : {}) });
+
 export async function POST(req: Request): Promise<Response> {
-  const rt = await getRuntime();
-  const reply = await handleNaiveWebhook({
-    rawBody: await req.text(),
-    headers: req.headers,
-    secrets: [rt.config.keys.naiveWebhookSecret, rt.config.keys.naiveWebhookSecretPrevious],
-    db: rt.db.db,
-    queue: rt.queue,
-  });
-  return Response.json(reply.body, { status: reply.status });
+  const rawBody = await req.text();
+  let reply: WebhookReply | null;
+  try {
+    const keys = config().keys;
+    reply = verifyNaiveDelivery({
+      rawBody,
+      headers: req.headers,
+      secrets: [keys.naiveWebhookSecret, keys.naiveWebhookSecretPrevious],
+    });
+  } catch (err) {
+    logger.error({ err }, "naive webhook: config failed to load");
+    return send({ status: 503, body: { error: "unavailable" }, headers: { "retry-after": "60" } });
+  }
+  if (reply) return send(reply);
+  try {
+    const rt = await getRuntime();
+    return send(await acceptNaiveDelivery({ rawBody, db: rt.db, queue: rt.queue }));
+  } catch (err) {
+    // Not ours to drop: 503 so Naive redelivers once we're healthy.
+    logger.error({ err }, "naive webhook: accept failed");
+    return send({ status: 503, body: { error: "unavailable" }, headers: { "retry-after": "30" } });
+  }
 }

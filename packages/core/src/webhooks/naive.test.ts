@@ -88,7 +88,17 @@ describe("verifyNaiveSignature", () => {
 describe("handleNaiveWebhook", () => {
   let t: TempDb;
   const enqueued: JobEnvelopeInput[] = [];
-  const queue = { enqueue: async (j: JobEnvelopeInput) => (enqueued.push(j), { jobId: "j" }) };
+  let failNext = false;
+  const queue = {
+    enqueue: async (j: JobEnvelopeInput) => {
+      if (failNext) {
+        failNext = false;
+        throw new Error("queue down");
+      }
+      enqueued.push(j);
+      return { jobId: "j" };
+    },
+  };
   beforeAll(async () => {
     t = await createTempDatabase();
   });
@@ -97,7 +107,14 @@ describe("handleNaiveWebhook", () => {
   });
 
   const send = (body: string, sig: string, ts = NOW / 1000, secrets: (string | undefined)[] = [SECRET]) =>
-    handleNaiveWebhook({ rawBody: body, headers: headers(sig, ts), secrets, db: t.db, queue, nowMs: NOW });
+    handleNaiveWebhook({
+      rawBody: body,
+      headers: headers(sig, ts),
+      secrets,
+      db: { pool: t.pool },
+      queue,
+      nowMs: NOW,
+    });
 
   it("answers 200 and enqueues handle_naive_event once for a valid delivery", async () => {
     const body = envelope("evt_ok");
@@ -136,8 +153,21 @@ describe("handleNaiveWebhook", () => {
     expect((await send(body, signNaive(SECRET, body, NOW / 1000), NOW / 1000, [undefined])).status).toBe(503);
   });
 
-  it("rejects a malformed envelope", async () => {
+  it("answers 200 for a verified but malformed envelope, so Naive never counts it as a failure", async () => {
     const body = JSON.stringify({ hello: "world" });
-    expect((await send(body, signNaive(SECRET, body, NOW / 1000))).status).toBe(400);
+    expect(await send(body, signNaive(SECRET, body, NOW / 1000))).toEqual({
+      status: 200,
+      body: { ok: true, ignored: "invalid_envelope" },
+    });
+  });
+
+  it("a failed enqueue rolls back the dedupe row, so the redelivery is processed", async () => {
+    const body = envelope("evt_retry");
+    const sig = signNaive(SECRET, body, NOW / 1000);
+    failNext = true;
+    await expect(send(body, sig)).rejects.toThrow("queue down");
+    const before = enqueued.length;
+    expect(await send(body, sig)).toEqual({ status: 200, body: { ok: true } });
+    expect(enqueued.length).toBe(before + 1);
   });
 });

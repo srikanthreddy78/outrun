@@ -7,13 +7,20 @@ export class AppError extends Error {
   readonly code: ErrorCode;
   readonly retryable: boolean;
   readonly status: number;
+  /** From an upstream Retry-After, when there was one. */
+  readonly retryAfterSeconds: number | undefined;
 
-  constructor(code: ErrorCode, message: string, opts: { retryable?: boolean; cause?: unknown } = {}) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    opts: { retryable?: boolean; cause?: unknown; retryAfterSeconds?: number } = {},
+  ) {
     super(message, { cause: opts.cause });
     this.name = "AppError";
     this.code = code;
     this.retryable = opts.retryable ?? RETRYABLE.has(code);
     this.status = HTTP_STATUS[code];
+    this.retryAfterSeconds = opts.retryAfterSeconds;
   }
 
   toBody(requestId: string): ErrorBody {

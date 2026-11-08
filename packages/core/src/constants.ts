@@ -82,6 +82,8 @@ export const CRON = {
 export const STUCK_JOB_MINUTES = 15;
 export const STUCK_ORDER_MINUTES = 60;
 export const STUCK_APPROVAL_HOURS = 24;
+/** A session row left `starting` this long belongs to a crashed attempt and is reclaimed. */
+export const SESSION_START_STALE_MINUTES = 10;
 export const LLM_BUDGET_ALERT_RATIO = 0.8;
 
 /** In-app models. The smart model is OUTRUN_SMART_MODEL on OpenAI; bulk and fallback go through OpenRouter. */

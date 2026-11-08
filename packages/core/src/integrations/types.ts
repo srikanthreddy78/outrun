@@ -34,11 +34,20 @@ export interface NaivePendingAction {
   /** As Naive names it: `outrun.send_email`. */
   tool: string;
   input: unknown;
+  /** Tells a re-proposed call (same toolCallId) apart from the first one. */
+  parkedSeq: number | null;
+}
+/** One row of GET /v1/sessions/{id}/events. */
+export interface NaiveEvent {
+  seq: number;
+  type: string;
+  data: Record<string, unknown>;
+  createdAt: string;
 }
 export interface NaiveSession {
   id: string;
   agentId: string;
-  /** queued | running | idle | cancelled | terminated, as Naive reports it. */
+  /** queued | running | idle | completed | failed | cancelled, as Naive reports it. */
   status: string;
   stopReason: StopReason | null;
   pendingActions: NaivePendingAction[];
@@ -58,8 +67,11 @@ export interface NaiveClient {
     toolCallId: string,
     decision: "allow" | "deny",
     reason: string,
+    parkedSeq?: number | null,
   ): Promise<void>;
   getSession(sessionId: string): Promise<NaiveSession>;
+  /** Session events after `afterSeq`, oldest first; `includeAccepted` adds tool.confirm.resolved rows. */
+  getEvents(sessionId: string, opts: { afterSeq: number; includeAccepted?: boolean }): Promise<NaiveEvent[]>;
   agentSpendUsd(agentId: string): Promise<number>;
   resolveAgentId(agent: AgentName): Promise<string>;
 }
