@@ -1,0 +1,24 @@
+{
+  "name": "@outrun/user-acquisition",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "naive": "node --env-file-if-exists=../.env node_modules/@usenaive-sdk/cli/dist/index.js",
+    "up:dry": "pnpm build && pnpm naive up --dry-run",
+    "up": "pnpm build && pnpm naive up"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@usenaive-sdk/blueprints": "^0.18.0",
+    "@usenaive-sdk/cli": "^1.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "~5.9.3"
+  }
+}
