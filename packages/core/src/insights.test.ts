@@ -207,6 +207,15 @@ describe("the CEO learns from the ledger", () => {
     const bf = await message(other, pid.beta, { kind: "first", subject: "Beta subject", at: ago(5) });
     await message(other, pid.beta, { kind: "inbound", at: ago(4), label: "interested" });
     await decision(bf, "deny", "Beta: never say free", ago(4));
+    // Beta won its prospect: it must not count as an Acme win.
+    await t.db.insert(events).values({
+      actor: "naive:closer",
+      type: "prospect.outcome",
+      entityType: "prospect",
+      entityId: pid.beta,
+      payload: { outcome: "won" },
+      ts: ago(3),
+    });
 
     const d1 = await message(acme, pid.p2, {
       kind: "followup",
@@ -377,6 +386,14 @@ describe("the CEO learns from the ledger", () => {
       changes: { dropIncludeKeywords: ["accounts payable"] },
       evidence: "accounts payable: 0 of 9 replied",
     })) as { ok: true; proposalId: string };
+    // The owner edited Beta's ICP after the proposal: accepting it now would overwrite that.
+    const [before] = await t.db.select().from(clients).where(eq(clients.id, other));
+    const edited = structuredClone(before!.profile) as typeof profile;
+    edited.icp.buyerRoles = ["Controller"];
+    await t.db.update(clients).set({ profile: edited }).where(eq(clients.id, other));
+    await expect(
+      applyProfileProposal({ db: t.db, emit: createEmitter(t.db) }, other, ok.proposalId, "user:o@x.dev"),
+    ).rejects.toMatchObject({ code: "conflict", message: expect.stringMatching(/ICP changed/) });
     await rejectProfileProposal(
       { db: t.db, emit: createEmitter(t.db) },
       other,

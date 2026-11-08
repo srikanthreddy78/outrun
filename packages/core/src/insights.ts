@@ -12,7 +12,7 @@
  * Joins go through messages and prospects, which carry client_id. Every number is counted by
  * code; nothing here moves money, sets a price or deletes data.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { ClientProfile, ProfileChanges } from "../contracts";
 import { validProfileFor } from "./clients";
@@ -58,7 +58,7 @@ async function labelledInbound(db: Db, clientId: string, since?: Date) {
       at: messages.createdAt,
       label: sql<
         string | null
-      >`(select e.payload->>'label' from events e where e.type = 'triage.classified' and e.entity_id = "messages"."id"::text order by e.ts desc limit 1)`,
+      >`(select e.payload->>'label' from events e where e.type = 'triage.classified' and e.entity_type = 'message' and e.entity_id = "messages"."id"::text order by e.ts desc limit 1)`,
     })
     .from(messages)
     .where(
@@ -80,6 +80,7 @@ async function approvalDecisions(db: Db, clientId: string, since?: Date) {
     .where(
       and(
         inArray(events.type, ["approval.submitted", "approval.approved", "approval.rejected"]),
+        eq(events.entityType, "message"),
         eq(messages.clientId, clientId),
         since ? gte(events.ts, since) : undefined,
       ),
@@ -119,7 +120,7 @@ async function repliedSubjects(db: Db, clientId: string, since?: Date): Promise<
         eq(messages.status, "sent"),
         since ? gte(messages.sentAt, since) : undefined,
         sql`exists (select 1 from messages r where r.prospect_id = ${messages.prospectId} and r.direction = 'inbound'
-          and coalesce((select e.payload->>'label' from events e where e.type = 'triage.classified' and e.entity_id = r.id::text order by e.ts desc limit 1), 'unlabelled')
+          and coalesce((select e.payload->>'label' from events e where e.type = 'triage.classified' and e.entity_type = 'message' and e.entity_id = r.id::text order by e.ts desc limit 1), 'unlabelled')
             not in ('bounce', 'auto_reply', 'unsubscribe'))`,
       ),
     )
@@ -153,6 +154,8 @@ export interface Proposal {
   clientId: string;
   changes: ProfileChanges;
   evidence: string;
+  /** A hash of the ICP the proposal was made against (null on older proposals). */
+  icpHash: string | null;
   by: string;
   at: Date;
   status: "open" | "accepted" | "rejected";
@@ -180,12 +183,18 @@ export async function proposalsFor(db: Db, clientId: string): Promise<Proposal[]
   return rows
     .filter((r) => r.type === "ceo.proposal")
     .map((r) => {
-      const p = r.payload as { proposalId: string; changes: ProfileChanges; evidence: string };
+      const p = r.payload as {
+        proposalId: string;
+        changes: ProfileChanges;
+        evidence: string;
+        icpHash?: string;
+      };
       return {
         proposalId: p.proposalId,
         clientId,
         changes: p.changes,
         evidence: p.evidence,
+        icpHash: p.icpHash ?? null,
         by: r.actor,
         at: r.ts,
         status: resolved.get(p.proposalId) ?? ("open" as const),
@@ -266,10 +275,17 @@ export async function proposeProfileChange(
     type: "ceo.proposal",
     entityType: "client",
     entityId: c.id,
-    payload: { proposalId, changes: input.changes, evidence: input.evidence },
+    payload: { proposalId, changes: input.changes, evidence: input.evidence, icpHash: icpHash(c.profile) },
   });
   return { ok: true, proposalId };
 }
+
+/** The ICP a proposal was made against, so a later owner edit can't be silently overwritten. */
+const icpHash = (profile: unknown) =>
+  createHash("sha256")
+    .update(JSON.stringify((profile as { icp?: unknown } | null)?.icp ?? null))
+    .digest("hex")
+    .slice(0, 16);
 
 async function openProposal(db: Db, clientId: string, proposalId: string) {
   const p = (await proposalsFor(db, clientId)).find((x) => x.proposalId === proposalId);
@@ -291,8 +307,20 @@ export async function applyProfileProposal(
   const c = await confirmedRow(deps.db, clientId);
   if (!c.profileConfirmedAt) throw new AppError("conflict", "the client's profile isn't confirmed");
   const p = await openProposal(deps.db, c.id, proposalId);
+  if (p.icpHash && p.icpHash !== icpHash(c.profile))
+    throw new AppError(
+      "conflict",
+      "the profile's ICP changed after this proposal was made; reject it and let the CEO propose again",
+    );
   const profile = changedProfile(c, p.changes);
-  await deps.db.update(clients).set({ profile }).where(eq(clients.id, c.id));
+  // Compare-and-swap: only if the profile is still the one read, so two accepts apply once.
+  const swapped = await deps.db
+    .update(clients)
+    .set({ profile })
+    .where(and(eq(clients.id, c.id), sql`${clients.profile} = ${JSON.stringify(c.profile)}::jsonb`))
+    .returning({ id: clients.id });
+  if (!swapped[0])
+    throw new AppError("conflict", "the profile changed while accepting; reload and try again");
   await deps.emit({
     actor: actor as never,
     type: "ceo.proposal_accepted",
@@ -452,9 +480,11 @@ export async function clientInsights(db: Db, clientId: string, opts: { since: Da
     .where(
       and(
         eq(prospects.clientId, c.id),
-        sql`(${prospects.stage} = 'won' and ${prospects.updatedAt} >= ${since.toISOString()})
-          or exists (select 1 from events e where e.type = 'prospect.outcome' and e.entity_id = ${prospects.id}::text
-            and e.ts >= ${since.toISOString()} and (e.payload->>'outcome' = 'won' or e.payload->>'stage' = 'won'))`,
+        // Wrapped whole: and() doesn't parenthesise raw sql, and a bare `or` would escape the client.
+        sql`((${prospects.stage} = 'won' and ${prospects.updatedAt} >= ${since.toISOString()})
+          or exists (select 1 from events e where e.type = 'prospect.outcome' and e.entity_type = 'prospect'
+            and e.entity_id = ${prospects.id}::text
+            and e.ts >= ${since.toISOString()} and (e.payload->>'outcome' = 'won' or e.payload->>'stage' = 'won')))`,
       ),
     );
   const approvals = await approvalDecisions(db, c.id, since);
