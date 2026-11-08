@@ -1,6 +1,6 @@
 import { PROSPECT_STAGES, type ProspectStage } from "../../../contracts";
 import { CRON_TZ } from "../../constants";
-import { and, count, eq, gte, inArray } from "drizzle-orm";
+import { and, count, eq, gte, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client";
 import { companies, messages, prospects } from "../../db/schema";
 import { startOfDayIn } from "../../time";
@@ -46,8 +46,12 @@ export async function pipelineCounts(
       and(
         eq(messages.direction, "outbound"),
         inArray(messages.kind, ["first", "followup", "reply"]),
-        inArray(messages.status, ["approved", "sending", "sent"]),
-        gte(messages.updatedAt, since),
+        // Today's cap: what went out today, plus what's approved and about to go. A later
+        // touch (bounce, CRM sync) to an old send must not count again.
+        or(
+          and(eq(messages.status, "sent"), gte(messages.sentAt, since)),
+          inArray(messages.status, ["approved", "sending"]),
+        ),
       ),
     );
   const [waiting] = await db
