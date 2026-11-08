@@ -211,6 +211,30 @@ export function createNaiveClient(
       return out.sort((a, b) => a.seq - b.seq);
     },
 
+    async listWebhooks() {
+      type Row = { id: string; url: string; enabled?: boolean; status?: string; events?: string[] };
+      const out: { id: string; url: string; enabled: boolean; events: string[] }[] = [];
+      let after: string | undefined;
+      for (let page = 0; page < EVENT_MAX_PAGES; page++) {
+        const q = new URLSearchParams({ limit: "100" });
+        if (after) q.set("after", after);
+        const r = await call<{ data: Row[]; has_more?: boolean; next_cursor?: string }>(
+          "GET",
+          `/v1/webhooks?${q.toString()}`,
+        );
+        for (const w of r.data)
+          out.push({
+            id: w.id,
+            url: w.url,
+            enabled: w.enabled ?? w.status !== "disabled",
+            events: w.events ?? [],
+          });
+        if (!r.has_more || !r.next_cursor) break;
+        after = r.next_cursor;
+      }
+      return out;
+    },
+
     async agentSpendUsd(agentId) {
       const r = await forgetOn404(
         call<{ spent_micro_usd?: number }>("GET", `/v1/agents/${encodeURIComponent(agentId)}/spend`),

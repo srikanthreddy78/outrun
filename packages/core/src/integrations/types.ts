@@ -74,6 +74,8 @@ export interface NaiveClient {
   getEvents(sessionId: string, opts: { afterSeq: number; includeAccepted?: boolean }): Promise<NaiveEvent[]>;
   agentSpendUsd(agentId: string): Promise<number>;
   resolveAgentId(agent: AgentName): Promise<string>;
+  /** The organization's webhooks, for the "Naive webhook disabled" alert. */
+  listWebhooks(): Promise<{ id: string; url: string; enabled: boolean; events: string[] }[]>;
 }
 
 /* ---------- Stripe (Srikanth, SR-8) ---------- */

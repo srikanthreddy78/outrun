@@ -55,12 +55,15 @@ const Env = Settings.extend({
   HUBSPOT_ACCESS_TOKEN: optionalKey,
   APIFY_TOKEN: optionalKey,
   APIFY_WEBHOOK_SECRET: optionalKey,
+  /** Where SR-10 alerts go (the team inbox). Unset: alerts are ledger events and log lines only. */
+  ALERT_EMAIL: z.preprocess((v) => (v === "" ? undefined : v), z.email().optional()),
 });
 
 export interface Config {
   env: "development" | "test" | "production";
   isProd: boolean;
   appUrl: string;
+  alertEmail: string | undefined;
   databaseUrl: string | undefined;
   databaseUrlUnpooled: string | undefined;
   settings: {
@@ -115,6 +118,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     env: e.NODE_ENV,
     isProd: e.NODE_ENV === "production",
     appUrl: e.APP_URL.replace(/\/$/, ""),
+    alertEmail: e.ALERT_EMAIL,
     databaseUrl: e.DATABASE_URL,
     databaseUrlUnpooled: e.DATABASE_URL_UNPOOLED ?? e.DATABASE_URL,
     settings: {
