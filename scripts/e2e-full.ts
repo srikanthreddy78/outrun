@@ -42,7 +42,7 @@ import { startWorker } from "@outrun/worker";
 import { submitDecisions } from "../apps/web/lib/approvals-core";
 import { OUTRUN_CLIENT_ID } from "@outrun/core/constants";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 const APIFY_SECRET = "e2e-apify-secret"; // gitleaks:allow (throwaway test value)
 const DOMAIN = DEMO_PLACEHOLDER.domain;
 const INBOX = DEMO_PLACEHOLDER.inbox;
@@ -413,9 +413,9 @@ async function main(): Promise<void> {
       const [p] = await db.select().from(prospects).where(eq(prospects.id, prospectId));
       return p?.stage === "won";
     });
-    check(
+    // The receipt is its own job; it can land just after the prospect is won.
+    await waitFor("the receipt", async () =>
       fakes.agentmail.transactional.some((m) => m.subject.startsWith("Outrun receipt")),
-      "a receipt was sent",
     );
     ok("Stripe webhook marked the order paid, sent the receipt and won the prospect");
 

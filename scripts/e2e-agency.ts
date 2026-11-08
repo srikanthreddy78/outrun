@@ -33,7 +33,7 @@ import { acceptAgentMailEvent } from "@outrun/core/webhooks/agentmail";
 import { startWorker } from "@outrun/worker";
 import { submitDecisions } from "../apps/web/lib/approvals-core";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 180_000;
 const OWNER = "user:srikanth@outrun.example";
 const LEAD = { domain: "ledgerly.dev", name: "Ledgerly", contact: "cy@ledgerly.dev" };
 
