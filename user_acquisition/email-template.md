@@ -1,32 +1,39 @@
 # Outreach email template
 
-The first email each prospect gets. Plain text, one recipient, no links except the unsubscribe
-link the system adds. Emails are anonymous: they're signed "The Outrun team" and never name
-anyone on the team. Every send waits for a person's approval, so nothing below goes out
-until someone approves it.
+The first email each prospect gets, written from `wiki/PRODUCT.md`: Outrun is a product marketing
+agency that the prospect's coding agent uses, and its feedback loop ships code. Plain text, one
+recipient, anonymous ("The Outrun team", written as "we"), and one link besides the unsubscribe
+link: `heyoutrun.com/llms.txt`, the page written for the prospect's agent. Every send waits for a
+person's approval, so nothing below goes out until someone approves it.
 
 ## Envelope
 
-| Field   | Value                                                                                               |
-| ------- | --------------------------------------------------------------------------------------------------- |
-| From    | `hello@launchpad-marketing-prgqe7.usenaive.ai` until a domain is bought, then `hello@<that domain>` |
-| To      | `{{contact_email}}`, one recipient only                                                             |
-| Subject | `{{company}} and AI agents`                                                                         |
+| Field   | Value                                                                                       |
+| ------- | ------------------------------------------------------------------------------------------- |
+| From    | `hello@launchpad-marketing-prgqe7.usenaive.ai` until an inbox exists on a domain of our own |
+| To      | `{{contact_email}}`, one recipient only                                                     |
+| Subject | `Marketing your coding agent can run, for {{company}}`                                      |
 
 ## Body
 
 ```text
 Hi {{first_name_or_team}},
 
-We came across {{company}} through {{found_via_label}}. You ship {{why_fit}}, so AI agents are
-already one of your users, whether they show up in your analytics or not.
+We came across {{company}} through {{found_via_label}}. You ship {{what_they_ship}}.
 
-Agents decide in seconds whether they can use a product: they look for an llms.txt, a clean
-OpenAPI spec, an MCP listing, docs they can read without running JavaScript, and pricing they
-can parse. Most teams are missing two or three of these without knowing it.
+Outrun is a product marketing agency built for coding agents. Tell the agent that builds
+{{company}} (Claude Code, Codex or similar) to use Outrun, and it sends us three things: a
+product link, a brand style and a marketing theme. We send back a marketing plan for your
+agent to review, then run your marketing on TikTok and Instagram.
 
-We run a free agent-readiness scan that scores {{domain}} on 14 of these checks and lists your
-top three gaps. Want us to send yours over? Just reply "yes".
+The part most agencies skip: what we hear comes back to your agent as tickets it can ship, each
+with the evidence attached. That means comments on our posts, complaints in competitors'
+reviews, Reddit threads, and which hooks got attention. If the hook that lands is "never lose
+your streak" but your landing page leads with "beautiful habit tracking", your agent gets a
+ticket to change the headline, not just a report.
+
+We're opening early access. Reply "yes" and we'll send the details, or point your agent at
+heyoutrun.com/llms.txt and it can take it from there.
 
 The Outrun team
 ```
@@ -43,8 +50,8 @@ Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.a
 ```
 
 - `{{token}}` is 32 characters, unique per recipient address.
-- The `{{mailing_address}}` line appears only once `OUTREACH_MAILING_ADDRESS` is set. US commercial
-  email law (CAN-SPAM) requires a postal address, so set it before any real outreach.
+- The `{{mailing_address}}` line appears only once `OUTREACH_MAILING_ADDRESS` is set. US
+  commercial email law (CAN-SPAM) requires a postal address, so set it before any real outreach.
 
 ## Where each field comes from
 
@@ -52,36 +59,19 @@ Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.a
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `{{contact_email}}`      | `outrun_prospects.contact_email`: published on the company's own page and verified by `outreach.save_prospect`                                                                                                                           |
 | `{{company}}`            | `outrun_prospects.company`                                                                                                                                                                                                               |
-| `{{domain}}`             | `outrun_prospects.domain`                                                                                                                                                                                                                |
-| `{{why_fit}}`            | `outrun_prospects.why_fit`, shortened to a phrase, e.g. "an MCP server for your billing API"                                                                                                                                             |
+| `{{what_they_ship}}`     | `outrun_prospects.why_fit`, cut down to the product itself, e.g. "a habit tracker for iOS" or "a REST API for generating images from templates"                                                                                          |
 | `{{found_via_label}}`    | From `outrun_prospects.found_via`: `mcp_registry` → "the MCP Registry", `glama` → "Glama", `smithery` → "Smithery", `apis_guru` → "APIs.guru", `product_hunt` → "Product Hunt", `yc` → "the YC directory", `hacker_news` → "Hacker News" |
 | `{{first_name_or_team}}` | First word of `outrun_prospects.contact_name`; "{{company}} team" when there's no name                                                                                                                                                   |
 
-## Example
+## Rules for every email
 
-For a made-up prospect, Acme Tools (`acmetools.example`), found on Glama, contact Jane Doe:
-
-```text
-To: jane@acmetools.example
-Subject: Acme Tools and AI agents
-
-Hi Jane,
-
-We came across Acme Tools through Glama. You ship an MCP server for your scheduling API, so AI
-agents are already one of your users, whether they show up in your analytics or not.
-
-Agents decide in seconds whether they can use a product: they look for an llms.txt, a clean
-OpenAPI spec, an MCP listing, docs they can read without running JavaScript, and pricing they
-can parse. Most teams are missing two or three of these without knowing it.
-
-We run a free agent-readiness scan that scores acmetools.example on 14 of these checks and
-lists your top three gaps. Want us to send yours over? Just reply "yes".
-
-The Outrun team
-
---
-Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.app/u/3fQ9…
-```
+- Anonymous: signed "The Outrun team", never a person's name, title, phone or personal email.
+- No invented facts: no metrics, customer names, results or prices. The streak example is the
+  illustration from `wiki/PRODUCT.md`, phrased as a hypothetical ("If the hook that lands...").
+- Don't promise what doesn't exist yet: no install command or public CLI/MCP connector. Early
+  access is by reply, or through `heyoutrun.com/llms.txt`.
+- A reply of "yes" lands in the inbox, where `inbox-triage` logs it as a human reply. Someone has
+  to answer it with the early-access details; nothing answers automatically yet.
 
 ## Follow-ups
 
@@ -93,8 +83,9 @@ automated yet; each would go through the same prepare-and-approve path.
 ```text
 Hi {{first_name_or_team}},
 
-Quick nudge on the free agent-readiness scan for {{domain}}. It takes a few minutes and
-you get the score plus your top three gaps. Reply "yes" and it's yours.
+A quick nudge on Outrun. Your coding agent hands us the product, we run the marketing, and
+what we learn comes back as tickets it can ship. Reply "yes" for early access, or point your
+agent at heyoutrun.com/llms.txt.
 
 The Outrun team
 ```
@@ -104,8 +95,8 @@ The Outrun team
 ```text
 Hi {{first_name_or_team}},
 
-Last note from us. If agents using {{company}} ever becomes a priority, reply any time and
-we'll run the scan.
+Last note from us. If you ever want your coding agent to hand off {{company}}'s marketing,
+reply any time, or have it read heyoutrun.com/llms.txt.
 
 The Outrun team
 ```
