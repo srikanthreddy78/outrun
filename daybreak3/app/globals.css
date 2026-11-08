@@ -1,0 +1,166 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-dawn-peach: #FFD9B8;
+  --color-dawn-apricot: #FFC9A0;
+  --color-dawn-gold: #F5D78A;
+  --color-dawn-lavender: #C8C5DD;
+  --color-dawn-ink: #2A1F18;
+  --color-dawn-muted: #4A3728;
+  --color-dawn-faint: #E8D5C4;
+
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+}
+
+:root {
+  --background: #EDC086;
+  --foreground: #2A1F18;
+  /* The sky, split into two planes so light can drift independently of the
+     base (parallax → clouds shifting across a still sky). Richer/deeper than a
+     pastel wash: pale-gold bloom + amber halo (the "clouds") over a warm
+     terracotta → dusty-lavender base. */
+  --sky-base:
+    linear-gradient(172deg, #EDC086 0%, #E0A87A 30%, #D0927E 56%, #BE8FA4 80%, #AB88B4 100%);
+  --sky-glow:
+    radial-gradient(50% 32% at 40% 12%, #FFF4D6 0%, rgba(255, 244, 214, 0) 56%),
+    radial-gradient(90% 56% at 42% 6%, #F9C77E 0%, rgba(249, 199, 126, 0) 62%);
+  /* Combined, static — for the body fallback and opaque overlays. */
+  --sky: var(--sky-glow), var(--sky-base);
+  /* Soft white wisps toward the middle/centre — layered onto the drifting glow
+     plane so they slowly wander like clouds. Shared across all palettes. */
+  --sky-clouds:
+    radial-gradient(30% 14% at 60% 45%, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(34% 15% at 33% 57%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 62%),
+    radial-gradient(24% 11% at 50% 40%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 60%);
+}
+
+/* Time-of-day palettes. Default (:root above) is the warm "morning". Switch
+   live from the dev panel, which sets <html data-sky="…">. Overriding the two
+   source layers cascades everywhere (body fallback, animated sky, overlays). */
+[data-sky="dawn"] {
+  /* really early morning / evening — cooler, dimmer, purple */
+  --sky-base:
+    linear-gradient(172deg, #E4AC8E 0%, #C68F94 28%, #9E7C9E 54%, #82719F 78%, #6E67A0 100%);
+  --sky-glow:
+    radial-gradient(50% 32% at 40% 12%, #FBE7D6 0%, rgba(251, 231, 214, 0) 56%),
+    radial-gradient(90% 56% at 42% 6%, #E6A78E 0%, rgba(230, 167, 142, 0) 62%);
+}
+[data-sky="day"] {
+  /* later morning / afternoon — light + airy up top, warm peach settling in at
+     the bottom (warm, not hot) */
+  --sky-base:
+    linear-gradient(172deg, #FDE6BC 0%, #F9CE9C 28%, #F3BB8E 54%, #ECA97F 78%, #E2A079 100%);
+  --sky-glow:
+    radial-gradient(40% 26% at 41% 13%, #FFFFFC 0%, rgba(255, 255, 252, 0) 58%),
+    radial-gradient(64% 42% at 41% 11%, #FFF6D6 0%, rgba(255, 246, 214, 0) 60%),
+    radial-gradient(94% 58% at 42% 6%, #FDD79E 0%, rgba(253, 215, 158, 0) 62%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+  color: var(--foreground);
+  /* The single source of the screen atmosphere. As the root background it's
+     propagated to the whole canvas — covering the safe-area insets and
+     overscroll, immune to any descendant transforms (PageTransition wraps
+     everything in a transformed fixed container). Screens stay transparent so
+     they all show this one atmosphere, with nothing to drift against.
+     Hybrid look: a warm aura bloom (pale-gold core + amber halo) resolving
+     into a warm-to-lavender base — depth from light, not a flat fill. */
+  /* Static fallback — the animated .sky layer sits above and carries the motion. */
+  background: var(--sky);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Page screens are transparent so they show the single body/canvas atmosphere
+   (which fills safe areas and never drifts). */
+.dawn-gradient {
+  background: transparent;
+}
+
+/* Opaque version of the same atmosphere, for full-screen overlays that must
+   hide the content beneath them (first-run tour, weekly wrap, morning welcome).
+   They're `fixed inset-0`, so this fills the whole screen including safe areas. */
+.gradient-screen {
+  background: var(--sky);
+}
+
+/* The living sky, two parallax planes. Both transform-based (GPU) so they stay
+   smooth in the iOS webview; `inset` overscan means motion never reveals edges.
+   ::before is the deep base, drifting almost imperceptibly. ::after is the
+   bright bloom ("clouds") wandering across on a longer, offset path so the light
+   shifts and breathes relative to the still sky beneath it. */
+.sky {
+  overflow: hidden;
+}
+.sky::before,
+.sky::after {
+  content: "";
+  position: absolute;
+  will-change: transform;
+}
+.sky::before {
+  inset: -24%;
+  background: var(--sky-base);
+  animation: sky-base 44s ease-in-out infinite;
+}
+.sky::after {
+  inset: -42%;
+  background: var(--sky-clouds), var(--sky-glow);
+  will-change: transform, opacity;
+  animation: sky-clouds 26s ease-in-out infinite;
+}
+
+/* Base: a big slow swell + rotation so the lower colors swirl up into the
+   middle rather than just sliding. Generous inset overscan hides the edges. */
+@keyframes sky-base {
+  0% {
+    transform: translate3d(0%, 0%, 0) scale(1.1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-3%, -5%, 0) scale(1.2) rotate(4deg);
+  }
+  100% {
+    transform: translate3d(0%, 0%, 0) scale(1.1) rotate(0deg);
+  }
+}
+
+/* Clouds: wander wide across + expand/contract + counter-rotate, with an
+   opacity breathe, so the bright/white light clearly drifts over the base. */
+@keyframes sky-clouds {
+  0% {
+    transform: translate3d(-13%, -7%, 0) scale(1.08) rotate(-2deg);
+    opacity: 0.78;
+  }
+  33% {
+    transform: translate3d(11%, 3%, 0) scale(1.3) rotate(3deg);
+    opacity: 1;
+  }
+  66% {
+    transform: translate3d(-4%, 11%, 0) scale(1.14) rotate(-1deg);
+    opacity: 0.76;
+  }
+  100% {
+    transform: translate3d(-13%, -7%, 0) scale(1.08) rotate(-2deg);
+    opacity: 0.78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sky::before,
+  .sky::after {
+    animation: none;
+  }
+}
