@@ -1,0 +1,234 @@
+:root {
+  --bg: linear-gradient(180deg, #e8b98a, #a988b0);
+  --fg: #1c1a18;
+  --accent: #b5532d;
+  --on-accent: #ffffff;
+  --card: #fff8f1;
+  --glow: #ffd66b;
+  --cap-bg: rgba(28, 26, 24, 0.84);
+  --cap-fg: #ffffff;
+  --scrim: rgba(28, 26, 24, 0.5);
+  --display: Georgia, serif;
+  --body: system-ui, sans-serif;
+  --display-weight: 700;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: #000;
+}
+
+#app {
+  position: relative;
+  width: 1080px;
+  height: 1920px;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--body);
+  background: var(--bg);
+}
+
+#bg,
+#scenes {
+  position: absolute;
+  inset: 0;
+}
+
+#bg {
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.glow {
+  position: absolute;
+  left: -160px;
+  top: 120px;
+  width: 1400px;
+  height: 1400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--glow) 0%, rgba(255, 255, 255, 0) 62%);
+  opacity: 0.55;
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+}
+
+/* Titles. Text stays between the 110px top and 340px bottom safe lines. */
+
+.title-box {
+  position: absolute;
+  inset: 110px 72px 340px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.title-box.center {
+  align-items: center;
+  text-align: center;
+}
+
+.mask {
+  overflow: hidden;
+  padding: 0.06em 0 0.3em;
+  margin-bottom: -0.26em;
+}
+
+.title-line {
+  display: inline-block;
+  font-family: var(--display);
+  font-weight: var(--display-weight);
+  font-size: 168px;
+  line-height: 1.06;
+  white-space: nowrap;
+  letter-spacing: -0.015em;
+}
+
+.title-line.accent {
+  color: var(--accent);
+}
+
+.title-line.italic {
+  font-style: italic;
+}
+
+.title-sub {
+  margin-top: 44px;
+  font-size: 62px;
+  line-height: 1.22;
+  font-weight: 500;
+}
+
+.url-pill {
+  margin-top: 64px;
+  padding: 26px 48px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 54px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Screens. */
+
+.inset {
+  position: absolute;
+  left: 50px;
+  top: 180px;
+  width: 980px;
+  height: 1120px;
+  border-radius: 34px;
+  overflow: hidden;
+  background: var(--card);
+  border: 8px solid var(--card);
+  box-shadow: 0 34px 80px rgba(0, 0, 0, 0.3);
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.shot-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  max-width: none;
+}
+
+.hl {
+  position: absolute;
+  border: 6px solid var(--accent);
+  border-radius: 22px;
+  box-shadow: 0 0 0 2400px var(--scrim);
+}
+
+.callout-label {
+  position: absolute;
+  left: 60px;
+  top: 0;
+  max-width: 960px;
+  padding: 24px 40px;
+  border-radius: 28px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 66px;
+  font-weight: 700;
+  line-height: 1.14;
+  text-align: center;
+  white-space: pre-wrap;
+}
+
+.tap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  border: 8px solid var(--accent);
+}
+
+/* Poster and clip. */
+
+.poster {
+  position: absolute;
+  left: 50%;
+  top: 170px;
+  max-width: 880px;
+  max-height: 1160px;
+  transform-origin: 50% 50%;
+  border-radius: 24px;
+  box-shadow: 0 54px 110px rgba(0, 0, 0, 0.4);
+  margin-left: -440px;
+}
+
+.clip-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1080px;
+  height: 1920px;
+}
+
+/* Captions: above the bottom safe line. */
+
+#cap {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 340px;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: 960px;
+  padding: 18px 36px 22px;
+  border-radius: 24px;
+  background: var(--cap-bg);
+  color: var(--cap-fg);
+  font-family: var(--body);
+  font-size: 66px;
+  font-weight: 700;
+  line-height: 1.16;
+  text-align: center;
+  text-wrap: balance;
+  opacity: 0;
+}
+
+#bloom {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 42%, var(--glow) 0%, rgba(255, 255, 255, 0) 70%);
+  opacity: 0;
+  pointer-events: none;
+}

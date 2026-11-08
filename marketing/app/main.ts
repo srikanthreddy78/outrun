@@ -4,12 +4,14 @@
  */
 import {
   commentsFor,
+  eventsFor,
   findClient,
   insightsFor,
   listClients,
   mediaFor,
   openDb,
   postsFor,
+  videoJob,
   type Db,
 } from "./db.ts";
 import { handleMcp, sameSecret } from "./mcp.ts";
@@ -40,6 +42,15 @@ const html = (res: Res, status: number, body: string): void => {
   res.status(status).end(body);
 };
 
+/** Where this deployment serves the video kit. The platform's own name comes first, as agents run what it points at. */
+function kitUrl(req: Req): string | null {
+  const host =
+    process.env["VERCEL_PROJECT_PRODUCTION_URL"] ||
+    header(req, "x-forwarded-host")?.split(",")[0]?.trim() ||
+    header(req, "host");
+  return host && /^[A-Za-z0-9.-]+(:\d+)?$/.test(host) ? `https://${host}/video-kit.tgz` : null;
+}
+
 export default async function handler(req: Req, res: Res): Promise<void> {
   let client: Db | null = null;
   const db = async (): Promise<Db> => (client ??= await openDb());
@@ -60,7 +71,7 @@ export default async function handler(req: Req, res: Res): Promise<void> {
       const mcpToken = process.env["VETTA_MCP_TOKEN"];
       if (!token || !mcpToken || !sameSecret(token, mcpToken))
         return void res.status(401).json({ error: "unauthorized" });
-      const answer = await handleMcp(raw, db);
+      const answer = await handleMcp(raw, db, kitUrl(req));
       return void (answer === null ? res.status(202).end() : res.status(200).json(answer));
     }
     if (path === "/api/health") {
@@ -93,6 +104,8 @@ export default async function handler(req: Req, res: Res): Promise<void> {
           comments: await commentsFor(d, c.id),
           insights: await insightsFor(d, c.id),
           media,
+          job: await videoJob(d, c.id),
+          events: await eventsFor(d, c.id),
           fileNames: await fileNames(media.map((m) => String(m["file_id"]))),
         }),
       );

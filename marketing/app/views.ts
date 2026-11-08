@@ -1,10 +1,11 @@
 /**
  * The internal dashboard: every app Outrun markets, and for each one its owner, posts, the
- * comments read, the suggestions made and the media produced, plus the latest summary email and
- * whether it has been sent. Sign-in is the Studio's entry ticket or the generated password.
+ * comments read, the suggestions made, the media produced and its video job, plus the latest
+ * summary email and whether it has been sent. Sign-in is the Studio's entry ticket or the generated password.
  * Everything shown came from agents, X or the web, so every value is escaped.
  */
 import { createHmac } from "node:crypto";
+import type { VideoJob } from "./db.ts";
 import { sameSecret } from "./mcp.ts";
 import { summaryEmail } from "./summary.ts";
 
@@ -122,14 +123,14 @@ export function home(clients: Record<string, unknown>[]): string {
         c,
       ) => `<tr><td><a href="/c/${esc(c["id"])}">${esc(c["name"])}</a><br>${link(c["app_url"], c["host"])}</td>
 <td>${esc(c["owner_email"] ?? "–")}</td><td>${esc(c["posts"])}</td><td>${esc(c["comments"])} <span class="tag">${esc(c["unread"])} new</span></td>
-<td>${esc(c["insights"])}</td><td>${esc(c["media"])}</td></tr>`,
+<td>${esc(c["insights"])}</td><td>${esc(c["media"])}</td><td><span class="tag">${esc(c["video_job"] ?? "–")}</span></td></tr>`,
     )
     .join("");
   return page(
     "Outrun studio",
     `<h1>Outrun studio</h1><p class="sub">Every app Outrun markets: posts, comments read, suggestions and media. Internal only.</p>
-<div class="wrap"><table><thead><tr><th>App</th><th>Owner email</th><th>Posts</th><th>Comments</th><th>Suggestion sets</th><th>Media</th></tr></thead>
-<tbody>${rows || `<tr><td colspan="6">No apps yet.</td></tr>`}</tbody></table></div>`,
+<div class="wrap"><table><thead><tr><th>App</th><th>Owner email</th><th>Posts</th><th>Comments</th><th>Suggestion sets</th><th>Media</th><th>Video job</th></tr></thead>
+<tbody>${rows || `<tr><td colspan="7">No apps yet.</td></tr>`}</tbody></table></div>`,
   );
 }
 
@@ -139,9 +140,11 @@ export function clientPage(data: {
   comments: Record<string, unknown>[];
   insights: Record<string, unknown>[];
   media: Record<string, unknown>[];
+  job: VideoJob | null;
+  events: Record<string, unknown>[];
   fileNames: Record<string, string>;
 }): string {
-  const { client, posts, comments, insights, media, fileNames } = data;
+  const { client, posts, comments, insights, media, job, events, fileNames } = data;
   const latest = insights[0];
   const suggestions = (i: Record<string, unknown>) =>
     (Array.isArray(i["suggestions"]) ? (i["suggestions"] as Record<string, unknown>[]) : [])
@@ -171,8 +174,12 @@ ${comments.map((c) => `<tr><td>${when(c["posted_at"])}</td><td>${esc(c["text"])}
 <h2>Posts</h2><div class="wrap"><table><thead><tr><th>When</th><th>Post</th><th>Status</th></tr></thead><tbody>
 ${posts.map((p) => `<tr><td>${when(p["posted_at"])}</td><td>${esc(p["content"])}<br>${link(p["url"], p["url"] ? "open on X" : "")}</td><td>${esc(p["status"])}</td></tr>`).join("") || `<tr><td colspan="3">No posts yet.</td></tr>`}
 </tbody></table></div>
-<h2>Media</h2><div class="wrap"><table><thead><tr><th>Kind</th><th>Title</th><th>File</th><th>Notes</th></tr></thead><tbody>
-${media.map((m) => `<tr><td><span class="tag">${esc(m["kind"])}</span></td><td>${esc(m["title"])}</td><td>${esc(fileNames[String(m["file_id"])] ?? m["file_id"])}</td><td>${esc(m["notes"] ?? "")}</td></tr>`).join("") || `<tr><td colspan="4">No media yet.</td></tr>`}
+<h2>Media</h2><div class="wrap"><table><thead><tr><th>Kind</th><th>Title</th><th>File</th><th>Notes</th><th>Review</th></tr></thead><tbody>
+${media.map((m) => `<tr><td><span class="tag">${esc(m["kind"])}</span></td><td>${esc(m["title"])}</td><td>${esc(fileNames[String(m["file_id"])] ?? m["file_id"])}</td><td>${esc(m["notes"] ?? "")}</td><td>${m["review"] ? `<span class="tag">${esc(m["review"])}</span> ${esc(m["review_notes"])}` : "–"}</td></tr>`).join("") || `<tr><td colspan="5">No media yet.</td></tr>`}
+</tbody></table></div>
+<h2>Video job</h2><div class="card"><span class="tag">${esc(job?.status ?? "no job")}</span> · revisions: ${esc(job?.revisions ?? 0)} · file: ${esc(job?.file_id ?? "–")} · posts as: ${esc(client["identity_id"] ?? "no identity set")}${job?.notes ? `<br>${esc(job.notes)}` : ""}</div>
+<div class="wrap"><table><thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead><tbody>
+${events.map((e) => `<tr><td>${when(e["created_at"])}</td><td>${esc(e["kind"])}</td><td>${esc(e["detail"] ?? "")}</td></tr>`).join("") || `<tr><td colspan="3">No events yet.</td></tr>`}
 </tbody></table></div>
 <details><summary>Triage notes</summary><div class="card"><pre>${esc(client["triage"] ?? "None yet.")}</pre></div></details>`,
   );

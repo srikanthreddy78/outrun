@@ -3,7 +3,16 @@
  * (agents:read, sessions:read, files:read): the X posts made as the Outrun identity, and their
  * comments. The studio never posts, sends or deletes anything on Naive.
  */
-import { hostOf, insertComment, listClients, upsertPost, type Db } from "./db.ts";
+import {
+  directPostsDue,
+  hostOf,
+  insertComment,
+  listClients,
+  markRepliesRead,
+  upsertPost,
+  type Db,
+} from "./db.ts";
+import { searchReplies, xKeys } from "./x.ts";
 
 const BASE = (process.env["NAIVE_API_URL"] ?? "https://api.vetta.sh").replace(/\/+$/, "");
 
@@ -44,8 +53,63 @@ export function commentText(data: unknown): string | null {
 }
 
 /**
+ * A reply's words for storing: no reply-to prefix, and any other handle in it masked, so a person's
+ * handle never gets into the records. Null if nothing is left.
+ */
+export function replyText(text: unknown): string | null {
+  if (typeof text !== "string") return null;
+  const words = (commentText(text) ?? "")
+    .replace(/^(?:@\w{1,15}[\s,]*)+/, "")
+    .replace(/(?<![\w@.])@\w{1,15}\b/g, "@user")
+    .trim();
+  return words === "" ? null : words;
+}
+
+/** Stores one reply under its post. True if it's new; the same reply is never stored twice. */
+export async function storeReply(
+  db: Db,
+  r: { id: string; postId: string; clientId: string; text: unknown; postedAt: unknown },
+): Promise<boolean | null> {
+  const words = replyText(r.text);
+  if (words === null) return null;
+  const when = typeof r.postedAt === "string" ? new Date(r.postedAt) : null;
+  return insertComment(db, {
+    id: `x_${r.id}`,
+    postId: r.postId,
+    clientId: r.clientId,
+    text: words,
+    postedAt: when !== null && !Number.isNaN(when.getTime()) ? when.toISOString() : null,
+  });
+}
+
+/** Reads replies on posts made directly with the X keys, skipping any read recently. */
+async function syncDirectReplies(db: Db, errors: string[]): Promise<number> {
+  const keys = xKeys();
+  if (keys === null) return 0;
+  let added = 0;
+  for (const post of await directPostsDue(db)) {
+    try {
+      for (const reply of await searchReplies(keys, post.tweet_id)) {
+        const isNew = await storeReply(db, {
+          id: reply.id,
+          postId: `x_${post.tweet_id}`,
+          clientId: post.client_id,
+          text: reply.text,
+          postedAt: reply.created_at,
+        });
+        if (isNew === true) added += 1;
+      }
+      await markRepliesRead(db, post.key);
+    } catch (error) {
+      errors.push(`x_${post.tweet_id}: ${error instanceof Error ? error.message : "failed"}`);
+    }
+  }
+  return added;
+}
+
+/**
  * Pulls the identity's posts, files each under the client whose app URL it mentions, then reads
- * the comments on each X post. Safe to run any number of times.
+ * the comments on each X post, and the replies on posts made directly. Safe to run any number of times.
  */
 export async function syncX(
   db: Db,
@@ -101,7 +165,32 @@ export async function syncX(
       }
     }
   }
+  newComments += await syncDirectReplies(db, commentErrors);
   return { posts, newComments, unmatched, commentErrors };
+}
+
+interface NaiveFile {
+  content_type: string;
+  size_bytes: number;
+}
+
+/** A published file's bytes and type, refused before downloading if `limit` says it's too large. */
+export async function downloadFile(
+  id: string,
+  limit: (contentType: string) => number | null,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  const path = `/v1/files/${encodeURIComponent(id)}`;
+  const file = await get<NaiveFile>(path);
+  const contentType = file.content_type.split(";")[0]?.trim().toLowerCase() ?? "";
+  const max = limit(contentType);
+  if (max === null) throw new Error(`X can't take a ${contentType} file`);
+  if (file.size_bytes > max) throw new Error(`the file is ${file.size_bytes} bytes; X's limit is ${max}`);
+  const r = await fetch(`${BASE}${path}?download=true`, {
+    headers: { authorization: `Bearer ${process.env["NAIVE_API_KEY"] ?? ""}`, "vetta-version": "2026-09-30" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!r.ok) throw new Error(`Naive ${path} answered ${r.status}`);
+  return { bytes: new Uint8Array(await r.arrayBuffer()), contentType };
 }
 
 /** File names for the media rows, for the dashboard. */

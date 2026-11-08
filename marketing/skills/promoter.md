@@ -68,9 +68,19 @@ Call `social.accounts` to see which networks are connected, and post only to tho
 **A poster:** `publish_file` the poster you'll post, which gives you a file id, then call
 `social.post` with `file_ids: [<that id>]`.
 
-**A video, when the request asks for one:** skip the posters. Call `outrun-studio.list_media` with
-`kind: "short"`, and call `social.post` with `file_ids: [<the newest short's id>]`. Video can go to
-any connected network, including TikTok and Instagram, which only take media.
+**A video, when the request asks for one:** skip the posters. It posts to the app's own accounts,
+so the session must have been started with that app's identity, and the request must name it
+(`Identity: idn_…`).
+
+1. Read `identity_id` from `outrun-studio.get_client`. If it's empty and the request names an
+   identity, call `outrun-studio.set_client_identity` with it (it waits for a person's approval).
+   If it's empty and the request names none, or it differs from the one the request names, stop and
+   report that; don't post.
+2. Call `outrun-studio.list_media` with `kind: "short"` and take the newest short whose `review` is
+   `approved`. If none is, stop and report that: a short that has no review, or whose review is
+   `changes`, is never posted.
+3. Call `social.post` with `file_ids: [<that short's id>]`. Video can go to any connected network,
+   including TikTok and Instagram, which only take media.
 
 Either way, pass the connected `platforms`, `ai_generated: true`, and `content` of at most 270
 characters: what the app does in its own words, who it's for, and its URL. No hashtag spam (two at
@@ -82,6 +92,15 @@ expected. Post once per session.
 `social.post` answering `scheduled` does not mean it was published. After approval, run
 `sleep 25` in `bash`, then call `social.status` with the post's id, up to three times. Report the
 status you read. If it failed, say so and quote the error; never call a failed post done.
+
+**If X refused it.** Only when `social.status` shows the X post failed with a refusal, call
+`outrun-studio.post_direct` once, with the same `content` as `text` and the same file id. It posts to
+the one X account the studio has keys for and waits for a person's approval. Report the real tweet
+URL it returns. If it says it isn't configured, or fails, report that and stop. Never try it for any
+other kind of failure, and never instead of `social.post`.
+
+If the request gives the URL of a live X post about this app that Naive didn't make, call
+`outrun-studio.track_post` with it so its replies get read.
 
 Finish with one short summary: the triage file, the files you made, and the status you confirmed.
 
