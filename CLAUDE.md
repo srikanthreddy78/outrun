@@ -8,6 +8,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm eval
                           run all four before every push
 pnpm e2e:loop             the seeded prospect through every job, on fakes
 pnpm e2e:full             the whole business through the real handlers, on fakes
+pnpm e2e:agency           two clients beside Outrun, onboarding to reply, asserting no leaks
 pnpm db:migrate           apply migrations to your DATABASE_URL
 pnpm db:seed              seed the demo prospect
 pnpm smoke                check a deployed environment

@@ -214,8 +214,11 @@ export class FakeNaiveClient implements NaiveClient {
     s.status = "running";
     while (s.cursor < s.steps.length) {
       const step = s.steps[s.cursor]!;
+      // A step sees its own session's calls, as an agent sees only its own transcript.
       if (typeof step.input === "function")
-        step.input = (step.input as (c: ToolCallRecord[]) => unknown)(this.toolCalls);
+        step.input = (step.input as (c: ToolCallRecord[]) => unknown)(
+          this.toolCalls.filter((c) => c.sessionId === s.id),
+        );
       if (CREW_TOOLS[step.tool].policy === "ask") {
         const toolCallId = `tc_${randomUUID().slice(0, 8)}`;
         const parked = this.event(s, "tool.confirm", {
