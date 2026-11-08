@@ -1,5 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["src/**/*.ts", "contracts/**/*.ts"]
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "contracts/**/*.ts", "drizzle.config.ts"]
 }
