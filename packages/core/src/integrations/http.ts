@@ -11,6 +11,11 @@ export async function postJson<T>(
     provider: string;
     /** POST unless set; HubSpot's association calls are PUT. */
     method?: "POST" | "PUT" | "PATCH" | "GET";
+    /**
+     * Statuses whose JSON body is still the answer: Monid returns a finished run with the
+     * provider's 4xx as the HTTP status. Never set it for 401, 403 or 429.
+     */
+    acceptStatus?: (status: number) => boolean;
   },
 ): Promise<T> {
   const signal = opts.signal
@@ -26,6 +31,14 @@ export async function postJson<T>(
     });
   } catch (err) {
     throw new AppError("upstream_error", `${opts.provider}: request failed`, { retryable: true, cause: err });
+  }
+  if (!res.ok && opts.acceptStatus?.(res.status)) {
+    const text = await res.text();
+    try {
+      return (text ? JSON.parse(text) : {}) as T;
+    } catch {
+      throw new AppError("upstream_error", `${opts.provider}: HTTP ${res.status}`, { retryable: false });
+    }
   }
   if (!res.ok) {
     // The body can echo prompt or customer text; keep it out of errors and the ledger.

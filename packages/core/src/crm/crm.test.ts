@@ -114,6 +114,21 @@ describe("Monid client (SH-3), recorded responses", () => {
     expect(seen.at(-1)!.url).toBe("https://api.monid.ai/v1/runs/run_1");
   });
 
+  it("a provider 404 is an empty answer, as the live API returns it (HTTP 404 with the run)", async () => {
+    recordFetch(() => ({
+      status: 404,
+      json: { runId: "r", status: "COMPLETED", providerResponse: { status: 404 }, cost: { value: 0 } },
+    }));
+    await expect(
+      createMonidClient("k", { sleep: async () => {} }).run("akta:/v1/company/enrichment", {}),
+    ).resolves.toEqual({ data: null, costUsd: 0 });
+    // An unknown endpoint or a bad key is still an error.
+    recordFetch(() => ({ status: 401, json: { error: "bad key" } }));
+    await expect(createMonidClient("k", { sleep: async () => {} }).run("akta:/x", {})).rejects.toThrow(
+      "monid: HTTP 401",
+    );
+  });
+
   it("a provider error or a blocked run is an error, not data", async () => {
     recordFetch(() => ({
       json: { runId: "r", status: "COMPLETED", providerResponse: { status: 422, data: { error: "bad" } } },

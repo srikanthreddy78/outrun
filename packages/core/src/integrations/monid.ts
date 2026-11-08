@@ -32,7 +32,13 @@ export function createMonidClient(
       let run = await postJson<MonidRun>(
         `${BASE}/v1/run`,
         { provider: endpoint.slice(0, at), endpoint: endpoint.slice(at + 1), input },
-        { headers, timeoutMs: 30_000, provider: "monid" },
+        {
+          headers,
+          timeoutMs: 30_000,
+          provider: "monid",
+          // A run the provider answered with a 4xx comes back as that status, with the run as body.
+          acceptStatus: (st) => st >= 400 && st < 500 && ![401, 402, 403, 429].includes(st),
+        },
       );
       const id = run.id ?? run.runId;
       let waited = 0;
@@ -55,6 +61,8 @@ export function createMonidClient(
           retryable: run.status === undefined || !DONE.has(run.status),
         });
       const http = run.providerResponse?.status;
+      // Not found: the provider knows nothing about it. That is an empty answer, not a failure.
+      if (http === 404) return { data: null, costUsd: run.cost?.value ?? 0 };
       if (http && http >= 400)
         throw new AppError("upstream_error", `monid: provider HTTP ${http}`, { retryable: http >= 500 });
       return { data: run.providerResponse?.data ?? run.output ?? null, costUsd: run.cost?.value ?? 0 };
