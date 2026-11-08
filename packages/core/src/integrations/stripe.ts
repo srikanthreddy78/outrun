@@ -9,6 +9,8 @@ import { AppError } from "../errors";
 import type { StripeGateway } from "./types";
 
 export const STRIPE_API_VERSION = "2025-10-29.clover" as const;
+/** Shared Payment Tokens are a preview API; this version is from Stripe's SPT seller docs. */
+export const STRIPE_SPT_API_VERSION = "2026-09-30.preview";
 export const priceLookupKey = (p: PaidProductKey): string => `outrun_${p}`;
 
 export function stripeSdk(key: string): Stripe {
@@ -75,6 +77,33 @@ export function createStripeGateway(key: string): StripeGateway {
         );
         if (!session.url) throw new AppError("upstream_error", "stripe returned a session without a url");
         return { checkoutId: session.id, url: session.url };
+      } catch (err) {
+        throw err instanceof AppError ? err : stripeError(err);
+      }
+    },
+
+    async payWithSharedToken(req) {
+      const spec = PRODUCTS[req.product];
+      if (spec.interval !== "one_time")
+        throw new AppError("bad_request", "a subscription is paid through Checkout");
+      try {
+        // The SDK has no types for the preview parameter, so this is a raw request on the same client.
+        const res = await stripe.rawRequest(
+          "POST",
+          "/v1/payment_intents",
+          {
+            amount: Math.round(spec.priceUsd * 100),
+            currency: "usd",
+            confirm: true,
+            payment_method_data: { shared_payment_granted_token: req.token },
+            metadata: { orderId: req.orderId, product: req.product },
+            description: `Outrun ${spec.name}`,
+          },
+          { apiVersion: STRIPE_SPT_API_VERSION, idempotencyKey: req.idempotencyKey },
+        );
+        const pi = res as unknown as { id?: string; status?: string };
+        if (!pi.id) throw new AppError("upstream_error", "stripe returned a payment intent without an id");
+        return { paymentIntentId: pi.id, status: pi.status ?? "unknown" };
       } catch (err) {
         throw err instanceof AppError ? err : stripeError(err);
       }

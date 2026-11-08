@@ -88,6 +88,16 @@ export interface StripeGateway {
     cancelUrl: string;
     idempotencyKey: string;
   }): Promise<{ checkoutId: string; url: string }>;
+  /**
+   * SR-12: charge a buyer agent's Shared Payment Token for a one-time product. The PaymentIntent carries
+   * orderId in its metadata, so payment_intent.succeeded marks the order paid through the usual webhook.
+   */
+  payWithSharedToken(req: {
+    orderId: string;
+    product: PaidProductKey;
+    token: string;
+    idempotencyKey: string;
+  }): Promise<{ paymentIntentId: string; status: string }>;
 }
 
 /* ---------- Readiness scanner (Matthew, MT-2) ---------- */

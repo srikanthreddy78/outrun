@@ -5,6 +5,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Domain, PaidProductKey, ScanCheck } from "../../contracts";
 import { PRODUCTS } from "../constants";
+import { AppError } from "../errors";
 import type {
   AgentMailClient,
   ApifyClient,
@@ -37,6 +38,35 @@ export class FakeStripe implements StripeGateway {
       checkoutId,
     });
     this.byKey.set(req.idempotencyKey, out);
+    return out;
+  }
+
+  /** Token payments. `spt_declined…` is declined, as a card error would be. */
+  readonly tokenPayments: {
+    orderId: string;
+    product: PaidProductKey;
+    amountUsd: number;
+    paymentIntentId: string;
+  }[] = [];
+  private readonly piByKey = new Map<string, { paymentIntentId: string; status: string }>();
+  async payWithSharedToken(req: Parameters<StripeGateway["payWithSharedToken"]>[0]) {
+    const hit = this.piByKey.get(req.idempotencyKey);
+    if (hit) return hit;
+    if (PRODUCTS[req.product].interval !== "one_time")
+      throw new AppError("bad_request", "a subscription is paid through Checkout");
+    if (req.token.startsWith("spt_declined"))
+      throw new AppError("bad_request", "stripe StripeCardError (card_declined)");
+    const out = {
+      paymentIntentId: `pi_test_fake_${h(req.idempotencyKey).slice(0, 16)}`,
+      status: "succeeded",
+    };
+    this.tokenPayments.push({
+      orderId: req.orderId,
+      product: req.product,
+      amountUsd: PRODUCTS[req.product].priceUsd,
+      paymentIntentId: out.paymentIntentId,
+    });
+    this.piByKey.set(req.idempotencyKey, out);
     return out;
   }
 }

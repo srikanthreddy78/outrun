@@ -46,7 +46,17 @@ into Vercel env, Render env and the Naive vault, never into git, prompts or chat
 - `OUTRUN_APPLY=yes pnpm naive:up` runs only from `main`. Read the apply report, not the exit code.
 - `pnpm naive:sync` sets up agents, the roster check and the webhook. The webhook secret lands in `.naive/webhook-secret`. Copy it into Vercel as `NAIVE_WEBHOOK_SECRET`, then delete the file.
 
-## 6. Check
+## 6. Listing (on the team's go)
+
+- After the check below is green, run `pnpm listing https://<app>`. It confirms the public MCP lists the four tools and the A2A card, MCP server card and `llms.txt` point at the deployment, then writes `server.json`.
+- Publishing is public. With the go, the GitHub owner of `io.github.shaneliu0` (Shane) runs `mcp-publisher login github`, then `pnpm listing https://<app> --publish`.
+- Then submit `https://<app>/.well-known/agent-card.json` to A2A directories.
+
+## 7. Agent payments (when Stripe enables them)
+
+- Accept the agentic commerce seller terms and create the Stripe profile, then follow `docs/adr/0009-agent-payments-with-shared-payment-tokens.md` to test in a sandbox before setting `AGENT_PAYMENTS_ENABLED`.
+
+## 8. Check
 
 - Run `CREW_TOKEN_SECRET=… pnpm smoke https://<app>`. It must be green, with no fakes and the webhook secret set.
 - With a go, start one real orchestrator session that calls `outrun.ping`. The `tool.called` event shows up in the ledger.

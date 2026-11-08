@@ -139,3 +139,22 @@ export function openApi(appUrl: string) {
 /** The markdown alternate link every page carries (MT-3, MT-5); as an HTTP Link header too. */
 export const markdownLinkHeader = (path: string): string =>
   `<${path}>; rel="alternate"; type="text/markdown"`;
+
+/** SR-13: the MCP Registry entry. Published with `pnpm listing --publish`, on the user's go only. */
+export const REGISTRY_SCHEMA = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json";
+/** A GitHub namespace needs the repo owner's `mcp-publisher login github`; a domain needs DNS proof. */
+export const REGISTRY_NAME = "io.github.shaneliu0/outrun";
+export const LISTING_VERSION = "0.1.0";
+
+export function serverJson(appUrl: string) {
+  return {
+    $schema: REGISTRY_SCHEMA,
+    name: REGISTRY_NAME,
+    title: "Outrun",
+    description: "Score a site's AI-agent readiness, get a quote, and buy and track an Audit + Kit.",
+    version: LISTING_VERSION,
+    websiteUrl: appUrl,
+    repository: { url: "https://github.com/shaneliu0/naive-hackathon-nov-2026", source: "github" },
+    remotes: [{ type: "streamable-http", url: `${appUrl}/api/mcp` }],
+  };
+}

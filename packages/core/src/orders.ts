@@ -4,7 +4,7 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import type { Actor, OrderState, PaidProductKey } from "../contracts";
-import { priceOf } from "./constants";
+import { AGENT_PAYMENTS_ENABLED, priceOf } from "./constants";
 import type { Db } from "./db/client";
 import { orders } from "./db/schema";
 import { AppError } from "./errors";
@@ -140,6 +140,46 @@ export async function checkoutFor(
   });
   if (order.stripeCheckoutId !== res.checkoutId) {
     await deps.db.update(orders).set({ stripeCheckoutId: res.checkoutId }).where(eq(orders.id, order.id));
+  }
+  return res;
+}
+
+/**
+ * SR-12: a buyer agent pays a pending one-time order with a Stripe Shared Payment Token. This only
+ * submits the payment; the order becomes paid when payment_intent.succeeded arrives, the same path
+ * Checkout uses, so the state machine has one way in. The token never reaches the ledger.
+ */
+export async function payWithSharedToken(
+  deps: OrderDeps & { stripe: StripeGateway; agentPayments?: boolean },
+  order: Order,
+  token: string,
+): Promise<{ paymentIntentId: string; status: string }> {
+  if (!(deps.agentPayments ?? AGENT_PAYMENTS_ENABLED))
+    throw new AppError("not_configured", "agent payments are not enabled; use the checkoutUrl");
+  if (!/^spt_[A-Za-z0-9_]{4,200}$/.test(token))
+    throw new AppError("bad_request", "not a shared payment token");
+  if (order.state !== "pending")
+    throw new AppError("illegal_transition", `order ${order.id} is ${order.state}; nothing to pay`);
+  const product = order.product as PaidProductKey;
+  // One payment per order: a repeated call, even with another token, replays the first PaymentIntent.
+  const res = await deps.stripe.payWithSharedToken({
+    orderId: order.id,
+    product,
+    token,
+    idempotencyKey: `spt:${order.id}`,
+  });
+  if (order.stripePaymentIntentId !== res.paymentIntentId) {
+    await deps.db
+      .update(orders)
+      .set({ stripePaymentIntentId: res.paymentIntentId })
+      .where(eq(orders.id, order.id));
+    await deps.emit({
+      actor: "web",
+      type: "order.agent_payment_submitted",
+      entityType: "order",
+      entityId: order.id,
+      payload: { paymentIntentId: res.paymentIntentId, status: res.status },
+    });
   }
   return res;
 }
