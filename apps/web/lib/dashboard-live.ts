@@ -17,9 +17,10 @@ import { getRuntime } from "./runtime";
 export async function loadDashboardSnapshot() {
   const rt = await getRuntime();
   const db = rt.db.db;
-  const [ledgerRows, sessionRows, orderRows, approvals, naiveSpend, eventCosts, funnel, health] =
+  const [ledgerRows, deadRows, sessionRows, orderRows, approvals, naiveSpend, eventCosts, funnel, health] =
     await Promise.all([
       db.select().from(events).orderBy(desc(events.ts)).limit(100),
+      db.select().from(events).where(eq(events.type, "job.dead")).orderBy(desc(events.ts)).limit(20),
       db.select().from(agentSessions).orderBy(desc(agentSessions.createdAt)).limit(50),
       db.select().from(orders).orderBy(desc(orders.createdAt)).limit(50),
       db
@@ -78,6 +79,12 @@ export async function loadDashboardSnapshot() {
     summary,
     naiveCostUsd,
     events: ledgerEvents,
+    deadJobs: deadRows.map((row) => ({
+      id: row.id,
+      at: row.ts.toISOString(),
+      job: typeof row.payload.job === "string" ? row.payload.job : "unknown",
+      jobId: typeof row.payload.jobId === "string" ? row.payload.jobId : null,
+    })),
     sessions: sessionRows.map((row) => ({
       ...row,
       spendUsd: Number(row.spendUsd),
