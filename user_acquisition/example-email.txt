@@ -1,0 +1,21 @@
+From: hello@launchpad-marketing-prgqe7.usenaive.ai
+To: contact@renderform.io
+Subject: RenderForm and AI agents
+
+Hi RenderForm team,
+
+We came across RenderForm through Glama. You ship a REST API and an MCP server for generating
+images, PDFs and videos from templates, so AI agents are already one of your users, whether
+they show up in your analytics or not.
+
+Agents decide in seconds whether they can use a product: they look for an llms.txt, a clean
+OpenAPI spec, an MCP listing, docs they can read without running JavaScript, and pricing they
+can parse. Most teams are missing two or three of these without knowing it.
+
+We run a free agent-readiness scan that scores renderform.io on 14 of these checks and lists
+your top three gaps. Want us to send yours over? Just reply "yes".
+
+The Outrun team
+
+--
+Not interested? Unsubscribe in one click: https://outreach-9vzp5sprgqe7.vercel.app/u/<32-character token, unique to this address>

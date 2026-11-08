@@ -155,3 +155,5 @@ next-env.d.ts
 
 # Claude Code local state and agent worktrees
 .claude/
+
+.local/
