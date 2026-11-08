@@ -12,6 +12,7 @@ import { createNaiveClient } from "./integrations/naive";
 import { ApifyClient } from "./integrations/apify";
 import { createStripeGateway } from "./integrations/stripe";
 import { createAgentMailClient } from "./integrations/agentmail";
+import { hasMx } from "./email/mx";
 import type { Integrations } from "./integrations/types";
 import { createLlm, type Llm } from "./llm";
 import { Queue, type QueueOptions } from "./queue";
@@ -68,6 +69,7 @@ export async function createRuntime(config: Config, opts: RuntimeOptions = {}): 
       settings: config.settings,
       orders: { stripe: integrations.stripe, emit, appUrl: config.appUrl },
       audit: { apify: integrations.apify, appUrl: config.appUrl },
+      outreach: { appUrl: config.appUrl, settings: config.settings, mx: hasMx },
     }),
   );
   const llm = createLlm({ providers: integrations.llm, db: db.db, emit, settings: config.settings });

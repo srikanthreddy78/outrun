@@ -1,0 +1,21 @@
+name: sdr reads the brief, checks a grounded draft, and the send waits for a person then queues once
+agent: sdr
+seed: demo
+steps:
+  - { tool: get_brief, input: { prospectId: "$prospectId" } }
+  - tool: check_draft
+    input:
+      prospectId: "$prospectId"
+      kind: first
+      subject: "Agents can't find demo.outrun.dev"
+      body: "Your site has no llms.txt, so AI agents skip it. The audit kit fixes that for $499."
+      citedCheckIds: [llms_txt]
+  - { tool: send_email, input: { draftId: "$draftId", hash: "$hash" } }
+decisions: [allow]
+expect:
+  calls:
+    - { tool: get_brief, ok: true }
+    - { tool: check_draft, result: { ok: true } }
+    - { tool: send_email, decision: allow, result: { status: queued } }
+  held: 0
+  enqueued: [send_email]

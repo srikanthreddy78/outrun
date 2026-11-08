@@ -12,7 +12,7 @@
  * Every step is keyed, so a redelivered event or a retried job does nothing twice.
  */
 import { PRODUCTS } from "@outrun/core/constants";
-import { eq, orders } from "@outrun/core/db";
+import { eq, orders, prospects } from "@outrun/core/db";
 import type { Emit } from "@outrun/core/events";
 import type { Integrations } from "@outrun/core/integrations";
 import { getOrder, transition, type Order } from "@outrun/core/orders";
@@ -142,6 +142,10 @@ async function markPaid(
     };
     if (Object.keys(patch).length) await deps.db.update(orders).set(patch).where(eq(orders.id, order.id));
     if (order.state !== "paid") return;
+  }
+  // SH-7: a closer's prospect who paid is won.
+  if (order.prospectId) {
+    await deps.db.update(prospects).set({ stage: "won" }).where(eq(prospects.id, order.prospectId));
   }
   // The receipt and the audit are keyed on the order, so a repeat report is a no-op.
   const product = PRODUCTS[order.product];

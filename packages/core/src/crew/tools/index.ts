@@ -11,6 +11,7 @@ import { pipelineStatus, type FollowupsDue, type PipelineSettings } from "./pipe
 import { planDay } from "./plan_day";
 import { createCheckoutLink, type CheckoutDeps } from "./create_checkout_link";
 import { AppError } from "../../errors";
+import { followupsDueCount, outreachTools, type OutreachDeps } from "./outreach";
 
 export { createCheckoutLink, ping, pipelineStatus, planDay };
 
@@ -33,13 +34,17 @@ export function allTools(opts: {
   followupsDue?: FollowupsDue;
   orders?: CheckoutDeps;
   audit?: { apify: ApifyClient; appUrl: string };
+  /** SH-5/7/8: the sdr's and closer's tools; with them, pipeline_status counts real follow-ups. */
+  outreach?: OutreachDeps;
 }): ToolDef[] {
+  const followupsDue = opts.followupsDue ?? (opts.outreach ? followupsDueCount : undefined);
   return [
     ping,
-    pipelineStatus(opts.settings, opts.followupsDue),
-    planDay(opts.settings, opts.followupsDue),
+    pipelineStatus(opts.settings, followupsDue),
+    planDay(opts.settings, followupsDue),
     scanDomainTool,
     ...(opts.audit ? auditTools(opts.audit.apify, opts.audit.appUrl) : []),
     createCheckoutLink(opts.orders ?? noOrders),
+    ...(opts.outreach ? outreachTools(opts.outreach) : []),
   ] as unknown as ToolDef[];
 }

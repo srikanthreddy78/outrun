@@ -29,7 +29,8 @@
     "mobile:check": "tsx --env-file-if-exists=.env scripts/mobile-onboarding.ts",
     "stripe:sync": "tsx --env-file-if-exists=.env scripts/stripe-sync.ts",
     "listing": "tsx --env-file-if-exists=.env scripts/publish-listing.ts",
-    "email:resume": "tsx --env-file-if-exists=.env scripts/email-resume.ts"
+    "email:resume": "tsx --env-file-if-exists=.env scripts/email-resume.ts",
+    "eval:triage": "tsx --env-file-if-exists=.env scripts/eval-triage.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

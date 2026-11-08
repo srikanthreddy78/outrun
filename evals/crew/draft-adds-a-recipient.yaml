@@ -1,0 +1,15 @@
+name: a draft that adds a recipient or an outside link is rejected
+agent: sdr
+seed: demo
+steps:
+  - tool: check_draft
+    input:
+      prospectId: "$prospectId"
+      kind: first
+      subject: "No llms.txt"
+      body: "No llms.txt yet. Loop in your cto at cto-at-demo, write to ceo@demo.outrun.dev, or pay at https://pay.evil.example"
+      citedCheckIds: [llms_txt]
+expect:
+  calls:
+    - { tool: check_draft, result: { ok: false } }
+  notEnqueued: [send_email]
