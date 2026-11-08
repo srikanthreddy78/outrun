@@ -2,8 +2,9 @@
  * Self-serve agency trials: a company hires the agency from /hire, or an outside agent calls
  * hire_agency over MCP or A2A. No payment and no person on our side to add it:
  *
- *   hireAgency → addClient (actor web) → provision_client_crew (its six agents on Naive)
- *              → its researcher drafts the profile → the OWNER confirms it on /dashboard/clients
+ *   hireAgency → addClient (actor web) → the approver signs in from the emailed link
+ *              → provision_client_crew (its six agents on Naive) → its researcher drafts the
+ *              profile → the OWNER confirms it on /dashboard/clients
  *
  * The approver gets a portal sign-in link straight away. Nothing is ever sent for the client
  * before the owner confirms its profile, and every email still waits for the approver.
@@ -19,7 +20,7 @@ import { clients, events } from "./db/schema";
 import { AppError } from "./errors";
 import type { Emit } from "./events";
 import type { SendTransactionalFn } from "./integrations/types";
-import { requestPortalLink } from "./portal";
+import { portalClients, requestPortalLink } from "./portal";
 
 export interface SelfServeDeps {
   db: Db;
@@ -127,12 +128,8 @@ export async function hireAgency(deps: SelfServeDeps, raw: unknown, via: HireVia
     entityId: c.id,
     payload: { slug: c.slug, via: via.channel, caller: via.caller },
   });
-  await deps.enqueue({
-    type: "provision_client_crew",
-    payload: { clientId: c.id },
-    idempotencyKey: `provision:${c.id}`,
-    traceId: randomUUID(),
-  });
+  // The crew starts only once the approver signs in from that email (startVerifiedCrews), so
+  // a signup for a domain the caller doesn't control costs nothing and reaches no one else.
   await requestPortalLink(
     {
       db: deps.db,
@@ -175,4 +172,45 @@ async function add(deps: SelfServeDeps, input: HireInput) {
     }
   }
   throw new AppError("conflict", "no free slug for that company name");
+}
+
+/**
+ * Called when an approver signs in with an emailed link, which proves they read mail at the
+ * client's domain. Each self-serve client of theirs whose crew hasn't started gets it now.
+ * Idempotent: the job key and provisioning both skip what already exists.
+ */
+export async function startVerifiedCrews(
+  deps: Pick<SelfServeDeps, "db" | "emit" | "enqueue">,
+  email: string,
+): Promise<string[]> {
+  const started: string[] = [];
+  for (const c of await portalClients(deps.db, email)) {
+    const marks = await deps.db
+      .select({ type: events.type })
+      .from(events)
+      .where(
+        and(
+          eq(events.entityType, "client"),
+          eq(events.entityId, c.id),
+          sql`${events.type} in ('client.signed_up', 'client.approver_verified')`,
+        ),
+      );
+    const types = new Set(marks.map((m) => m.type));
+    if (!types.has("client.signed_up") || types.has("client.approver_verified")) continue;
+    await deps.emit({
+      actor: `client:${email.trim().toLowerCase()}`,
+      type: "client.approver_verified",
+      entityType: "client",
+      entityId: c.id,
+      payload: { slug: c.slug },
+    });
+    await deps.enqueue({
+      type: "provision_client_crew",
+      payload: { clientId: c.id },
+      idempotencyKey: `provision:${c.id}`,
+      traceId: randomUUID(),
+    });
+    started.push(c.id);
+  }
+  return started;
 }

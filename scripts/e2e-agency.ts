@@ -32,7 +32,8 @@ import { and, clientCandidates, clients, desc, eq, events, messages, prospects }
 import { isSuppressed } from "@outrun/core/email/rules";
 import { readUnsubscribeToken, unsubscribeContact } from "@outrun/core/email/unsubscribe";
 import { createFakes, FakeLlmProvider, FakeNaiveClient } from "@outrun/core/fakes";
-import { assertPortalAccess } from "@outrun/core/portal";
+import { assertPortalAccess, redeemPortalLink } from "@outrun/core/portal";
+import { startVerifiedCrews } from "@outrun/core/selfServe";
 import { callPublicTool } from "@outrun/core/public/service";
 import type { Runtime } from "@outrun/core/runtime";
 import { seedDemo } from "@outrun/core/seed";
@@ -690,6 +691,20 @@ async function main(): Promise<void> {
     ok(
       "Gamma Grid hired the agency over MCP with hire_agency; a repeat is idempotent; its approver got a portal link",
     );
+
+    // Nothing starts until the approver proves they read Gamma's mail by signing in.
+    const early = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, "client.crew_provisioned"), eq(events.entityId, hired.clientId)));
+    check(early.length === 0, "no crew before the approver signs in");
+    const linkMail = fakes.agentmail.transactional.find((m) => m.to === GAMMA.approver)!;
+    const linkToken = /\/portal\/auth\/([^\s]+)/.exec(linkMail.text)![1]!;
+    const signedIn = await redeemPortalLink({ db, secret: config.keys.crewTokenSecret }, linkToken);
+    check(signedIn?.email === GAMMA.approver, "Gamma's approver signed in with the link");
+    const startedCrews = await startVerifiedCrews(deps, signedIn!.email);
+    check(startedCrews.length === 1 && startedCrews[0] === hired.clientId, "signing in started Gamma's crew");
+    check((await startVerifiedCrews(deps, signedIn!.email)).length === 0, "a second sign-in starts nothing");
 
     const provisioned = await waitFor("Gamma's crew provisioned", async () => {
       const [e] = await db

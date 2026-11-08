@@ -6,7 +6,8 @@ import { createEmitter } from "./events";
 import { FakeStripe } from "./fakes";
 import type { TransactionalEmail } from "./integrations/types";
 import { callPublicTool, type PublicDeps } from "./public/service";
-import { hireAgency, type SelfServeDeps } from "./selfServe";
+import { redeemPortalLink } from "./portal";
+import { hireAgency, startVerifiedCrews, type SelfServeDeps } from "./selfServe";
 import { createTempDatabase, type TempDb } from "./testing/db";
 
 const APP = "https://outrun.example";
@@ -44,7 +45,7 @@ describe("self-serve agency signups", () => {
     await t?.drop();
   });
 
-  it("adds a draft client as code, not a person, provisions its crew and emails the approver", async () => {
+  it("adds a draft client as code, not a person, and emails the approver; no crew yet", async () => {
     const out = await hireAgency(
       deps(),
       { companyName: "Gamma Grid", domain: "Gamma-Grid.dev", approverEmail: "Gus@gamma-grid.dev" },
@@ -65,13 +66,8 @@ describe("self-serve agency signups", () => {
       entityId: out.clientId,
       payload: { via: "web", caller: "c1" },
     });
-    expect(jobs).toEqual([
-      expect.objectContaining({
-        type: "provision_client_crew",
-        payload: { clientId: out.clientId },
-        idempotencyKey: `provision:${out.clientId}`,
-      }),
-    ]);
+    // The crew waits for the approver to prove they read the domain's mail.
+    expect(jobs).toEqual([]);
     expect(mail).toHaveLength(1);
     expect(mail[0]!.to).toBe("gus@gamma-grid.dev");
     expect(mail[0]!.text).toContain(`${APP}/portal/auth/`);
@@ -181,7 +177,7 @@ describe("self-serve agency signups", () => {
     const input = { companyName: "Omega Ops", domain: "omega-ops.dev", approverEmail: "ola@omega-ops.dev" };
     const out = await callPublicTool(pub, "hire_agency", input, meta);
     expect(out).toMatchObject({ slug: "omega-ops", status: "draft", created: true });
-    expect(jobs.map((j) => j.type)).toEqual(["provision_client_crew"]);
+    expect(jobs).toEqual([]);
     const [signed] = await t.db.select().from(events).where(eq(events.entityId, out.clientId));
     expect(signed).toBeTruthy();
     const ev = await t.db.select().from(events).where(eq(events.type, "client.signed_up"));
@@ -194,5 +190,31 @@ describe("self-serve agency signups", () => {
     await expect(callPublicTool(bare, "hire_agency", input, meta)).rejects.toMatchObject({
       code: "not_configured",
     });
+  });
+
+  it("starts the crew once the approver signs in with the emailed link, once", async () => {
+    const out = await hireAgency(
+      deps(),
+      { companyName: "Sigma Sky", domain: "sigma-sky.dev", approverEmail: "sam@sigma-sky.dev" },
+      via("s1"),
+    );
+    expect(jobs).toEqual([]);
+    const token = /\/portal\/auth\/(\S+)/.exec(mail.at(-1)!.text)![1]!;
+    const session = await redeemPortalLink({ db: t.db, secret: SECRET }, token);
+    expect(session?.email).toBe("sam@sigma-sky.dev");
+    expect(await startVerifiedCrews(deps(), session!.email)).toEqual([out.clientId]);
+    expect(jobs).toEqual([
+      expect.objectContaining({
+        type: "provision_client_crew",
+        payload: { clientId: out.clientId },
+        idempotencyKey: `provision:${out.clientId}`,
+      }),
+    ]);
+    const [v] = await t.db.select().from(events).where(eq(events.type, "client.approver_verified"));
+    expect(v).toMatchObject({ actor: "client:sam@sigma-sky.dev", entityId: out.clientId });
+    // A second sign-in, or an approver of an owner-added client, starts nothing.
+    expect(await startVerifiedCrews(deps(), session!.email)).toEqual([]);
+    expect(await startVerifiedCrews(deps(), "nobody@elsewhere.dev")).toEqual([]);
+    expect(jobs).toHaveLength(1);
   });
 });

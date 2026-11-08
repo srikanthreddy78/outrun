@@ -19,14 +19,15 @@ export default async function Hire({ searchParams }: { searchParams: Promise<Rec
         and write cited outbound emails for you. Free trial, no card.
       </p>
       <ol>
+        <li>Sign in with the link we email you; that starts your crew.</li>
         <li>Your crew reads your site and drafts your profile: who you sell to, your offer and prices.</li>
         <li>Our owner checks that profile before anything is written for you.</li>
         <li>You approve every email in your portal before it is sent, from your own domain.</li>
       </ol>
       {q.hired && (
         <p role="status">
-          You&apos;re in. Your crew is being set up now; check your inbox for a sign-in link to your{" "}
-          <a href="/portal">portal</a>.
+          You&apos;re in. Check your inbox and sign in with the link to your <a href="/portal">portal</a>;
+          your crew starts as soon as you do.
         </p>
       )}
       {q.known && (
