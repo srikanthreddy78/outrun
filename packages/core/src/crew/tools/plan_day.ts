@@ -8,14 +8,16 @@
  *                    person or a reply, so nothing is planned for them.
  *   - follow-ups due → one sdr session for the batch, before first drafts, sharing the send cap.
  *   - candidates waiting and discovery cap left → one prospector session for the batch.
+ * Within a stage, prospects with a fresh signal (date within SIGNAL_FRESH_DAYS) come first.
  * Keys are `plan:<day in CRON_TZ>:<agent>:<entity id>`, so a second run the same day enqueues
  * nothing new. Messages name ids only. In demo mode only the seeded demo prospect is planned
  * and discovery is skipped.
  */
-import { and, asc, eq, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 import type { AgentName, Entity, ProspectStage } from "../../../contracts";
-import { CRON_TZ, OUTRUN_CLIENT_ID } from "../../constants";
-import { prospects } from "../../db/schema";
+import { CRON_TZ, OUTRUN_CLIENT_ID, SIGNAL_SESSION_PROSPECTS } from "../../constants";
+import { clients, prospects } from "../../db/schema";
+import { freshSignalRank } from "../../experiments";
 import { clientFocus } from "../../insights";
 import { DEMO_FILED_REASON } from "../../seed";
 import { CLIENT_CANDIDATES_ENOUGH } from "../../sources/clientSources";
@@ -26,6 +28,8 @@ import { pipelineCounts, type FollowupsDue, type PipelineSettings } from "./pipe
 /** Stable entity ids for the batch sessions. */
 export const DISCOVERY_ENTITY: Entity = { type: "system", id: "discovery" };
 export const FOLLOWUPS_ENTITY: Entity = { type: "system", id: "followups" };
+export const SIGNALS_ENTITY: Entity = { type: "system", id: "signals" };
+export const EXPERIMENT_ENTITY: Entity = { type: "system", id: "experiment" };
 
 export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue = async () => 0) {
   return defineTool({
@@ -58,7 +62,8 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
           .select({ id: prospects.id })
           .from(prospects)
           .where(and(eq(prospects.clientId, ctx.clientId), eq(prospects.stage, stage), demoOnly))
-          .orderBy(asc(prospects.createdAt), asc(prospects.id))
+          // A prospect with a fresh signal (the signal scout's) goes first.
+          .orderBy(desc(freshSignalRank(now)), asc(prospects.createdAt), asc(prospects.id))
           .limit(n);
         return rows.map((r) => r.id);
       };
@@ -86,6 +91,40 @@ export function planDay(settings: PipelineSettings, followupsDue: FollowupsDue =
           DISCOVERY_ENTITY,
           `File up to ${discovery} prospects that fit the ICP from the candidates waiting.`,
         );
+
+      // Roles the CEO staffed on this client's crew get one batch session a day.
+      if (!settings.demo && ctx.clientId !== OUTRUN_CLIENT_ID) {
+        const [c] = await ctx.db
+          .select({ roles: clients.crewRoles })
+          .from(clients)
+          .where(eq(clients.id, ctx.clientId));
+        const roles = new Set(c?.roles ?? []);
+        if (roles.has("signal_scout")) {
+          // Researched prospects with no fresh signal yet, named by id (a message holds ten).
+          const ids = (
+            await ctx.db
+              .select({ id: prospects.id })
+              .from(prospects)
+              .where(
+                and(
+                  eq(prospects.clientId, ctx.clientId),
+                  eq(prospects.stage, "researched"),
+                  sql`${freshSignalRank(now)} = 0`,
+                ),
+              )
+              .orderBy(asc(prospects.createdAt), asc(prospects.id))
+              .limit(Math.min(limit, SIGNAL_SESSION_PROSPECTS))
+          ).map((r) => r.id);
+          if (ids.length)
+            await start("signal_scout", SIGNALS_ENTITY, `Find signals for prospects ${ids.join(", ")}.`);
+        }
+        if (roles.has("experimenter"))
+          await start(
+            "experimenter",
+            EXPERIMENT_ENTITY,
+            "Check the experiment: start one if none runs, or read its results and end it once it has enough sends.",
+          );
+      }
 
       // A client's own sources: search again when its list runs low, once a day.
       if (

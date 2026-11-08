@@ -77,6 +77,18 @@ const InsightRow = z.object({
   replyRate: z.number().min(0).max(1),
   interestRate: z.number().min(0).max(1),
 });
+export const SignalKind = z.enum(["funding", "hiring", "launch", "news"]);
+/** A calendar date, YYYY-MM-DD. */
+const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "a date as YYYY-MM-DD");
+const VariantKey = z.enum(["A", "B"]);
+const VariantResult = z.object({
+  key: VariantKey,
+  angle: z.string(),
+  sent: z.number().int().nonnegative(),
+  replies: z.number().int().nonnegative(),
+  interested: z.number().int().nonnegative(),
+  replyRate: z.number().min(0).max(1),
+});
 const Limit = (max: number, def: number) => z.number().int().min(1).max(max).default(def);
 
 export const CREW_TOOLS = {
@@ -220,6 +232,18 @@ export const CREW_TOOLS = {
           repliedSubjects: z.array(z.string()),
         })
         .nullable(),
+      /** The prospect's freshest signal (signal scout), if any: open with it and cite its fact key. */
+      signal: z
+        .object({
+          factKey: z.string(),
+          kind: SignalKind,
+          summary: Untrusted,
+          sourceUrl: z.url(),
+          date: DateOnly,
+        })
+        .nullable(),
+      /** While the client runs an experiment: the angle to write for this prospect. Prices, links and the CTA stay. */
+      variant: z.object({ key: VariantKey, angle: z.string(), hypothesis: z.string() }).nullable(),
     }),
   },
   check_draft: {
@@ -518,6 +542,81 @@ export const CREW_TOOLS = {
       reason: z.string().min(1).max(300),
     }),
     output: z.object({ dailyDraftLimit: z.number().int(), previous: z.number().int().nullable() }),
+  },
+  find_signals: {
+    agents: ["signal_scout"],
+    policy: "allow",
+    description:
+      "One Monid news search (5 results) for a prospect's company: candidate funding, hiring, launch and news items, wrapped as untrusted. Saves nothing.",
+    input: z.object({ prospectId: Id }),
+    output: z.object({
+      prospectId: Id,
+      company: z.object({ domain: Domain, name: z.string() }),
+      items: z.array(
+        z.object({ title: Untrusted, summary: Untrusted, url: z.url(), date: DateOnly.nullable() }),
+      ),
+    }),
+  },
+  save_signal: {
+    agents: ["signal_scout"],
+    policy: "allow",
+    description:
+      "Saves one sourced signal on a prospect as the fact signal:<kind>, so the sdr can open with it and cite it. Fresh signals put the prospect first in today's plan.",
+    input: z.object({
+      prospectId: Id,
+      kind: SignalKind,
+      summary: z.string().min(1).max(280),
+      sourceUrl: z.url(),
+      date: DateOnly,
+    }),
+    output: z.object({ factKey: z.string(), fresh: z.boolean() }),
+  },
+  start_experiment: {
+    agents: ["experimenter"],
+    policy: "allow",
+    description:
+      "Starts an A/B test of two email angles for your client; the sdr alternates them by prospect. One active experiment per client. Angles never change prices, links or the call to action.",
+    input: z.object({
+      hypothesis: z.string().min(1).max(300),
+      variants: z.tuple([
+        z.object({ key: z.literal("A"), angle: z.string().min(1).max(300) }),
+        z.object({ key: z.literal("B"), angle: z.string().min(1).max(300) }),
+      ]),
+    }),
+    output: z.discriminatedUnion("ok", [
+      z.object({ ok: z.literal(true), experimentId: Id }),
+      z.object({ ok: z.literal(false), reason: z.string() }),
+    ]),
+  },
+  experiment_results: {
+    agents: ["experimenter"],
+    policy: "allow",
+    description:
+      "The active experiment (or the last one) per variant: first emails sent, prospects that replied, interested, and the reply rate. Read-only.",
+    input: z.object({}),
+    output: z.object({
+      experiment: z
+        .object({
+          experimentId: Id,
+          hypothesis: z.string(),
+          startedAt: IsoDateTime,
+          active: z.boolean(),
+          variants: z.array(VariantResult),
+        })
+        .nullable(),
+    }),
+  },
+  end_experiment: {
+    agents: ["experimenter"],
+    policy: "allow",
+    description:
+      "Ends the active experiment with its winner (or none) and the lesson, which goes to the CEO's playbook with the numbers behind it.",
+    input: z.object({ winner: z.enum(["A", "B", "none"]), lesson: z.string().min(1).max(300) }),
+    output: z.object({
+      experimentId: Id,
+      winner: z.enum(["A", "B", "none"]),
+      variants: z.array(VariantResult),
+    }),
   },
 } as const satisfies Record<
   string,

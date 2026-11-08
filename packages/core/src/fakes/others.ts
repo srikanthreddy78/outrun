@@ -265,12 +265,22 @@ export class FakeMonid implements MonidClient {
   readonly runs: { endpoint: string; input: Record<string, unknown> }[] = [];
   /** Hunter discover answers by first include keyword; tests set them. */
   readonly hunter = new Map<string, { domain: string; organization: string }[]>();
+  /** News search answers by domain (the signal scout's find_signals); tests set them. */
+  readonly news = new Map<
+    string,
+    { headline: string; description?: string; url: string; published_at?: string }[]
+  >();
   async run(endpoint: string, input: Record<string, unknown>) {
     this.runs.push({ endpoint, input });
     if (endpoint === "hunterio:/discover") {
       const kw = ((input.keywords as { include?: string[] } | undefined)?.include ?? [])[0] ?? "";
       const data = (this.hunter.get(kw) ?? []).slice(0, Number(input.limit ?? 100));
       return { data: { data, meta: { results: data.length } }, costUsd: 0 };
+    }
+    if (endpoint === "context.dev:/news/search") {
+      const domain = (input.searchBy as { entity?: { domain?: string } } | undefined)?.entity?.domain ?? "";
+      const articles = (this.news.get(domain) ?? []).slice(0, Number(input.limit ?? 10));
+      return { data: { articles }, costUsd: 0 };
     }
     return { data: { endpoint, results: [] }, costUsd: 0 };
   }

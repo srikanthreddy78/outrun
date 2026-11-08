@@ -24,6 +24,7 @@ import { assertDemoRecipient } from "../../demo";
 import type { MxLookup } from "../../email/mx";
 import { effectiveSendCap, isSuppressed, sentToday } from "../../email/rules";
 import { AppError } from "../../errors";
+import { activeExperiment, freshestSignal, variantFor } from "../../experiments";
 import { lessonsFor } from "../../insights";
 import { defineTool } from "../registry";
 import type { ToolContext } from "../types";
@@ -209,6 +210,16 @@ export function groundingProblems(opts: {
   return [...new Set(out)];
 }
 
+/** The variant this prospect's emails are written for while the client runs an experiment. */
+async function assignedVariant(ctx: ToolContext, prospectId: string) {
+  if (ctx.clientId === OUTRUN_CLIENT_ID) return null;
+  const e = await activeExperiment(ctx.db, ctx.clientId);
+  if (!e) return null;
+  const key = await variantFor(ctx.db, ctx.clientId, prospectId);
+  const v = e.variants.find((x) => x.key === key);
+  return v ? { key: v.key, angle: v.angle, hypothesis: e.hypothesis } : null;
+}
+
 export function getBrief(deps: OutreachDeps) {
   return defineTool({
     name: "get_brief",
@@ -229,6 +240,7 @@ export function getBrief(deps: OutreachDeps) {
         .where(and(eq(messages.prospectId, prospectId), inArray(messages.status, ["sent", "received"])))
         .orderBy(asc(messages.createdAt))
         .limit(20);
+      const signal = client ? freshestSignal(r.prospect.facts, ctx.now()) : null;
       const contact =
         r.contact && (client || !r.contact.suppressed)
           ? { contactId: r.contact.id, name: r.contact.name, role: r.contact.role, email: r.contact.email }
@@ -259,6 +271,16 @@ export function getBrief(deps: OutreachDeps) {
             }
           : null,
         lessons: client ? await lessonsFor(ctx.db, ctx.clientId) : null,
+        signal: signal
+          ? {
+              factKey: factCitation(signal.fact.key),
+              kind: signal.kind,
+              summary: untrusted(signal.fact.value),
+              sourceUrl: signal.fact.sourceUrl,
+              date: signal.date,
+            }
+          : null,
+        variant: await assignedVariant(ctx, prospectId),
       };
     },
   });
@@ -378,6 +400,8 @@ export function checkDraft(deps: OutreachDeps) {
           body: input.body,
           citedCheckIds: [...input.citedCheckIds],
           draftHash: hash,
+          variant:
+            input.kind === "reply" ? null : ((await assignedVariant(ctx, input.prospectId))?.key ?? null),
         })
         .returning({ id: messages.id });
       if (input.kind === "first" && ["filed", "researched"].includes(r.prospect.stage)) {

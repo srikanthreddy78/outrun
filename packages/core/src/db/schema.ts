@@ -192,7 +192,10 @@ export const prospects = pgTable(
       .references(() => companies.id),
     contactId: uuid("contact_id").references(() => contacts.id),
     stage: prospectStage("stage").notNull().default("filed"),
-    facts: jsonb("facts").$type<{ key: string; value: string; sourceUrl: string }[]>().notNull().default([]),
+    facts: jsonb("facts")
+      .$type<{ key: string; value: string; sourceUrl: string; date?: string }[]>()
+      .notNull()
+      .default([]),
     fitScore: real("fit_score"),
     gapScore: real("gap_score"),
     filedReason: text("filed_reason").notNull().default(""),
@@ -241,6 +244,8 @@ export const messages = pgTable(
     body: text("body").notNull().default(""),
     citedCheckIds: jsonb("cited_check_ids").$type<string[]>().notNull().default([]),
     draftHash: text("draft_hash"),
+    /** The experiment variant ("A" or "B") a first email or follow-up was written for, if any. */
+    variant: text("variant"),
     providerId: text("provider_id"),
     naiveSessionId: text("naive_session_id"),
     naiveToolCallId: text("naive_tool_call_id"),

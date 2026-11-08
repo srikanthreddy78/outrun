@@ -371,6 +371,22 @@ async function main(): Promise<void> {
       });
     ok("each researcher saved cited facts and the CFO; fit scored from that client's ICP");
 
+    // Acme's experimenter starts an A/B test of angles before its sdr writes.
+    const experimenter = () => naiveOpts.ctx!("experimenter", "acme-pay");
+    const started = (await rt.registry.call(
+      "experimenter",
+      "start_experiment",
+      {
+        hypothesis: "Leading with hours lost to manual work beats leading with speed",
+        variants: [
+          { key: "A", angle: "the hours finance loses to manual matching" },
+          { key: "B", angle: "closing the books faster" },
+        ],
+      },
+      await experimenter(),
+    )) as { ok: boolean };
+    check(started.ok, "Acme's experiment started");
+
     for (const c of CLIENTS) {
       const prospectId = prospectOf.get(c.slug)!;
       const amount = c.price.split("/")[0];
@@ -630,6 +646,42 @@ async function main(): Promise<void> {
       "Beta's profile untouched",
     );
     ok("the CEO read Acme's insights, set its focus and proposed an ICP change; the owner accepted it");
+
+    const [acmeVariantMail] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, firsts.get("acme-pay")!));
+    check(acmeVariantMail!.variant === "A", "Acme's first email was written for variant A");
+    const results = (await rt.registry.call(
+      "experimenter",
+      "experiment_results",
+      {},
+      await experimenter(),
+    )) as {
+      experiment: { variants: { key: string; sent: number; replies: number }[] };
+    };
+    const a = results.experiment.variants.find((v) => v.key === "A")!;
+    check(a.sent === 1 && a.replies === 1, "variant A: one sent, one reply");
+    await rt.registry.call(
+      "experimenter",
+      "end_experiment",
+      { winner: "A", lesson: "Lead with the hours finance loses to manual matching." },
+      await experimenter(),
+    );
+    const [lesson] = await db
+      .select()
+      .from(events)
+      .where(and(eq(events.type, "ceo.lesson"), eq(events.entityId, acme)));
+    check(
+      (lesson?.payload as { tags?: string[] } | undefined)?.tags?.includes("experiment"),
+      "the lesson reached the CEO's playbook",
+    );
+    const [betaVariants] = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.clientId, beta), eq(messages.kind, "first")));
+    check(betaVariants!.variant === null, "Beta runs no experiment, so its email has no variant");
+    ok("Acme's experiment ran on fakes: variant A was sent and replied to, and its lesson was recorded");
 
     console.log("G. a third client hires the agency itself");
     const GAMMA: ClientSpec = {
